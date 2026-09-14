@@ -1,0 +1,20 @@
+{
+  "handle": "@yourhandle",
+  "colors": {
+    "bg": "#0f0f17",
+    "surface1": "#181824",
+    "surface2": "#212133",
+    "border": "#2c2c42",
+    "accent": "#ff3d5a",
+    "textBody": "#e8e8ee",
+    "textMuted": "#737a94"
+  },
+  "fonts": {
+    "heading": "Archivo",
+    "mono": "Geist Mono",
+    "googleFontsUrl": "https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Geist+Mono:wght@400..700&display=swap"
+  },
+  "output": {
+    "dir": "~/voiceover-videos"
+  }
+}

@@ -1,0 +1,243 @@
+---
+name: voiceover-video
+description: "Turn a voice recording (voice note, narration, podcast snippet) into a fully animated, brand-styled video — local word-level transcription, a timed shot list, kinetic typography, camera moves, real images, synthesized sound design and a voice-ducked music bed, rendered as a 1080x1920 Short (or 1920x1080). Use when asked to 'make a video out of this audio', 'animate this voice note', 'turn this narration into a Short', 'edit this like a pro', 'create a video from my voiceover', or 'make a reel from this recording'."
+---
+
+# Voiceover Video Skill
+
+Takes an audio file and builds a complete edit around it: every shot is an HTML/GSAP scene timed to
+the exact spoken word, rendered frame by frame in headless Chromium, then muxed with a mixed
+soundtrack (voice + synthesized SFX + ducked music). The judgement — what each line should *look*
+like — is yours. The scripts handle transcription, rendering, audio, and encoding.
+
+`SKILL_DIR` = the directory containing this SKILL.md.
+
+**Always load `SKILL_DIR/references/scene-blocks.md` before writing the shot list.** It holds the
+block catalogue, the pacing rules, and the sound-cue vocabulary.
+
+---
+
+## Step 0 — Gather inputs
+
+| Field | Required | Example |
+|-------|----------|---------|
+| `audio` | Yes | `~/Downloads/voice-note.m4a` (any format ffmpeg reads) |
+| `format` | No | `vertical` 1080x1920 (default) · `landscape` 1920x1080 |
+| `music` | No | `synth` (default) · path to a royalty-free track · `none` |
+| `model` | No | `small` (default) · `base` for clean audio, ~2x faster |
+| `vocab` | No | names and terms the speaker uses: `"Kubernetes, Kafka, Jane Doe"` |
+| `slug` | No | inferred from the topic, e.g. `java-origin` |
+
+Brand: `./brand.json`, then `~/.config/voiceover-video/brand.json`, then the bundled
+`SKILL_DIR/brand.example.json`. Output goes to `<brand.output.dir>/<slug>/`; work files go to
+`<brand.output.dir>/<slug>/work/`. Pick the defaults and proceed. Don't interrogate.
+
+If the audio path is missing or not a file, say so and stop.
+
+---
+
+## Step 1 — Setup (first run only)
+
+```bash
+bash SKILL_DIR/scripts/setup.sh
+```
+
+Checks `ffmpeg`, `node`, `faster_whisper` and `numpy`; installs `playwright-core` and its matching
+Chromium build; downloads GSAP and the brand's fonts into `SKILL_DIR/assets/`. Prints `ready` or names
+the missing piece. Re-running is a no-op unless the brand's fonts changed.
+
+---
+
+## Step 2 — Transcribe
+
+Tell the user the estimate first: roughly **2–3x realtime on CPU** for `small`.
+
+```bash
+python3 SKILL_DIR/scripts/transcribe.py <audio> --outdir <work> --model small --vocab "<vocab>"
+```
+
+Writes `words.json` (every word with start/end) and `transcript.txt` — one phrase per line as
+`[start] word@time word@time …`. Read `transcript.txt`; the per-word times are what you cut to.
+
+Run it in the background for anything over two minutes. Never wait silently. The first run downloads
+the model, so it may sit at low CPU for a few minutes.
+
+---
+
+## Step 3 — Proofread the captions
+
+Captions are burned in. Scan `transcript.txt` for misheard words — proper nouns and technical terms
+break first (observed: `San Micro Systems` → Sun Microsystems, `Ok` → Oak, `CNC++` → C/C++,
+`Right once` → Write once). Write `<work>/fixes.json` mapping the raw token to its fix; an empty string
+drops the token:
+
+```json
+{ "San": "Sun", "Ok.": "Oak.", "CNC++,": "C/C++,", "alias,": "" }
+```
+
+```bash
+python3 SKILL_DIR/scripts/build_captions.py <work>
+```
+
+Writes `<work>/words.js`. Never change timestamps. Tell the user about any token you could not
+resolve instead of guessing.
+
+---
+
+## Step 4 — Shot list (confirm before building)
+
+Load `references/scene-blocks.md`. Write a shot table — one row per shot, cut on word times:
+
+```
+#   in-out        line (spoken)                      block              sound
+01  0.00-2.70     Did you know Java wasn't…          slam + strike      hit@0.44 hit@2.12
+02  2.70-6.10     a completely different problem     highlight-box      whoosh, hit@4.60
+03  6.10-8.30     Back in the early 1990s            vhs + counter      tick, hit@7.20
+```
+
+Rules: a new shot every 1–4 seconds; a hit only on a word that deserves it; captions hidden whenever
+the spoken word *is* the visual. Find images before the table is final (Step 5).
+
+Show the table and the image list to the user. Wait for a yes — this is the expensive part to change
+later.
+
+---
+
+## Step 5 — Source images
+
+Prefer Wikimedia Commons (free licences, stable URLs). Search, download, then **look at every file
+before using it** — search results lie (a "Star7" search returned an unrelated party photo).
+
+```bash
+curl -s -A "voiceover-video-skill/1.0" "https://commons.wikimedia.org/w/api.php?action=query&list=search&srnamespace=6&srlimit=10&format=json&srsearch=<query>"
+curl -sL -A "voiceover-video-skill/1.0" -o <work>/assets/<name> "https://commons.wikimedia.org/wiki/Special:FilePath/<File_Name.jpg>"
+```
+
+Logos: `https://cdn.jsdelivr.net/npm/simple-icons@13/icons/<slug>.svg`. Keep a credits list — file
+name, author, licence — for the report.
+
+---
+
+## Step 6 — Author the composition
+
+```bash
+python3 SKILL_DIR/scripts/fill_template.py <work> <duration> --format vertical
+```
+
+`<duration>` = last word end + ~2.5s for the outro. Writes `<work>/index.html` from the template with
+brand, geometry and duration filled, and links the vendored assets as `<work>/vendor`.
+
+Replace the demo shots between `BEGIN SHOTS` / `END SHOTS` (markup) and `BEGIN TIMELINE` /
+`END TIMELINE` (GSAP) with your shot list, using the helpers the template already defines:
+`shot()`, `slam()`, `hit()`, `rise()`, `pop()`, `drift()`, `typer()`, `counter()`, `terminal()`, and the
+`NOCAP` ranges. Every helper that makes noise pushes its own sound cue.
+
+The display style (`.xl`) is uppercase and width-expanded; captions are condensed. Size headlines
+for the expanded width — a vertical frame fits ~6 characters at 250px.
+
+---
+
+## Step 7 — QA stills (loop until clean)
+
+Pick one timestamp per shot, at the moment of densest content:
+
+```bash
+node SKILL_DIR/scripts/render.js stills <work>/index.html <work>/stills 0.6,2.4,4.9,…
+bash SKILL_DIR/scripts/contact-sheet.sh <work>/stills <work>/contact.jpg
+```
+
+Read `contact.jpg`. Check for: text clipped at the frame edge, captions colliding with diagram
+elements, overlays covering the signature, blank image crops, and `PAGE ERROR` lines in the output.
+Fix, re-render only the affected stills, and look again. Do not start Step 9 with a known defect — a
+full render costs minutes.
+
+---
+
+## Step 8 — Sound
+
+```bash
+node SKILL_DIR/scripts/render.js cues <work>/index.html <work>/cues.json
+python3 SKILL_DIR/scripts/synth_audio.py <work>/cues.json <duration> <work> --drop <time-of-final-slam>
+```
+
+Writes `sfx.wav` and `music.wav`. With `music` set to a file, pass `--no-music` and give that file to
+Step 10. With `none`, pass `--no-music` and nothing else.
+
+You cannot hear the result. Say so in the report and ask the user to listen.
+
+---
+
+## Step 9 — Render frames
+
+```bash
+bash SKILL_DIR/scripts/render-frames.sh <work>/index.html <work>/frames <duration> [workers] [from_frame to_frame]
+```
+
+About 3 minutes for 108s on 10 workers. Run it in the background. The optional frame range re-renders
+a single shot after a fix; each bound is its own argument, so it is safe under zsh.
+
+---
+
+## Step 10 — Mix and encode
+
+```bash
+bash SKILL_DIR/scripts/mix-encode.sh <work> <audio> <duration> <out.mp4> [music-file]
+```
+
+Normalises the voice, ducks the music under it, lays the SFX on top, pads everything to the full
+duration, targets −14 LUFS, and caps the video bitrate at 8M (film grain otherwise balloons the file
+past 800 MB).
+
+---
+
+## Step 11 — Verify, then report
+
+Before reporting, extract a frame from the **encoded file** at a shot you changed, read it, and check
+the duration and size:
+
+```bash
+ffmpeg -v error -y -ss <t> -i <out.mp4> -frames:v 1 -vf scale=360:-1 <work>/verify.jpg
+ffprobe -v error -show_entries format=duration,size -of compact <out.mp4>
+```
+
+A still rendered from the HTML is not proof the video contains the fix.
+
+```
+java-origin.mp4 · 1080x1920 · 108.2s · 112 MB · -14.7 LUFS
+
+  shots 30 · sound cues 117 · images 4 · captions fixed 6
+
+  credits     James Gosling 2008 (Wikimedia, CC BY-SA) · Solitary oak (geograph, CC BY-SA)
+  unverified  music taste — listen before posting · timeline years are stylistic
+
+Next: preview it on a phone, then post it with the credits in the description
+```
+
+---
+
+## Non-negotiables
+
+- **Shot list confirmed before authoring.** Rendering is cheap; redesigning thirty shots is not.
+- **Every image is looked at before it is used.** Never ship an image you have not seen.
+- **Every fix is verified in the encoded file**, not just in a still.
+- Transcription is local. Never upload the audio.
+- One brand accent. Green only for success states, red only for errors.
+- Timelines are deterministic: no `Math.random()`, no `Date.now()`. The grain uses a seeded PRNG.
+- Captions never cover the element the viewer is meant to read; hide them via `NOCAP` instead.
+- Report every image credit and every invented detail (dates, labels) that isn't in the audio.
+- Never commit rendered files or `work/`.
+
+---
+
+## Failure states
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `Executable doesn't exist at …ms-playwright…` | playwright-core updated, its Chromium build isn't installed | re-run `setup.sh` |
+| Fix visible in stills but not in the video | frames never re-rendered — a range passed as one quoted string renders zero frames | use `render-frames.sh` with the range as two separate args; check frame mtimes |
+| Video shorter than the audio | an audio filter trimmed the stream | `mix-encode.sh` pads and trims to the duration; don't hand-roll the mix |
+| Output file is hundreds of MB | film grain defeats compression at constant CRF | keep the `-maxrate` cap in `mix-encode.sh` |
+| Wrong or fallback font in stills | fonts not downloaded for this brand | re-run `setup.sh` with the brand file |
+| `PAGE ERROR` in render output | a script error in the timeline | fix it; GSAP only warns on missing selectors, so also check each shot visually |
+| Whisper sits at low CPU for minutes | model download on first run | expected once; the model is cached afterwards |
+| Shot renders blank | `shot()` start ≥ end, or the shot id is misspelled | check the shot row's in/out times |

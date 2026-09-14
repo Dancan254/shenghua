@@ -1,0 +1,9 @@
+node_modules/
+skills/voiceover-video/assets/
+__pycache__/
+work/
+*.mp4
+*.mov
+*.wav
+brand.json
+.DS_Store
