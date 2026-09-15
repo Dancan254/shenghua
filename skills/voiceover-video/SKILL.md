@@ -1,6 +1,6 @@
 ---
 name: voiceover-video
-description: "Turn a voice recording (voice note, narration, podcast snippet) into a fully animated, brand-styled video — local word-level transcription, a timed shot list, kinetic typography, camera moves, real images, synthesized sound design and a voice-ducked music bed, rendered as a 1080x1920 Short (or 1920x1080). Use when asked to 'make a video out of this audio', 'animate this voice note', 'turn this narration into a Short', 'edit this like a pro', 'create a video from my voiceover', or 'make a reel from this recording'."
+description: "Turn a voice recording (voice note, narration, podcast snippet) into a fully animated, brand-styled video — local word-level transcription, a timed shot list, kinetic typography, camera moves, real images, synthesized sound design and a voice-ducked music bed, rendered as a 1080x1920 Short (or 1920x1080). Also takes a to-camera phone recording: the opening line and sign-off stay on camera as face shots and everything between is animated. Use when asked to 'make a video out of this audio', 'animate this voice note', 'turn this narration into a Short', 'edit this like a pro', 'create a video from my voiceover', or 'make a reel from this recording'."
 ---
 
 # Voiceover Video Skill
@@ -9,6 +9,9 @@ Takes an audio file and builds a complete edit around it: every shot is an HTML/
 the exact spoken word, rendered frame by frame in headless Chromium, then muxed with a mixed
 soundtrack (voice + synthesized SFX + ducked music). The judgement — what each line should *look*
 like — is yours. The scripts handle transcription, rendering, audio, and encoding.
+
+Given a to-camera video instead of audio, the opening line and the sign-off stay on camera as face
+shots; everything between them is animated over the voice from the same take.
 
 `SKILL_DIR` = the directory containing this SKILL.md.
 
@@ -21,7 +24,8 @@ block catalogue, the pacing rules, and the sound-cue vocabulary.
 
 | Field | Required | Example |
 |-------|----------|---------|
-| `audio` | Yes | `~/Downloads/voice-note.m4a` (any format ffmpeg reads) |
+| `audio` or `video` | Yes | `~/Downloads/voice-note.m4a` · a to-camera recording `~/Movies/take-1.mp4` |
+| `script` | No | the script, plain or with `[FACE]` / `[VOICE]` sections; captions are checked against it |
 | `format` | No | `vertical` 1080x1920 (default) · `landscape` 1920x1080 |
 | `music` | No | `synth` (default) · path to a royalty-free track · `none` |
 | `model` | No | `small` (default) · `base` for clean audio, ~2x faster |
@@ -32,7 +36,8 @@ Brand: `./brand.json`, then `~/.config/voiceover-video/brand.json`, then the bun
 `SKILL_DIR/brand.example.json`. Output goes to `<brand.output.dir>/<slug>/`; work files go to
 `<brand.output.dir>/<slug>/work/`. Pick the defaults and proceed. Don't interrogate.
 
-If the audio path is missing or not a file, say so and stop.
+If the audio or video path is missing or not a file, say so and stop. With a `video`, pass the video
+file wherever a step below takes `<audio>`; ffmpeg reads the voice from its audio track.
 
 ---
 
@@ -82,6 +87,9 @@ python3 SKILL_DIR/scripts/build_captions.py <work>
 Writes `<work>/words.js`. Never change timestamps. Tell the user about any token you could not
 resolve instead of guessing.
 
+With a `script`, it is the reference for spelling: a token that differs from it goes in `fixes.json`.
+Captions follow what was said, so an ad-libbed line stays; tell the user where the take left the script.
+
 ---
 
 ## Step 4 — Shot list (confirm before building)
@@ -97,6 +105,10 @@ Load `references/scene-blocks.md`. Write a shot table — one row per shot, cut 
 
 Rules: a new shot every 1–4 seconds; a hit only on a word that deserves it; captions hidden whenever
 the spoken word *is* the visual. Find images before the table is final (Step 5).
+
+With a `video`, the first and last rows are face shots (*Face hook*, *Face sign-off*). The hook runs
+from 0 to the last word of the script's first `[FACE]` section (no script: the first sentence). The
+sign-off runs from the first word of the last `[FACE]` section to the end. A series badge goes on shot 02.
 
 Show the table and the image list to the user. Wait for a yes — this is the expensive part to change
 later.
@@ -124,13 +136,20 @@ name, author, licence — for the report.
 python3 SKILL_DIR/scripts/fill_template.py <work> <duration> --format vertical
 ```
 
-`<duration>` = last word end + ~2.5s for the outro. Writes `<work>/index.html` from the template with
-brand, geometry and duration filled, and links the vendored assets as `<work>/vendor`.
+`<duration>` = last word end + ~2.5s for the outro; with a `video`, last word end + 0.5s, and never past
+the recording's length. Writes `<work>/index.html` from the template with brand, geometry and duration
+filled, and links the vendored assets as `<work>/vendor`.
+
+With a `video`, extract the camera frames for both face shots, using the shot list's in/out times:
+
+```bash
+bash SKILL_DIR/scripts/extract_face.sh <video> <work> vertical <hook-in> <hook-out> <signoff-in> <signoff-out>
+```
 
 Replace the demo shots between `BEGIN SHOTS` / `END SHOTS` (markup) and `BEGIN TIMELINE` /
 `END TIMELINE` (GSAP) with your shot list, using the helpers the template already defines:
-`shot()`, `slam()`, `hit()`, `rise()`, `pop()`, `drift()`, `typer()`, `counter()`, `terminal()`, and the
-`NOCAP` ranges. Every helper that makes noise pushes its own sound cue.
+`shot()`, `slam()`, `hit()`, `rise()`, `pop()`, `drift()`, `typer()`, `counter()`, `terminal()`, `faceCam()`,
+and the `NOCAP` ranges. Every helper that makes noise pushes its own sound cue.
 
 The display style (`.xl`) is uppercase and width-expanded; captions are condensed. Size headlines
 for the expanded width — a vertical frame fits ~6 characters at 250px.
@@ -226,6 +245,7 @@ Next: preview it on a phone, then post it with the credits in the description
 - Captions never cover the element the viewer is meant to read; hide them via `NOCAP` instead.
 - Report every image credit and every invented detail (dates, labels) that isn't in the audio.
 - Never commit rendered files or `work/`.
+- `faceCam()` in/out times match the `extract_face.sh` ranges exactly; never re-time a face shot alone.
 
 ---
 
@@ -241,3 +261,5 @@ Next: preview it on a phone, then post it with the credits in the description
 | `PAGE ERROR` in render output | a script error in the timeline | fix it; GSAP only warns on missing selectors, so also check each shot visually |
 | Whisper sits at low CPU for minutes | model download on first run | expected once; the model is cached afterwards |
 | Shot renders blank | `shot()` start ≥ end, or the shot id is misspelled | check the shot row's in/out times |
+| `missing face frame …` stops the render | a `faceCam()` range is wider than the extracted one | re-run `extract_face.sh` with that shot's in/out |
+| Face shots look grey and washed out | HDR (HLG) phone recording, tone-mapped without metadata | record in SDR (iPhone: Settings › Camera › Formats, HDR Video off) |

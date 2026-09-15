@@ -21,6 +21,9 @@ html,body{width:var(--W);height:var(--H);overflow:hidden;background:#07070d;font
 .glow{position:absolute;border-radius:50%;background:radial-gradient(circle,color-mix(in srgb,var(--accent) 35%,transparent),transparent 65%)}
 .photo{position:absolute;overflow:hidden}
 .photo img{width:100%;height:100%;object-fit:cover}
+.face{background:#000}
+.face>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.badge{display:inline-block;font-family:"{{brand.fonts.mono}}",monospace;font-size:34px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:#fff;background:var(--accent);border-radius:14px;padding:14px 28px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
 .hl{position:relative;display:inline-block;padding:0 .12em}
 .hl i{position:absolute;inset:.08em 0 0;background:var(--accent);transform-origin:left;z-index:-1;border-radius:.08em}
 .strike{position:absolute;left:-4%;right:-4%;top:48%;height:.09em;background:var(--accent);border-radius:99px;transform-origin:left;box-shadow:0 0 40px var(--accent)}
@@ -117,6 +120,10 @@ const TYPERS = [], COUNTERS = [];
 function typer(el, text, s, e){ TYPERS.push({el:q(el),text,s,e}); SFX.push({t:s,type:"type",dur:e-s}); }
 function counter(el, from, to, s, e){ COUNTERS.push({el:q(el),from,to,s,e}); SFX.push({t:s,type:"tick",dur:e-s}); }
 
+// Camera frames come from extract_face.sh, numbered by edit frame, so seeking stays frame-exact
+const FACES = [];
+function faceCam(id, s, e, enter){ shot(id, s, e, enter); FACES.push({img:q("#"+id+">img"),s,e}); }
+
 // Lines with mixed colours: [{t, e, html}] rebuilt every frame so seeking stays deterministic
 const TERMINALS = [];
 function terminal(el, lines){ TERMINALS.push({el:q(el),lines}); lines.forEach(l=>{ if(l.e>l.t) SFX.push({t:l.t,type:"type",dur:l.e-l.t}); }); }
@@ -185,7 +192,17 @@ function renderGrain(frame){
   grain.putImageData(grainImage,0,0);
 }
 
+// The renderer awaits this, so a screenshot never captures a face frame that hasn't decoded yet
+function renderFaces(t, frame){
+  const src = `face/f${String(frame).padStart(5,"0")}.jpg`;
+  return Promise.all(FACES.filter(({s,e})=>t>=s&&t<e).map(({img})=>{
+    if(img.getAttribute("src")===src) return null;
+    img.src = src;
+    return img.decode().catch(()=>{ throw new Error(`missing face frame ${src} at t=${t.toFixed(2)}; re-run extract_face.sh with this shot's in/out`); });
+  }));
+}
+
 window.SFX = SFX; window.DURATION = D;
-window.renderAt = t => { tl.seek(t,false); renderCaptions(t); renderText(t); renderGrain(Math.round(t*30)); };
+window.renderAt = t => { const frame = Math.round(t*30); tl.seek(t,false); renderCaptions(t); renderText(t); renderGrain(frame); return renderFaces(t, frame); };
 </script>
 </body></html>
