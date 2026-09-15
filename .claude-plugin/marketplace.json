@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Turn a voice recording into a fully animated, captioned, sound-designed short video with Claude Code.",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "repository": "https://github.com/Dancan254/voiceover-video-skill"
   },
   "plugins": [
