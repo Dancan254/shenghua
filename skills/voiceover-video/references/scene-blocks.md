@@ -110,7 +110,41 @@ An SVG curve drawing slowly through labelled milestones — for "found its purpo
 Full-bleed photo, darkened gradient, slow drift, large sentence fading in. No hits, music ducked.
 
 ### Outro
-Stacked slams for the final line, mascot bouncing in, `follow @handle`. Hold ~2.5s.
+Stacked slams for the final line, mascot bouncing in, `follow @handle`. Hold ~2.5s. With a video
+input, use *Face sign-off* instead.
+
+### Face hook *(video input)*
+The speaker on camera saying the opening line. Always shot 01, ending on the hook's last word.
+```html
+<section class="shot face" id="s01"><img alt=""></section>
+```
+```js
+faceCam("s01", 0, 2.4);
+hit(1.62, .5);
+```
+One punch-in on the word that lands the claim. Keep captions on: most viewers watch muted. Enter the
+next shot with `zoom`.
+
+### Series badge
+Series name and episode, shown and never spoken. Pops on the first animated shot and leaves before
+its cut. Place it inside that shot's section, not the face shot.
+```html
+<div class="cx" style="top:170px;z-index:5"><span class="badge" id="s02badge">SERIES NAME #04</span></div>
+```
+```js
+pop("#s02badge", 2.5); tl.to("#s02badge",{opacity:0,duration:.3,ease:E},4.3);
+```
+
+### Face sign-off *(video input)*
+The speaker on camera for the closing line. Always the last shot, from its first word to the end of
+the composition. `fade` entry, no hits, no mascot.
+```html
+<section class="shot face" id="s24"><img alt=""></section>
+```
+```js
+faceCam("s24", 84.1, D, "fade");
+```
+Face shots are full-bleed; check stills for a crop that cuts off the head.
 
 ---
 

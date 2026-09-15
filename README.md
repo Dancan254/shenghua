@@ -25,6 +25,8 @@ your machine.
   timeline itself
 - **A music bed** that ducks automatically under the voice and drops out before the final line
 - **Film finish**: grain, vignette, loudness normalised to −14 LUFS
+- **Optional face-cam bookends**: film the script on your phone in one take; your opening line and
+  sign-off stay on camera and everything between is animated
 - **QA gates**: Claude reviews a contact sheet of every shot before the full render, and checks the
   encoded file, not just the preview
 
@@ -64,6 +66,8 @@ always produces the same video, however slow the machine.
 | Python 3.10+ with `faster-whisper` and `numpy` | transcription and sound synthesis |
 | FFmpeg | mixing and encoding |
 
+Runs on macOS and Linux. On Windows, run Claude Code inside WSL: the scripts are bash.
+
 ```bash
 pip install faster-whisper numpy
 # macOS: brew install ffmpeg node   ·   Debian/Ubuntu: sudo apt install ffmpeg nodejs npm
@@ -87,12 +91,15 @@ cp -r voiceover-video-skill/skills/voiceover-video ~/.claude/skills/
 
 ### One-time setup
 
+Nothing to run by hand: Claude runs `setup.sh` the first time you use the skill. It installs
+`playwright-core` and its Chromium build, and downloads GSAP and the fonts. It prints `ready` or names
+exactly what is missing.
+
+If you copied the skill instead of installing the plugin, you can run it yourself first:
+
 ```bash
 bash ~/.claude/skills/voiceover-video/scripts/setup.sh
 ```
-
-It installs `playwright-core` and its Chromium build, and downloads GSAP and the fonts. It prints
-`ready` or names exactly what is missing.
 
 ---
 
@@ -104,6 +111,13 @@ In Claude Code:
 
 Claude will tell you the transcription estimate, show you the shot list for approval, and hand you the
 finished file with image credits and anything it could not verify.
+
+Want to be on camera? Film yourself saying the script on your phone in one take and pass the video:
+
+> make a video out of ~/Movies/take-1.mp4 with my face on the first and last line
+
+Your opening line and sign-off stay on camera, and everything between is animated over the same take.
+Record in SDR, not HDR, or the face shots come out washed out.
 
 Useful follow-ups:
 
@@ -117,7 +131,8 @@ Copy the example brand and edit it:
 
 ```bash
 mkdir -p ~/.config/voiceover-video
-cp ~/.claude/skills/voiceover-video/brand.example.json ~/.config/voiceover-video/brand.json
+curl -sL https://raw.githubusercontent.com/Dancan254/voiceover-video-skill/main/skills/voiceover-video/brand.example.json \
+  -o ~/.config/voiceover-video/brand.json
 ```
 
 ```json
@@ -133,7 +148,7 @@ cp ~/.claude/skills/voiceover-video/brand.example.json ~/.config/voiceover-video
 }
 ```
 
-Any Google Font works. Re-run `setup.sh` after changing fonts. A `./brand.json` in the current
+Any Google Font works. After changing fonts, ask Claude to re-run the skill's setup. A `./brand.json` in the current
 directory overrides the global one, so each project can have its own look.
 
 The default type is **Archivo** — expanded black for headlines, condensed for captions — with
