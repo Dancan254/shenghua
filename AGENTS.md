@@ -19,6 +19,7 @@ skills/voiceover-video/
     ├── setup.sh                 dependency check, playwright-core + Chromium, GSAP, fonts
     ├── transcribe.py            faster-whisper, word-level timestamps
     ├── build_captions.py        applies fixes.json → words.js
+    ├── init_brand.py            first-run answers → ~/.config/voiceover-video/brand.json
     ├── fill_template.py         brand + geometry + duration → work/index.html
     ├── extract_face.sh          to-camera video → face/fNNNNN.jpg, numbered by edit frame
     ├── render.js                stills | frames | cues, driven by window.renderAt(t)

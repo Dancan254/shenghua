@@ -71,6 +71,10 @@ def main() -> int:
 
     args.work.mkdir(parents=True, exist_ok=True)
     (args.work / "index.html").write_text(html, encoding="utf-8")
+    # The page loads words.js; without a placeholder a preview render fails before captions exist
+    captions = args.work / "words.js"
+    if not captions.exists():
+        captions.write_text("window.PHRASES=[];", encoding="utf-8")
     vendor = args.work / "vendor"
     if not vendor.exists():
         vendor.symlink_to(SKILL_DIR / "assets", target_is_directory=True)
