@@ -127,12 +127,15 @@ Useful follow-ups:
 
 ## Make it yours
 
-Copy the example brand and edit it:
+The first time you use the skill, Claude asks for your handle, your colours (a named look or your own
+accent and background), your fonts and where videos should go, then writes the brand file for you. Every
+question has a default, so "just use the defaults" is a valid answer. Skip it and your video carries the
+example brand's `@yourhandle`.
+
+To set it up yourself instead, write `~/.config/voiceover-video/brand.json` directly:
 
 ```bash
-mkdir -p ~/.config/voiceover-video
-curl -sL https://raw.githubusercontent.com/Dancan254/voiceover-video-skill/main/skills/voiceover-video/brand.example.json \
-  -o ~/.config/voiceover-video/brand.json
+python3 ~/.claude/skills/voiceover-video/scripts/init_brand.py --handle @yourhandle --preset carbon-cyan
 ```
 
 ```json

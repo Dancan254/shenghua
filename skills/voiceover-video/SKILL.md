@@ -36,6 +36,26 @@ Brand: `./brand.json`, then `~/.config/voiceover-video/brand.json`, then the bun
 `SKILL_DIR/brand.example.json`. Output goes to `<brand.output.dir>/<slug>/`; work files go to
 `<brand.output.dir>/<slug>/work/`. Pick the defaults and proceed. Don't interrogate.
 
+**First run only — no brand file anywhere:** the example brand ships someone else's handle and colours,
+so ask before rendering. Four questions, each with its default, answered in one message:
+
+| Ask | Default |
+|---|---|
+| Handle shown in the corner | required, no default |
+| Look: `midnight-pink`, `carbon-cyan`, `ink-amber`, `violet-signal`, or their own accent and background | `midnight-pink` |
+| Fonts: display and code | `Archivo` / `Geist Mono` |
+| Where finished videos go | `~/voiceover-videos` |
+
+```bash
+python3 SKILL_DIR/scripts/init_brand.py --handle @theirhandle [--preset carbon-cyan] \
+  [--accent '#ff6600' --bg '#0d1117'] [--heading Archivo --mono 'Geist Mono'] [--output-dir ~/voiceover-videos]
+```
+
+It derives the surface and border colours, checks the fonts against Google Fonts, and writes
+`~/.config/voiceover-video/brand.json`. Then run Step 1 so the fonts download. Offer a preview: fill the
+template and render one still, so they see their look before a full render. If they'd rather skip setup,
+say plainly that the video will carry the example brand's `@yourhandle`.
+
 If the audio or video path is missing or not a file, say so and stop. With a `video`, pass the video
 file wherever a step below takes `<audio>`; ffmpeg reads the voice from its audio track.
 

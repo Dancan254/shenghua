@@ -157,14 +157,16 @@ const NOCAP = [[0,2.7],[4.1,5.6]];
 
 const capbox = q("#capbox"); let lastPhrase = -1;
 function renderCaptions(t){
+  // words.js may still be the empty placeholder on a preview render, before transcription
+  const PH = window.PHRASES || [];
   const hidden = NOCAP.some(([a,b])=>t>=a&&t<b);
-  const idx = PHRASES.findIndex((p,i)=>{const n=PHRASES[i+1];return t>=p[0].s-.05 && t<(n?Math.min(n[0].s-.05,p[p.length-1].e+.6):p[p.length-1].e+.6);});
+  const idx = PH.findIndex((p,i)=>{const n=PH[i+1];return t>=p[0].s-.05 && t<(n?Math.min(n[0].s-.05,p[p.length-1].e+.6):p[p.length-1].e+.6);});
   if(hidden || idx<0){ capbox.style.visibility="hidden"; return; }
   capbox.style.visibility="visible";
-  if(idx!==lastPhrase){ capbox.innerHTML = PHRASES[idx].map(w=>`<span>${w.t}</span>`).join(""); lastPhrase = idx; }
-  const pulse = Math.max(0,1-(t-PHRASES[idx][0].s)/.15);
+  if(idx!==lastPhrase){ capbox.innerHTML = PH[idx].map(w=>`<span>${w.t}</span>`).join(""); lastPhrase = idx; }
+  const pulse = Math.max(0,1-(t-PH[idx][0].s)/.15);
   capbox.style.transform = `translateY(${pulse*30}px) scale(${1+pulse*.08})`;
-  [...capbox.children].forEach((el,i)=>{const w=PHRASES[idx][i]; el.className = t>=w.e?"on":(t>=w.s?"now":"");});
+  [...capbox.children].forEach((el,i)=>{const w=PH[idx][i]; el.className = t>=w.e?"on":(t>=w.s?"now":"");});
 }
 
 function renderText(t){
