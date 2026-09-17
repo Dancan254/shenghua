@@ -221,7 +221,20 @@ def main() -> int:
     written = ["sfx.wav"]
 
     if not args.no_music:
-        quiet = [tuple(map(float, q.split(":"))) for q in args.quiet]
+        quiet = []
+        for q in args.quiet:
+            parts = q.split(":")
+            if len(parts) != 2:
+                print(f"--quiet must be A:B, got: {q}", file=sys.stderr)
+                print("Next: pass a numeric range like --quiet 2.5:4.0", file=sys.stderr)
+                return 1
+            try:
+                a, b = float(parts[0]), float(parts[1])
+            except ValueError:
+                print(f"--quiet times must be numbers, got: {q}", file=sys.stderr)
+                print("Next: pass a numeric range like --quiet 2.5:4.0", file=sys.stderr)
+                return 1
+            quiet.append((a, b))
         write_wav(args.work / "music.wav", build_music(args.duration, samples, args.drums_from, args.drop, quiet))
         written.append("music.wav")
 
