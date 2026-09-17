@@ -5,7 +5,7 @@
     "url": "https://github.com/Dancan254"
   },
   "metadata": {
-    "description": "Turn a voice recording into a fully animated, captioned, sound-designed short video with Claude Code.",
+    "description": "Turn a voice recording into a fully animated, captioned, sound-designed short video with any AI agent that can run shell commands.",
     "version": "1.1.0",
     "repository": "https://github.com/Dancan254/voiceover-video-skill"
   },
@@ -13,7 +13,7 @@
     {
       "name": "voiceover-video",
       "source": "./",
-      "strict": false,
+      "strict": true,
       "description": "Voice note in, animated vertical Short out: word-level captions, kinetic typography, camera moves, synthesized sound design and a voice-ducked music bed.",
       "skills": [
         "./skills/voiceover-video"

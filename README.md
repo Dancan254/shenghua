@@ -1,6 +1,6 @@
 # voiceover-video
 
-**A Claude Code skill that turns a voice recording into a fully edited, animated short video.**
+**An AI-agent skill that turns a voice recording into a fully edited, animated short video.**
 
 Drop in a voice note. Claude transcribes it word by word, designs a shot list, finds images, builds
 every scene as kinetic typography and motion graphics timed to your words, adds sound design and a
@@ -140,9 +140,10 @@ Then point your agent at `SKILL.md` and give it the audio file. Claude Code user
 through `/plugin install`, which only saves the cloning.
 
 **What the agent needs:** a shell, file writing, and the ability to read text output. Vision is
-optional and only improves Step 7: an agent that cannot see images runs `render.js check`, which
-measures every shot and reports problems as text, then asks you to glance at the contact sheet. No step
-needs audio, so every agent has to ask you to listen to the mix before posting.
+optional and improves Step 5 (judging sourced images) and Step 7 (reviewing the contact sheet): an
+agent that cannot see images lists each image source for you to confirm and runs `render.js check`,
+which measures every shot and reports problems as text. No step needs audio, so every agent has to ask
+you to listen to the mix before posting.
 
 ## Make it yours
 
@@ -154,13 +155,22 @@ example brand's `@yourhandle`.
 To set it up yourself instead, write `~/.config/voiceover-video/brand.json` directly:
 
 ```bash
+# Adjust the path if you installed the skill as a plugin or copied it elsewhere
 python3 ~/.claude/skills/voiceover-video/scripts/init_brand.py --handle @yourhandle --preset carbon-cyan
 ```
 
 ```json
 {
   "handle": "@yourhandle",
-  "colors": { "bg": "#0f0f17", "accent": "#ff3d5a", "...": "..." },
+  "colors": {
+    "bg": "#0f0f17",
+    "surface1": "#181824",
+    "surface2": "#212133",
+    "border": "#2c2c42",
+    "accent": "#ff3d5a",
+    "textBody": "#e8e8ee",
+    "textMuted": "#737a94"
+  },
   "fonts": {
     "heading": "Archivo",
     "mono": "Geist Mono",

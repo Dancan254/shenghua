@@ -1,0 +1,14 @@
+{
+  "name": "voiceover-video",
+  "description": "Turn a voice recording into a fully animated, captioned, sound-designed short video with any AI agent that can run shell commands.",
+  "version": "1.1.0",
+  "author": {
+    "name": "Dancan254",
+    "url": "https://github.com/Dancan254"
+  },
+  "repository": "https://github.com/Dancan254/voiceover-video-skill",
+  "license": "MIT",
+  "skills": [
+    "./skills/voiceover-video"
+  ]
+}
