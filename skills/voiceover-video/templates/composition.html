@@ -94,7 +94,11 @@ const tl = gsap.timeline({paused:true});
 const SFX = [];
 const q = s => document.querySelector(s);
 
+// Every shot registers its window so `render.js check` can seek to each one without the shot list
+const SHOTS = [];
+
 function shot(id, s, e, enter){
+  SHOTS.push({id, s, e});
   tl.set("#"+id,{visibility:"visible"},s);
   tl.set("#"+id,{visibility:"hidden"},e);
   if(enter === "whip"){ tl.fromTo("#"+id,{xPercent:40,filter:"blur(30px)"},{xPercent:0,filter:"blur(0px)",duration:.28,ease:EX},s); SFX.push({t:s-.12,type:"whoosh"}); }
@@ -204,7 +208,7 @@ function renderFaces(t, frame){
   }));
 }
 
-window.SFX = SFX; window.DURATION = D;
+window.SFX = SFX; window.DURATION = D; window.SHOTS = SHOTS;
 window.renderAt = t => { const frame = Math.round(t*30); tl.seek(t,false); renderCaptions(t); renderText(t); renderGrain(frame); return renderFaces(t, frame); };
 </script>
 </body></html>
