@@ -4,7 +4,7 @@
 <style>
 :root{--bg:{{brand.colors.bg}};--s1:{{brand.colors.surface1}};--s2:{{brand.colors.surface2}};--border:{{brand.colors.border}};--accent:{{brand.colors.accent}};--body:{{brand.colors.textBody}};--muted:{{brand.colors.textMuted}};--green:#3ddc84;--red:#ff3b3b;--W:{{width}}px;--H:{{height}}px}
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{width:var(--W);height:var(--H);overflow:hidden;background:#07070d;font-family:"{{brand.fonts.heading}}",sans-serif;color:#fff}
+html,body{width:var(--W);height:var(--H);overflow:hidden;background:#07070d;font-family:"{{brand.fonts.heading}}","Arial Narrow",Arial,sans-serif;color:#fff}
 #world{position:absolute;inset:0;overflow:hidden;background:var(--bg)}
 #cam{position:absolute;inset:0;transform-origin:50% 45%}
 .shot{position:absolute;inset:0;visibility:hidden;overflow:hidden}
@@ -118,6 +118,7 @@ function slam(sel, t, power=1){
 }
 function rise(sel, t, d=.45){ tl.fromTo(sel,{y:70,opacity:0},{y:0,opacity:1,duration:d,ease:EX},t); }
 function pop(sel, t){ tl.fromTo(sel,{scale:.4,opacity:0},{scale:1,opacity:1,duration:.4,ease:"back.out(2)"},t); SFX.push({t,type:"pop"}); }
+function stamp(sel, t){ tl.fromTo(sel,{scale:3,opacity:0},{scale:1,opacity:1,duration:.2,ease:EX},t); SFX.push({t,type:"stamp"}); }
 function drift(sel, s, e, from, to){ tl.fromTo(sel,from,{...to,duration:e-s,ease:"none"},s); }
 
 const TYPERS = [], COUNTERS = [];
