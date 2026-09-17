@@ -45,6 +45,30 @@ def main() -> int:
         return 1
 
     brand = json.loads(brand_path.read_text(encoding="utf-8"))
+
+    required = {
+        "handle": brand.get("handle"),
+        "fonts.heading": brand.get("fonts", {}).get("heading"),
+        "fonts.mono": brand.get("fonts", {}).get("mono"),
+        "colors.bg": brand.get("colors", {}).get("bg"),
+        "colors.accent": brand.get("colors", {}).get("accent"),
+        "colors.surface1": brand.get("colors", {}).get("surface1"),
+        "colors.surface2": brand.get("colors", {}).get("surface2"),
+        "colors.border": brand.get("colors", {}).get("border"),
+        "colors.textBody": brand.get("colors", {}).get("textBody"),
+        "colors.textMuted": brand.get("colors", {}).get("textMuted"),
+    }
+    missing = [k for k, v in required.items() if v is None]
+    if missing:
+        print(f"Brand file {brand_path} is missing keys: {', '.join(missing)}", file=sys.stderr)
+        print("Next: add them or run init_brand.py to generate a complete brand file", file=sys.stderr)
+        return 1
+
+    if args.duration <= 0:
+        print(f"Duration must be positive, got {args.duration}", file=sys.stderr)
+        print("Next: pass the composition length in seconds", file=sys.stderr)
+        return 1
+
     geometry = FORMATS[args.format]
     values = {
         "width": geometry["width"],
