@@ -3,7 +3,7 @@
  * render.js — drive a composition deterministically in headless Chromium
  *
  *   node render.js stills <index.html> <out-dir> <t1,t2,…>
- *   node render.js frames <index.html> <out-dir> <from-frame> <to-frame>
+ *   node render.js frames <index.html> <out-dir> <from-frame> <to-frame>  (to-frame is exclusive)
  *   node render.js cues   <index.html> <cues.json>
  *   node render.js check  <index.html> [report.json]
  *
@@ -134,7 +134,13 @@ if (mode === 'frames' && (Number.isNaN(Number(a)) || Number.isNaN(Number(b)) || 
 
   if (mode === 'stills') {
     fs.mkdirSync(target, { recursive: true });
-    const times = (a || '').split(',').filter(Boolean).map(Number);
+    if (!a) {
+      usage('stills needs a comma-separated timestamp list');
+    }
+    const times = a.split(',').map(s => Number(s.trim())).filter(t => !Number.isNaN(t));
+    if (!times.length) {
+      usage('stills timestamp list parsed to zero valid numbers');
+    }
     for (const t of times) {
       await page.evaluate(x => window.renderAt(x), t);
       await page.screenshot({ path: path.join(target, `t${String(t.toFixed(2)).padStart(7, '0')}.jpg`), type: 'jpeg', quality: 70 });
