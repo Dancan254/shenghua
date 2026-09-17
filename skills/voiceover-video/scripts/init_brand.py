@@ -99,6 +99,10 @@ def main() -> int:
             print("Next: check the exact family names on fonts.google.com, or pass --skip-font-check", file=sys.stderr)
             return 1
 
+    # Expand ~ so scripts that read brand["output"]["dir"] later don't create a literal
+    # "~" directory in the current working directory.
+    output_dir = Path(args.output_dir).expanduser().resolve()
+
     brand = {
         "handle": args.handle if args.handle.startswith("@") else "@" + args.handle,
         "colors": {
@@ -113,7 +117,7 @@ def main() -> int:
             "textMuted": colors["textMuted"],
         },
         "fonts": {"heading": args.heading, "mono": args.mono, "googleFontsUrl": url},
-        "output": {"dir": args.output_dir},
+        "output": {"dir": str(output_dir)},
     }
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
