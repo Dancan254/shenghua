@@ -71,15 +71,21 @@ counter("#s03y", 1984, 1991, 6.5, 7.2); hit(7.2,.8);
 ### Typewriter / terminal
 Code, commands, errors. The template's `.term` gives the window chrome; `typer()` types plain
 text and pushes typing SFX. For mixed colours (red error lines), keep a line array and rebuild
-`innerHTML` in the render loop — see `renderTerminal` in the template.
+`innerHTML` in the `renderText` loop — see `terminal()` in the template.
 
 ### Photo tape-in
 A person or artefact. Tilted polaroid with a tape strip, slow push-in (`drift` on the `<img>`
 scale), a typed name tag and a stamp.
 
 ### Stamp
-Verdicts: `NOT READY`, `CONFIDENTIAL`, `SUN MICROSYSTEMS`. Scale from 3 → 1 in 0.2s and add a
-`stamp` cue.
+Verdicts: `NOT READY`, `CONFIDENTIAL`, `SUN MICROSYSTEMS`.
+
+```html
+<div class="cx stamp" id="s04stamp" style="top:840px;color:var(--accent);font-size:120px">CONFIDENTIAL</div>
+```
+```js
+stamp("#s04stamp", 4.2);
+```
 
 ### Era look
 Period-specific texture for historical beats:
@@ -123,7 +129,8 @@ faceCam("s01", 0, 2.4);
 hit(1.62, .5);
 ```
 One punch-in on the word that lands the claim. Keep captions on: most viewers watch muted. Enter the
-next shot with `zoom`.
+next shot with `zoom`. The `faceCam()` in/out times must exactly match the `extract_face.sh` range
+for this shot.
 
 ### Series badge
 Series name and episode, shown and never spoken. Pops on the first animated shot and leaves before
@@ -144,7 +151,21 @@ the composition. `fade` entry, no hits, no mascot.
 ```js
 faceCam("s24", 84.1, D, "fade");
 ```
-Face shots are full-bleed; check stills for a crop that cuts off the head.
+Face shots are full-bleed; check stills for a crop that cuts off the head. The `faceCam()` in/out
+times must exactly match the `extract_face.sh` range for this shot.
+
+---
+
+## Captions
+
+Captions are burned in automatically from `words.js`. Hide them whenever the spoken word *is* the
+visual (a huge headline, a counter, a terminal) by adding its time range to `NOCAP` in the template:
+
+```js
+const NOCAP = [[1.2, 2.4], [4.1, 5.6]];
+```
+
+Never cover the element the viewer is meant to read; hide captions instead.
 
 ---
 
@@ -165,8 +186,9 @@ Every helper pushes its own cue into `SFX`; add extras with `SFX.push({t, type, 
 | `down` (dur) | falling tone | crashes, failures |
 | `error` | square buzz | red error lines |
 
-The music bed ducks under the voice automatically. Use `--drop <t>` in `synth_audio.py` to cut
-the music just before the final slam — silence before the punchline is the strongest hit.
+The music bed ducks under the voice automatically at mix time (`mix-encode.sh`). Use `--drop <t>`
+in `synth_audio.py` to cut the music just before the final slam — silence before the punchline is
+the strongest hit.
 
 ---
 
