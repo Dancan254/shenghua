@@ -125,6 +125,25 @@ Useful follow-ups:
 
 ---
 
+## Use it with another agent
+
+Nothing here is tied to one model. `skills/voiceover-video/SKILL.md` is a plain workflow document, and
+the scripts are Python, Node and bash that call no model at all. Any agent that can run shell commands
+and write files can follow it:
+
+```bash
+git clone https://github.com/Dancan254/voiceover-video-skill
+bash voiceover-video-skill/skills/voiceover-video/scripts/setup.sh
+```
+
+Then point your agent at `SKILL.md` and give it the audio file. Claude Code users get the same thing
+through `/plugin install`, which only saves the cloning.
+
+**What the agent needs:** a shell, file writing, and the ability to read text output. Vision is
+optional and only improves Step 7: an agent that cannot see images runs `render.js check`, which
+measures every shot and reports problems as text, then asks you to glance at the contact sheet. No step
+needs audio, so every agent has to ask you to listen to the mix before posting.
+
 ## Make it yours
 
 The first time you use the skill, Claude asks for your handle, your colours (a named look or your own

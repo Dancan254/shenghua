@@ -148,6 +148,9 @@ curl -sL -A "voiceover-video-skill/1.0" -o <work>/assets/<name> "https://commons
 Logos: `https://cdn.jsdelivr.net/npm/simple-icons@13/icons/<slug>.svg`. Keep a credits list — file
 name, author, licence — for the report.
 
+If you cannot view images, never place one unseen: list each file with its source URL and what you
+expect it to show, and ask the user to confirm before Step 6.
+
 ---
 
 ## Step 6 — Author the composition
@@ -185,10 +188,22 @@ node SKILL_DIR/scripts/render.js stills <work>/index.html <work>/stills 0.6,2.4,
 bash SKILL_DIR/scripts/contact-sheet.sh <work>/stills <work>/contact.jpg
 ```
 
-Read `contact.jpg`. Check for: text clipped at the frame edge, captions colliding with diagram
-elements, overlays covering the signature, blank image crops, and `PAGE ERROR` lines in the output.
-Fix, re-render only the affected stills, and look again. Do not start Step 9 with a known defect — a
-full render costs minutes.
+Measure first — this needs no eyes and runs in seconds:
+
+```bash
+node SKILL_DIR/scripts/render.js check <work>/index.html [<work>/check.json]
+```
+
+It seeks to each shot's midpoint and reports text past the frame edge, text sitting under the caption
+box, shots that render nothing, and `PAGE ERROR` lines. Exit 1 means findings. Fix and re-run until it
+is clean; it catches clipped headlines that a full render would waste minutes on.
+
+Then, **if you can view images**, read `contact.jpg` for what measurement cannot judge: crops that cut
+off a face or subject, an image that does not match the line, and layouts that fit the frame but read
+badly. Fix, re-render only the affected stills, and look again.
+
+If you cannot view images, say so in the report and ask the user to look at `contact.jpg` before
+Step 9. Do not start Step 9 with a known defect — a full render costs minutes.
 
 ---
 

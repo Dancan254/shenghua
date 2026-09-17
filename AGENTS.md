@@ -22,14 +22,30 @@ skills/voiceover-video/
     ├── init_brand.py            first-run answers → ~/.config/voiceover-video/brand.json
     ├── fill_template.py         brand + geometry + duration → work/index.html
     ├── extract_face.sh          to-camera video → face/fNNNNN.jpg, numbered by edit frame
-    ├── render.js                stills | frames | cues, driven by window.renderAt(t)
+    ├── render.js                stills | frames | cues | check, driven by window.renderAt(t)
     ├── render-frames.sh         parallel frame rendering
     ├── contact-sheet.sh         stills → one review image
     ├── synth_audio.py           cues.json → sfx.wav + music.wav
     └── mix-encode.sh            voice + ducked music + SFX → mp4
 ```
 
-`.claude-plugin/marketplace.json` registers the skill for `/plugin install`.
+`.claude-plugin/marketplace.json` registers the skill for `/plugin install`. It is additive: other
+hosts ignore it and read `SKILL.md` directly.
+
+## What an agent needs to run this
+
+The skill is model-agnostic by construction — no script calls a model, and `SKILL.md` names no vendor.
+Keep it that way:
+
+- **Required:** a shell, file writing, reading text output. Every script prints a one-line result and a
+  `Next:` line, so an agent can follow the workflow from stdout alone.
+- **Optional:** vision. Only Step 5 (judging a downloaded image) and Step 7 (reading the contact sheet)
+  benefit. Both have a documented text path: list images for the user to confirm, and
+  `render.js check`, which measures every shot and reports defects as text.
+- **Never assumed:** audio. Nothing can hear the mix, so the workflow always asks the user to listen.
+
+A change that makes any step impossible without vision, or that ties the workflow to one agent's tool
+names, breaks this.
 
 ## Invariants — do not break these
 
