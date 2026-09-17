@@ -25,7 +25,7 @@ block catalogue, the pacing rules, and the sound-cue vocabulary.
 | Field | Required | Example |
 |-------|----------|---------|
 | `audio` or `video` | Yes | `~/Downloads/voice-note.m4a` · a to-camera recording `~/Movies/take-1.mp4` |
-| `script` | No | the script, plain or with `[FACE]` / `[VOICE]` sections; captions are checked against it |
+| `script` | No | the script, plain or with `[FACE]` / `[VOICE]` sections; captions are checked against it. Sections start on their own line with exactly `[FACE]` or `[VOICE]` |
 | `format` | No | `vertical` 1080x1920 (default) · `landscape` 1920x1080 |
 | `music` | No | `synth` (default) · path to a royalty-free track · `none` |
 | `model` | No | `small` (default) · `base` for clean audio, ~2x faster |
@@ -34,7 +34,15 @@ block catalogue, the pacing rules, and the sound-cue vocabulary.
 
 Brand: `./brand.json`, then `~/.config/voiceover-video/brand.json`, then the bundled
 `SKILL_DIR/brand.example.json`. Output goes to `<brand.output.dir>/<slug>/`; work files go to
-`<brand.output.dir>/<slug>/work/`. Pick the defaults and proceed. Don't interrogate.
+`<brand.output.dir>/<slug>/work/`. Create it now and set `<work>` to that path for the rest of the
+workflow:
+
+```bash
+mkdir -p <brand.output.dir>/<slug>/work
+work="<brand.output.dir>/<slug>/work"
+```
+
+Pick the defaults and proceed. Don't interrogate.
 
 **First run only — no brand file anywhere:** the example brand ships someone else's handle and colours,
 so ask before rendering. Four questions, each with its default, answered in one message:
@@ -78,7 +86,7 @@ the missing piece. Re-running is a no-op unless the brand's fonts changed.
 Tell the user the estimate first: roughly **2–3x realtime on CPU** for `small`.
 
 ```bash
-python3 SKILL_DIR/scripts/transcribe.py <audio> --outdir <work> --model small --vocab "<vocab>"
+python3 SKILL_DIR/scripts/transcribe.py <audio> --outdir "$work" --model small --vocab "<vocab>"
 ```
 
 Writes `words.json` (every word with start/end) and `transcript.txt` — one phrase per line as
@@ -101,7 +109,7 @@ drops the token:
 ```
 
 ```bash
-python3 SKILL_DIR/scripts/build_captions.py <work>
+python3 SKILL_DIR/scripts/build_captions.py "$work"
 ```
 
 Writes `<work>/words.js`. Never change timestamps. Tell the user about any token you could not
@@ -156,12 +164,19 @@ expect it to show, and ask the user to confirm before Step 6.
 ## Step 6 — Author the composition
 
 ```bash
-python3 SKILL_DIR/scripts/fill_template.py <work> <duration> --format vertical
+python3 SKILL_DIR/scripts/fill_template.py "$work" <duration> --format vertical
+# or --format landscape for 1920x1080
 ```
 
 `<duration>` = last word end + ~2.5s for the outro; with a `video`, last word end + 0.5s, and never past
-the recording's length. Writes `<work>/index.html` from the template with brand, geometry and duration
-filled, and links the vendored assets as `<work>/vendor`.
+the recording's length. Get the recording length with:
+
+```bash
+ffprobe -v error -show_entries format=duration -of csv=p=0 <video>
+```
+
+Writes `<work>/index.html` from the template with brand, geometry and duration filled, and links the
+vendored assets as `<work>/vendor`.
 
 With a `video`, extract the camera frames for both face shots, using the shot list's in/out times:
 
@@ -170,7 +185,8 @@ bash SKILL_DIR/scripts/extract_face.sh <video> <work> vertical <hook-in> <hook-o
 ```
 
 Replace the demo shots between `BEGIN SHOTS` / `END SHOTS` (markup) and `BEGIN TIMELINE` /
-`END TIMELINE` (GSAP) with your shot list, using the helpers the template already defines:
+`END TIMELINE` (GSAP) with your shot list, using the helpers the template already defines. Keep the
+outer `#world` and `#cam` containers intact:
 `shot()`, `slam()`, `hit()`, `rise()`, `pop()`, `drift()`, `typer()`, `counter()`, `terminal()`, `faceCam()`,
 and the `NOCAP` ranges. Every helper that makes noise pushes its own sound cue.
 
@@ -184,14 +200,16 @@ for the expanded width — a vertical frame fits ~6 characters at 250px.
 Pick one timestamp per shot, at the moment of densest content:
 
 ```bash
-node SKILL_DIR/scripts/render.js stills <work>/index.html <work>/stills 0.6,2.4,4.9,…
-bash SKILL_DIR/scripts/contact-sheet.sh <work>/stills <work>/contact.jpg
+node SKILL_DIR/scripts/render.js stills "$work"/index.html "$work"/stills 0.6,2.4,4.9,…
+bash SKILL_DIR/scripts/contact-sheet.sh "$work"/stills "$work"/contact.jpg
 ```
+
+Pass timestamps as a comma-separated list with **no spaces**; spaces parse as `NaN`.
 
 Measure first — this needs no eyes and runs in seconds:
 
 ```bash
-node SKILL_DIR/scripts/render.js check <work>/index.html [<work>/check.json]
+node SKILL_DIR/scripts/render.js check "$work"/index.html ["$work"/check.json]
 ```
 
 It seeks to each shot's midpoint and reports text past the frame edge, text sitting under the caption
@@ -210,12 +228,18 @@ Step 9. Do not start Step 9 with a known defect — a full render costs minutes.
 ## Step 8 — Sound
 
 ```bash
-node SKILL_DIR/scripts/render.js cues <work>/index.html <work>/cues.json
-python3 SKILL_DIR/scripts/synth_audio.py <work>/cues.json <duration> <work> --drop <time-of-final-slam>
+node SKILL_DIR/scripts/render.js cues "$work"/index.html "$work"/cues.json
+python3 SKILL_DIR/scripts/synth_audio.py "$work"/cues.json <duration> "$work" --drop <time-of-final-slam>
 ```
 
-Writes `sfx.wav` and `music.wav`. With `music` set to a file, pass `--no-music` and give that file to
-Step 10. With `none`, pass `--no-music` and nothing else.
+Writes `sfx.wav` and `music.wav`. Omit `--drop` if the video has no final slam; otherwise use the time
+of the last big hit. Optional pacing flags:
+
+- `--drums-from <t>` — bring the drums in at `<t>` seconds.
+- `--quiet <a>:<b>` — duck the music between `a` and `b` seconds (repeatable).
+
+With `music` set to a file, pass `--no-music` and give that file to Step 10. With `none`, pass
+`--no-music` and nothing else.
 
 You cannot hear the result. Say so in the report and ask the user to listen.
 
@@ -224,7 +248,7 @@ You cannot hear the result. Say so in the report and ask the user to listen.
 ## Step 9 — Render frames
 
 ```bash
-bash SKILL_DIR/scripts/render-frames.sh <work>/index.html <work>/frames <duration> [workers] [from_frame to_frame]
+bash SKILL_DIR/scripts/render-frames.sh "$work"/index.html "$work"/frames <duration> [workers] [from_frame to_frame]
 ```
 
 About 3 minutes for 108s on 10 workers. Run it in the background. The optional frame range re-renders
@@ -235,7 +259,8 @@ a single shot after a fix; each bound is its own argument, so it is safe under z
 ## Step 10 — Mix and encode
 
 ```bash
-bash SKILL_DIR/scripts/mix-encode.sh <work> <audio> <duration> <out.mp4> [music-file]
+out="<brand.output.dir>/<slug>/<slug>.mp4"
+bash SKILL_DIR/scripts/mix-encode.sh "$work" <audio> <duration> "$out" [music-file]
 ```
 
 Normalises the voice, ducks the music under it, lays the SFX on top, pads everything to the full
@@ -257,7 +282,7 @@ ffprobe -v error -show_entries format=duration,size -of compact <out.mp4>
 A still rendered from the HTML is not proof the video contains the fix.
 
 ```
-java-origin.mp4 · 1080x1920 · 108.2s · 112 MB · -14.7 LUFS
+<slug>.mp4 · 1080x1920 · 108.2s · 112 MB · -14.7 LUFS
 
   shots 30 · sound cues 117 · images 4 · captions fixed 6
 
@@ -266,6 +291,8 @@ java-origin.mp4 · 1080x1920 · 108.2s · 112 MB · -14.7 LUFS
 
 Next: preview it on a phone, then post it with the credits in the description
 ```
+
+`mix-encode.sh` prints raw `ffprobe` output; reformat it into the line above for the report.
 
 ---
 
