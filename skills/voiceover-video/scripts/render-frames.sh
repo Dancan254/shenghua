@@ -11,9 +11,27 @@ WORKERS="${4:-10}"
 FPS=30
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+if ! [[ "$WORKERS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "workers must be a positive integer, got: $WORKERS"
+  echo "Next: pass a positive integer like 8 or 10"
+  exit 1
+fi
+
 TOTAL=$(python3 -c "import math; print(math.ceil($DURATION * $FPS))")
 FROM="${5:-0}"
 TO="${6:-$TOTAL}"
+
+if ! [[ "$FROM" =~ ^[0-9]+$ ]] || ! [[ "$TO" =~ ^[0-9]+$ ]]; then
+  echo "frame range must be non-negative integers, got: $FROM $TO"
+  echo "Next: pass the range as two integer frame numbers"
+  exit 1
+fi
+if (( FROM >= TO )); then
+  echo "frame range must satisfy from < to, got: $FROM $TO"
+  echo "Next: pass a valid range, or omit the range to render all frames"
+  exit 1
+fi
+
 SPAN=$(( TO - FROM ))
 STEP=$(( (SPAN + WORKERS - 1) / WORKERS ))
 
