@@ -106,8 +106,15 @@ break first (observed: `San Micro Systems` → Sun Microsystems, `Ok` → Oak, `
 drops the token:
 
 ```json
-{ "San": "Sun", "Ok.": "Oak.", "CNC++,": "C/C++,", "alias,": "" }
+{ "San": "Sun", "Ok.": "Oak.", "CNC++,": "C/C++,", "alias,": "", "that@50.22": "data" }
 ```
+
+A plain key fixes the token everywhere. For a common word that was misheard once, key it as
+`token@time`, with the start time printed in `transcript.txt`, and only that word changes.
+
+Optionally write `<work>/keywords.json`, an array of words that stay in the accent colour once
+spoken: `["Kafka", "Java@3.00"]`. A plain word flags every occurrence; `@time` flags one. Keep it to
+names and the few nouns the video is about, one per phrase at most.
 
 ```bash
 python3 SKILL_DIR/scripts/build_captions.py "$work"
@@ -240,8 +247,8 @@ full-bleed + lower-third pattern.
 Replace the demo shots between `BEGIN SHOTS` / `END SHOTS` (markup) and `BEGIN TIMELINE` /
 `END TIMELINE` (GSAP) with your shot list, using the helpers the template already defines. Keep the
 outer `#world` and `#cam` containers intact:
-`shot()`, `slam()`, `hit()`, `rise()`, `pop()`, `drift()`, `kenBurns()`, `lowerThird()`, `ticker()`,
-`typer()`, `counter()`, `terminal()`, `faceCam()`, `clip()`, `broll()`, and the `NOCAP` ranges. Every helper that makes noise pushes its own sound cue.
+`shot()`, `slam()`, `hit()`, `rise()`, `pop()`, `stagger()`, `drift()`, `kenBurns()`, `lowerThird()`, `ticker()`,
+`typer()`, `counter()`, `terminal()`, `faceCam()`, `clip()`, `broll()`, the `NOCAP` ranges, and the `CAP_STYLE` constant. Every helper that makes noise pushes its own sound cue.
 
 The display style (`.xl`) is uppercase and width-expanded; captions are condensed. Size headlines
 for the expanded width — a vertical frame fits ~6 characters at 250px.
