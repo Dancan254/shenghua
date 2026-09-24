@@ -77,6 +77,13 @@ function slam(sel, t, power=1){
 }
 function rise(sel, t, d=.45){ tl.fromTo(sel,{y:70,opacity:0},{y:0,opacity:1,duration:d,ease:EX},t); }
 function pop(sel, t){ tl.fromTo(sel,{scale:.4,opacity:0},{scale:1,opacity:1,duration:.4,ease:"back.out(2)"},t); SFX.push({t,type:"pop"}); }
+// One pop per matched element, gap seconds apart: a list, a grid of cards, a row of chips
+function stagger(sel, t, gap=.09){
+  document.querySelectorAll(sel).forEach((el,i)=>{
+    tl.fromTo(el,{scale:.4,opacity:0},{scale:1,opacity:1,duration:.4,ease:"back.out(2)"},t+i*gap);
+    SFX.push({t:t+i*gap,type:"pop"});
+  });
+}
 function stamp(sel, t){ tl.fromTo(sel,{scale:3,opacity:0},{scale:1,opacity:1,duration:.2,ease:EX},t); SFX.push({t,type:"stamp"}); }
 function drift(sel, s, e, from, to){ tl.fromTo(sel,from,{...to,duration:e-s,ease:"none"},s); }
 // Slow pan-and-zoom on a still so a photo held for seconds never looks frozen
@@ -134,6 +141,10 @@ hit(7.5,1); SFX.push({t:7.5,type:"error"});
 // Captions hide where the spoken word is already the visual: [[from, to], …]
 const NOCAP = [[0,2.7],[4.1,5.6]];
 
+// "phrase": the whole phrase shows dimmed, one pulse, the theme marks the spoken word.
+// "pop": each word pops in on its own timestamp, the theme still marks the spoken word.
+const CAP_STYLE = "phrase";
+
 const capbox = q("#capbox"); let lastPhrase = -1;
 function renderCaptions(t){
   // words.js may still be the empty placeholder on a preview render, before transcription
@@ -143,9 +154,23 @@ function renderCaptions(t){
   if(hidden || idx<0){ capbox.style.visibility="hidden"; return; }
   capbox.style.visibility="visible";
   if(idx!==lastPhrase){ capbox.innerHTML = PH[idx].map(w=>`<span>${w.t}</span>`).join(""); lastPhrase = idx; }
+  const state = w => (t>=w.e?"on":(t>=w.s?"now":"")) + (w.k?" kw":"");
+  if(CAP_STYLE === "pop"){
+    capbox.style.transform = "none";
+    // A pure function of t, like everything else, so any frame can be rendered alone
+    [...capbox.children].forEach((el,i)=>{
+      const w = PH[idx][i];
+      el.className = state(w);
+      if(t < w.s){ el.style.opacity = 0; el.style.transform = "scale(.6)"; return; }
+      const k = Math.min(1,(t-w.s)/.14), overshoot = 1+.45*(1-k)*(1-k)*THEME.pulse;
+      el.style.opacity = 1;
+      el.style.transform = `scale(${overshoot.toFixed(3)})`;
+    });
+    return;
+  }
   const pulse = Math.max(0,1-(t-PH[idx][0].s)/.15);
   capbox.style.transform = `translateY(${pulse*30*THEME.pulse}px) scale(${1+pulse*.08*THEME.pulse})`;
-  [...capbox.children].forEach((el,i)=>{const w=PH[idx][i]; el.className = t>=w.e?"on":(t>=w.s?"now":"");});
+  [...capbox.children].forEach((el,i)=>{ el.className = state(PH[idx][i]); });
 }
 
 function renderText(t){

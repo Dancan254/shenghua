@@ -205,6 +205,9 @@ The emotional "it's everywhere" beat.
 
 ### Logo wall
 3x3 grid of `.logo` cards popping with a stagger; nine `pop` cues.
+```js
+stagger("#s09 .logo", 20.4, .09);   // one pop and one pop cue per card, in DOM order
+```
 
 ### Path / journey
 An SVG curve drawing slowly through labelled milestones — for "found its purpose along the way".
@@ -263,6 +266,16 @@ const NOCAP = [[1.2, 2.4], [4.1, 5.6]];
 ```
 
 Never cover the element the viewer is meant to read; hide captions instead.
+
+Two caption styles, set with `CAP_STYLE` in the template:
+
+| `CAP_STYLE` | Feel | Use for |
+|---|---|---|
+| `"phrase"` *(default)* | whole phrase dimmed, one pulse, the spoken word marked | calm explainers, long sentences |
+| `"pop"` | each word pops in on its own timestamp | fast Shorts, listicles, hype |
+
+Both use the theme's mark for the spoken word. Words flagged in `keywords.json` stay in the accent
+colour after they are spoken.
 
 ---
 
