@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 """Find photos and video of people, products and events, download them, and keep the credits.
 
-  find_media.py search <work> "<query>" [--kind image|video] [--source commons,openverse,web,youtube,archive,pexels] [--licensed-only] [--limit 6]
+  find_media.py search <work> "<query>" [--kind image|video|gif] [--source commons,openverse,web,youtube,archive,pexels,giphy] [--licensed-only] [--limit 6]
   find_media.py fetch  <work> <result-id> --name <stem> [--section <from>-<to>]
-  find_media.py fetch  <work> --url <url> --name <stem> [--kind image|video] [--license "<licence>" --author "<who>"] [--section <from>-<to>]
+  find_media.py fetch  <work> --url <url> --name <stem> [--kind image|video|gif] [--license "<licence>" --author "<who>"] [--section <from>-<to>]
   find_media.py credits <work>
 
 Licensed sources (Commons, Openverse, Internet Archive, Pexels) are searched alongside the open web
 (Bing images) and YouTube (via yt-dlp). Web and YouTube results carry no licence; they are marked ⚠ and
-flagged in credits.json so the report can name them.
+flagged in credits.json so the report can name them. Reaction gifs come from Commons and, with
+GIPHY_API_KEY, from GIPHY; GIPHY files are unlicensed too.
 
 Search results are numbered m1, m2, … across the whole edit and kept in <work>/media/index.json.
-Images land in <work>/assets/, video sections in <work>/clips/src/ with a preview sheet beside them.
+Images land in <work>/assets/; video sections and gifs (converted to mp4) in <work>/clips/src/ with a
+preview sheet beside them.
 Every download is appended to <work>/credits.json, which the final report and the video description use.
 """
 
@@ -30,12 +32,16 @@ from pathlib import Path
 
 USER_AGENT = "voiceover-video-skill/1.0 (https://github.com/Dancan254/voiceover-video-skill)"
 BROWSER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36"
-SOURCES = {"image": ["commons", "openverse", "web", "pexels"], "video": ["commons", "youtube", "archive", "pexels"]}
+SOURCES = {"image": ["commons", "openverse", "web", "pexels"], "video": ["commons", "youtube", "archive", "pexels"],
+           "gif": ["commons", "giphy"]}
+API_KEYS = {"pexels": ("PEXELS_API_KEY", "https://www.pexels.com/api/"),
+            "giphy": ("GIPHY_API_KEY", "https://developers.giphy.com/dashboard/")}
 LICENSED_SOURCES = {"commons", "openverse", "archive", "pexels"}
 MAX_SECTION = 120
+MIN_SIDE = 160
 VIDEO_EXTENSIONS = (".mp4", ".webm", ".mov", ".mkv", ".ogv", ".m4v")
-IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp", ".avif", ".gif")
-IMAGE_TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/avif": ".avif", "image/gif": ".gif"}
+IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp", ".avif")
+IMAGE_TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/avif": ".avif"}
 # Stock-photo previews are watermarked, and the clean file is paid; they never make a usable shot
 STOCK_HOSTS = ("alamy.", "gettyimages.", "shutterstock.", "istockphoto.", "dreamstime.", "depositphotos.",
                "123rf.", "stock.adobe.", "vecteezy.", "freepik.")
@@ -68,14 +74,15 @@ def is_non_commercial(licence):
 
 
 def search_commons(query, kind, limit):
-    filetype = "bitmap" if kind == "image" else "video"
+    search = {"image": "filetype:bitmap -filemime:image/gif", "video": "filetype:video", "gif": "filemime:image/gif"}[kind]
+    is_still = kind != "video"
     params = {
         "action": "query", "format": "json", "generator": "search", "gsrnamespace": "6",
-        "gsrlimit": str(limit), "gsrsearch": f"{query} filetype:{filetype}",
-        "prop": "imageinfo" if kind == "image" else "videoinfo",
+        "gsrlimit": str(limit), "gsrsearch": f"{query} {search}",
+        "prop": "imageinfo" if is_still else "videoinfo",
     }
-    info_prefix = "ii" if kind == "image" else "vi"
-    params[f"{info_prefix}prop"] = "url|size|mime|extmetadata" + ("" if kind == "image" else "|derivatives")
+    info_prefix = "ii" if is_still else "vi"
+    params[f"{info_prefix}prop"] = "url|size|mime|extmetadata" + ("" if is_still else "|derivatives")
     params[f"{info_prefix}extmetadatafilter"] = "LicenseShortName|Artist|ImageDescription"
     if kind == "image":
         params["iiurlwidth"] = "2000"
@@ -85,7 +92,8 @@ def search_commons(query, kind, limit):
     for page in pages:
         info = (page.get("imageinfo") or page.get("videoinfo") or [{}])[0]
         meta = info.get("extmetadata", {})
-        file_url = info.get("thumburl") or info.get("url")
+        # A gif thumbnail can come back as a single still frame; the original is always animated
+        file_url = info.get("url") if kind == "gif" else info.get("thumburl") or info.get("url")
         if kind == "video":
             # A derivative near 1080p is plenty for a frame, and far smaller than a 4K original
             webms = [d for d in info.get("derivatives", []) if "webm" in d.get("type", "") and d.get("width", 0) <= 1920]
@@ -162,6 +170,28 @@ def search_pexels(query, kind, limit):
     return results
 
 
+def search_giphy(query, kind, limit):
+    key = os.environ.get("GIPHY_API_KEY")
+    if kind != "gif" or not key:
+        return []
+    params = {"api_key": key, "q": query, "limit": str(limit), "rating": "g", "lang": "en"}
+    data = get_json("https://api.giphy.com/v1/gifs/search?" + urllib.parse.urlencode(params))
+    results = []
+    for r in data.get("data", []):
+        original = r.get("images", {}).get("original", {})
+        user = r.get("user") or {}
+        results.append({
+            "source": "giphy", "kind": "gif", "title": r.get("title") or r.get("slug") or r["id"],
+            "author": user.get("display_name") or r.get("username") or "GIPHY",
+            "license": "GIPHY (rights reserved by the owner)", "page_url": r.get("url"),
+            # GIPHY serves an mp4 of every gif, a fraction of the size and already a video
+            "file_url": original.get("mp4") or original.get("url"),
+            "width": int(original.get("width") or 0) or None, "height": int(original.get("height") or 0) or None,
+            "duration": None, "about": "",
+        })
+    return results
+
+
 def search_web(query, kind, limit):
     if kind != "image":
         return []
@@ -206,7 +236,7 @@ def search_youtube(query, kind, limit):
 
 
 SEARCHERS = {"commons": search_commons, "openverse": search_openverse, "web": search_web,
-             "youtube": search_youtube, "archive": search_archive, "pexels": search_pexels}
+             "youtube": search_youtube, "archive": search_archive, "pexels": search_pexels, "giphy": search_giphy}
 
 
 def load_index(work):
@@ -223,7 +253,10 @@ def save_index(work, index):
 
 def describe(result_id, r):
     size = f"{r['width']}x{r['height']}" if r.get("width") else "?"
-    length = f" {int(r['duration']) // 60}:{int(r['duration']) % 60:02d}" if r.get("duration") else ""
+    if r["kind"] == "gif":
+        length = f" {r['duration']:.1f}s" if r.get("duration") else ""
+    else:
+        length = f" {int(r['duration']) // 60}:{int(r['duration']) % 60:02d}" if r.get("duration") else ""
     about = f" — {r['about']}" if r.get("about") else ""
     mark = "⚠ " if r["source"] not in LICENSED_SOURCES else ""
     return f"{result_id:<5} {r['source']:<9} {r['kind']}{length} {size} · {mark}{r['license']} · {r['title']} · by {r['author'][:40]}{about}"
@@ -241,9 +274,10 @@ def search(args):
     index = load_index(args.work)
     found, seen = [], set()
     for source in kinds_sources:
-        if source == "pexels" and not os.environ.get("PEXELS_API_KEY"):
-            if args.source:
-                print("pexels skipped: PEXELS_API_KEY is not set (free key at https://www.pexels.com/api/)", file=sys.stderr)
+        if source in API_KEYS and not os.environ.get(API_KEYS[source][0]):
+            variable, signup = API_KEYS[source]
+            if args.source or source == "giphy":
+                print(f"{source} skipped: {variable} is not set (free key at {signup})", file=sys.stderr)
             continue
         try:
             results = SEARCHERS[source](args.query, args.kind, args.limit)
@@ -253,6 +287,9 @@ def search(args):
             continue
         for r in results:
             if args.licensed_only and is_non_commercial(r["license"]):
+                continue
+            # Icons and emoji-sized files turn to mush at shot size
+            if r.get("width") and max(r["width"], r.get("height") or 0) < MIN_SIDE:
                 continue
             # Openverse indexes Commons too; the same file under two ids only adds noise
             key = re.sub(r"\.\w{3,4}$", "", r["title"]).strip().lower()
@@ -271,6 +308,8 @@ def search(args):
         return 1
     print("Next: fetch the ones that fit with: find_media.py fetch <work> <id> --name <stem>" +
           (" --section <from>-<to>" if args.kind == "video" else ""))
+    if args.kind == "gif":
+        print("      a gif is converted to mp4 in clips/src/; cut it with extract_clip.sh --loop")
     return 0
 
 
@@ -304,6 +343,9 @@ def download_image(url, stem, referer):
     headers = {"User-Agent": agent, **({"Referer": referer} if referer else {})}
     with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=120) as response:
         content_type = response.headers.get_content_type()
+        if content_type == "image/gif":
+            # A browser plays a gif on its own clock, so an <img> gif would differ on every render
+            raise RuntimeError(f"{url} is a gif; fetch it with --kind gif so it becomes a seekable clip")
         if content_type not in IMAGE_TYPES:
             raise RuntimeError(f"{url} served {content_type}, not an image")
         target = stem.with_suffix(IMAGE_TYPES[content_type])
@@ -351,6 +393,21 @@ def preview_sheet(clip, sheet):
     return duration
 
 
+def fetch_gif(url, target):
+    """Convert a gif (or GIPHY's mp4 of it) into an mp4 extract_clip.sh can cut and loop."""
+    agent = USER_AGENT if "wikimedia.org" in url else BROWSER_AGENT
+    cache = target.parent / ".cache"
+    cache.mkdir(parents=True, exist_ok=True)
+    source = cache / (target.stem + Path(urllib.parse.urlparse(url).path).suffix)
+    request = urllib.request.Request(url, headers={"User-Agent": agent})
+    with urllib.request.urlopen(request, timeout=120) as response, open(source, "wb") as out:
+        shutil.copyfileobj(response, out)
+    # yuv420p needs even dimensions, and many gifs are odd-sized
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(source), "-an",
+                    "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", "-c:v", "libx264", "-preset", "veryfast",
+                    "-crf", "18", "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(target)], check=True)
+
+
 def append_credit(work, credit):
     path = work / "credits.json"
     credits = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else []
@@ -374,7 +431,8 @@ def fetch(args):
     elif args.url:
         unlicensed = not args.license
         # A page URL (YouTube, X, Vimeo…) is a video yt-dlp can resolve; a bare file URL says what it is
-        kind = args.kind or ("image" if urllib.parse.urlparse(args.url).path.lower().endswith(IMAGE_EXTENSIONS) else "video")
+        path = urllib.parse.urlparse(args.url).path.lower()
+        kind = args.kind or ("gif" if path.endswith(".gif") else "image" if path.endswith(IMAGE_EXTENSIONS) else "video")
         record = {
             "source": "url", "kind": kind, "title": args.url,
             "author": args.author or urllib.parse.urlparse(args.url).netloc.removeprefix("www."),
@@ -390,6 +448,13 @@ def fetch(args):
             (args.work / "assets").mkdir(parents=True, exist_ok=True)
             target = download_image(record["file_url"], args.work / "assets" / args.name, record.get("page_url"))
             detail = f"{target.stat().st_size // 1024} KB"
+        elif record["kind"] == "gif":
+            target = args.work / "clips" / "src" / f"{args.name}.mp4"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            fetch_gif(record["file_url"], target)
+            sheet = target.with_suffix(".jpg")
+            duration = preview_sheet(target, sheet)
+            detail = f"{duration:.1f}s loop · preview {sheet}"
         else:
             section = parse_section(args.section, MAX_SECTION)
             if section is None:
@@ -427,6 +492,8 @@ def fetch(args):
         print("⚠ no licence: credit the source in the description; the report must name it")
     if record["kind"] == "image":
         print("Next: look at the file before placing it; search results can be the wrong person or thing")
+    elif record["kind"] == "gif":
+        print(f"Next: look at the preview sheet, then cut it with extract_clip.sh {target} <work> <size> {args.name} <in> <out> --loop")
     else:
         print("Next: look at the preview sheet, then cut it into the edit with extract_clip.sh")
     return 0
@@ -457,7 +524,7 @@ def main() -> int:
     search_parser.add_argument("query")
     search_parser.add_argument("--kind", choices=SOURCES, default="image")
     search_parser.add_argument("--source", default=None, help="comma-separated: " + ",".join(SEARCHERS))
-    search_parser.add_argument("--licensed-only", action="store_true", help="skip web and YouTube, and non-commercial licences")
+    search_parser.add_argument("--licensed-only", action="store_true", help="skip web, YouTube and GIPHY, and non-commercial licences")
     search_parser.add_argument("--limit", type=int, default=6)
 
     fetch_parser = commands.add_parser("fetch")
@@ -468,7 +535,7 @@ def main() -> int:
     fetch_parser.add_argument("--url", default=None)
     fetch_parser.add_argument("--license", default=None)
     fetch_parser.add_argument("--author", default=None)
-    fetch_parser.add_argument("--kind", choices=SOURCES, default=None, help="for --url: override the image/video guess")
+    fetch_parser.add_argument("--kind", choices=SOURCES, default=None, help="for --url: override the image/video/gif guess")
 
     credits_parser = commands.add_parser("credits")
     credits_parser.add_argument("work", type=Path)

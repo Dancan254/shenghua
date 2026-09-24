@@ -122,6 +122,19 @@ pop("#s04pip", 9.1);
 clip("#s04img", "torvalds", 8.9, 12.6);   // same name, in and out as extract_clip.sh
 ```
 
+### Reaction gif
+A punchline beat: the facepalm, the "this is fine" dog. A `.pip` box, never full-bleed, looping for
+1.5–2.5s. Fetch it with `find_media.py … --kind gif` and cut it with `extract_clip.sh … --loop`. One
+or two per video; the box size matches the size passed to `extract_clip.sh`.
+```html
+<div class="pip" id="s09pip" style="left:140px;top:520px;width:800px;height:560px;transform:rotate(-3deg)"><img id="s09img" alt=""></div>
+<div class="credit" style="left:140px;top:1100px">GIPHY / @creator</div>
+```
+```js
+pop("#s09pip", 31.2);
+clip("#s09img", "facepalm", 31.2, 33.4);
+```
+
 ### Full-bleed clip
 Same as the face shot, fed from `extract_clip.sh … vertical …` instead of the camera.
 ```html
