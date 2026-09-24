@@ -83,6 +83,7 @@ always produces the same video, however slow the machine.
 | FFmpeg | mixing and encoding |
 | `yt-dlp` *(optional)* + `node` or `deno` | YouTube and other video pages; the JS runtime solves YouTube's download challenge |
 | `PEXELS_API_KEY` *(optional)* | adds Pexels stock photos and video to media search ([free key](https://www.pexels.com/api/)) |
+| `GIPHY_API_KEY` *(optional)* | adds GIPHY to reaction gif search ([free key](https://developers.giphy.com/dashboard/)) |
 
 Runs on macOS and Linux. On Windows, run your agent inside WSL: the scripts are bash.
 

@@ -22,12 +22,12 @@ machine, and each stays under its own licence.
 
 The skill finds photos and video on [Wikimedia Commons](https://commons.wikimedia.org),
 [Openverse](https://openverse.org), the [Internet Archive](https://archive.org), Bing image search,
-YouTube and, with an API key, [Pexels](https://www.pexels.com/license/), and logos from
+YouTube and, with API keys, [Pexels](https://www.pexels.com/license/) and [GIPHY](https://giphy.com/terms), and logos from
 [Simple Icons](https://simpleicons.org). Those are **not** covered by this repository's licence:
 
 - Each file carries its own licence, often requiring attribution. `find_media.py` records a credit for
   every file it downloads in `credits.json`; put those credits in your video description.
-- Web images and YouTube videos come with no licence. They are someone else's copyrighted work: whether
+- Web images, YouTube videos and GIPHY gifs come with no licence. They are someone else's copyrighted work: whether
   your use is fair use is your call, and YouTube's Content ID may claim, demonetise or block a video
   that contains them. `credits.json` marks each one.
 - A photo or clip of a person can carry personality and publicity rights beyond its copyright licence.

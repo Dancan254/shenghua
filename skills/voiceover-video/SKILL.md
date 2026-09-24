@@ -181,7 +181,14 @@ python3 SKILL_DIR/scripts/find_media.py search "$work" "Yang Zhilin keynote" --k
 python3 SKILL_DIR/scripts/find_media.py fetch "$work" m6 --name yang-launch
 python3 SKILL_DIR/scripts/find_media.py fetch "$work" m8 --name yang-gtc --section 120-150
 python3 SKILL_DIR/scripts/find_media.py fetch "$work" --url "https://youtu.be/…" --name demo --section 30-45
+python3 SKILL_DIR/scripts/find_media.py search "$work" "facepalm" --kind gif                        # reactions
+python3 SKILL_DIR/scripts/find_media.py fetch "$work" m11 --name facepalm
 ```
+
+Gifs come from Commons, and from GIPHY when `GIPHY_API_KEY` is set (GIPHY results are marked ⚠). A
+fetched gif becomes an mp4 in `clips/src/`; cut it like any clip, adding `--loop` so a 2-second gif
+fills a longer shot. Never put a `.gif` in an `<img>`: the browser plays it on its own clock, so every
+render would differ. One or two reaction beats per video, on a punchline, never on the point itself.
 
 Results without a licence are marked ⚠. When a licensed result is as good a shot, take it; otherwise
 use the best shot. Prefer the subject's own channel (a company's official YouTube) over re-uploads.
@@ -234,6 +241,7 @@ clip to start at. Add `--audio` when the clip's own sound should play — a foun
 
 ```bash
 bash SKILL_DIR/scripts/extract_clip.sh "$work"/clips/src/torvalds-talk.mp4 "$work" 900x620 torvalds 8.9 12.6 --from 20 --audio
+bash SKILL_DIR/scripts/extract_clip.sh "$work"/clips/src/facepalm.mp4 "$work" 900x620 facepalm 31.2 33.4 --loop
 ```
 
 Clip audio ducks under the narration automatically, so it only really plays over a pause in the voice.
