@@ -43,8 +43,10 @@ Two hosts carry most explainers:
 - **The sidekick** asks the question the viewer is thinking ("They both get every letter?"), panics
   when things break, celebrates when they're fixed. One short line per scene at most.
 
-The template ships two original designs: `keeper` (glasses, silver bun, clipboard, a teacher) and
-`drone` (a one-eyed delivery drone, a sidekick). Give them names that suit the analogy; the name in
+The template ships three original designs: `keeper` (glasses, silver bun, clipboard, a calm teacher),
+`conductor` (a matatu conductor with a backwards cap, reflective vest and money pouch, an energetic
+teacher for anything about routing, queues or traffic) and `drone` (a one-eyed delivery drone, a
+sidekick). Give them names that suit the analogy; the name in
 the script is how `speak.py` and `host()` connect a voice to a body.
 
 **Original characters only.** Never draw, name or imitate an existing cartoon, film or game character,

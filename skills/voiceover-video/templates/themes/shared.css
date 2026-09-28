@@ -19,7 +19,7 @@
 #capbox span.kw:not(.now){color:var(--accent)}
 #capbox span{display:inline-block;transform-origin:50% 80%}
 /* Character hosts and explainer blocks (script mode): flat cartoon, bold ink outline, theme accent */
-:root{--host-ink:#06080d;--host-alt:#ffb020;--host-skin:#8b5a3c;--host-hair:#d9dee7;--token:#fff1dc}
+:root{--host-ink:#06080d;--host-alt:#ffb020;--host-skin:#8b5a3c;--host-hair:#d9dee7;--token:#fff1dc;--host-skin-2:#5c3a24;--host-vest:#c8f53c;--host-cap:#2dd4bf}
 .host{position:absolute;z-index:4}
 .host svg{width:100%;height:100%;overflow:visible}
 .host .ink{stroke:var(--host-ink);stroke-width:6;stroke-linejoin:round;stroke-linecap:round}

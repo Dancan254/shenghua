@@ -230,8 +230,10 @@ Full-bleed photo, darkened gradient, slow drift, large sentence fading in. No hi
 
 ### Host *(script mode)*
 A cartoon character that talks when its lines play: mouth or bounce follow `speech.js`, blinks and bobs
-run on their own. `kind` is `keeper` (teacher) or `drone` (sidekick); `who` is the speaker's name in
-the script. The element is only a box; size it for the shot.
+run on their own. `kind` is `keeper` (teacher), `conductor` (teacher: a matatu conductor, cap on
+backwards, reflective vest, money pouch) or `drone` (sidekick); `who` is the speaker's name in the
+script. The element is only a box; size it for the shot. `keeper` and `conductor` use a ~0.69 width to
+height box (330x480); `drone` is about square.
 ```html
 <div class="host" id="s04pip" style="left:340px;top:520px;width:400px;height:420px"></div>
 <div class="host" id="s04k" style="left:30px;top:1020px;width:330px;height:480px"></div>
@@ -240,7 +242,8 @@ the script. The element is only a box; size it for the shot.
 host("#s04pip","drone","pip"); host("#s04k","keeper","keeper");   // once per element, before the shots
 mood("#s04pip","panic", 3.6, 5.2);    // "panic": shakes and sweats · "happy": eye becomes a smile
 look("#s04pip", -1, .4, 0, 3.6);      // pupil direction, -1..1
-point("#s04k", 6.6, 9.0);             // keeper raises her arm while explaining
+point("#s04k", 6.6, 9.0);             // keeper or conductor raises an arm while explaining
+wave("#s04c", 2.0, 4.5);              // conductor waves: greeting, calling passengers on
 ```
 A host appears in several shots as several elements; call `host()` on each. Keep a host in the same
 spot across a scene so it reads as one character, and give the bubble side room.

@@ -164,13 +164,51 @@ const HOST_SVG = {
       <rect class="ink" x="-14" y="-55" width="28" height="14" rx="4" fill="#d9dee7" style="stroke-width:3"/></g>
     <circle class="ink" cx="32" cy="-116" r="14" fill="var(--host-skin)" style="stroke-width:4"/>
   </g></svg>`,
+  conductor: `<svg viewBox="-135 -385 270 395"><g class="h-rig">
+    <ellipse cx="0" cy="0" rx="105" ry="17" fill="#000" opacity=".35"/>
+    <g class="h-breathe">
+    <path class="ink" d="M-40 -112 L-44 -14 L-8 -14 L-4 -104 L4 -104 L8 -14 L44 -14 L40 -112Z" fill="#2b3a5c"/>
+    <rect class="ink" x="-58" y="-22" width="52" height="20" rx="10" fill="#f4f6fb" style="stroke-width:5"/>
+    <rect class="ink" x="6" y="-22" width="52" height="20" rx="10" fill="#f4f6fb" style="stroke-width:5"/>
+    <path class="ink" d="M-62 -196 C-66 -160 -64 -130 -56 -104 L56 -104 C64 -130 66 -160 62 -196 C40 -214 -40 -214 -62 -196Z" fill="var(--accent)"/>
+    <path d="M-40 -200 L-30 -178 M-14 -206 L-6 -184 M22 -204 L30 -182 M46 -196 L52 -176" stroke="#fff" stroke-opacity=".55" stroke-width="5" stroke-linecap="round"/>
+    <path class="ink" d="M-62 -196 C-66 -160 -64 -130 -56 -104 L-18 -104 L-14 -202 C-30 -206 -48 -204 -62 -196Z" fill="var(--host-vest)"/>
+    <path class="ink" d="M62 -196 C66 -160 64 -130 56 -104 L18 -104 L14 -202 C30 -206 48 -204 62 -196Z" fill="var(--host-vest)"/>
+    <path d="M-62 -150 H-16 M-61 -128 H-17 M16 -150 H62 M17 -128 H61" stroke="#e8edf5" stroke-width="7"/>
+    <path d="M-50 -196 L44 -112" stroke="var(--host-ink)" stroke-width="13" stroke-linecap="round"/>
+    <path d="M-50 -196 L44 -112" stroke="#7a4a2a" stroke-width="7" stroke-linecap="round"/>
+    <rect class="ink" x="28" y="-126" width="46" height="38" rx="8" fill="#9a6034" style="stroke-width:5"/>
+    <circle cx="51" cy="-112" r="5" fill="#ffd166"/>
+    <rect class="ink" x="-11" y="-228" width="22" height="22" rx="4" fill="var(--host-skin-2)" style="stroke-width:4"/>
+    <g class="h-head">
+      <circle class="ink" cy="-262" r="46" fill="var(--host-skin-2)"/>
+      <path class="ink" d="M-46 -270 C-44 -318 44 -318 46 -270 C20 -282 -20 -282 -46 -270Z" fill="var(--host-cap)" style="stroke-width:5"/>
+      <path class="ink" d="M-40 -286 C-62 -290 -84 -284 -92 -272 C-72 -268 -52 -270 -40 -274Z" fill="var(--host-cap)" style="stroke-width:5"/>
+      <circle cy="-306" r="5" fill="var(--host-ink)"/>
+      <path d="M-30 -272 Q-19 -278 -8 -272 M8 -272 Q19 -278 30 -272" fill="none" stroke="var(--host-ink)" stroke-width="5" stroke-linecap="round"/>
+      <g class="h-eye"><circle cx="-18" cy="-258" r="6" fill="var(--host-ink)"/><circle cx="18" cy="-258" r="6" fill="var(--host-ink)"/>
+        <circle cx="-16" cy="-260" r="2" fill="#fff"/><circle cx="20" cy="-260" r="2" fill="#fff"/></g>
+      <path class="h-smile" d="M-20 -238 Q0 -218 20 -238 Z" fill="#fff" stroke="var(--host-ink)" stroke-width="4" stroke-linejoin="round"/>
+      <ellipse class="h-mouth" cx="0" cy="-234" rx="13" ry="7" fill="var(--host-ink)"/>
+      <circle cx="-46" cy="-258" r="8" fill="var(--host-skin-2)" class="ink" style="stroke-width:4"/>
+      <circle cx="46" cy="-258" r="8" fill="var(--host-skin-2)" class="ink" style="stroke-width:4"/>
+    </g></g>
+    <g class="h-arm"><path d="M-58 -198 L-80 -112" stroke="var(--host-ink)" stroke-width="30" stroke-linecap="round"/>
+      <path d="M-58 -198 L-80 -112" stroke="var(--accent)" stroke-width="19" stroke-linecap="round"/>
+      <circle class="ink" cx="-80" cy="-112" r="14" fill="var(--host-skin-2)" style="stroke-width:4"/></g>
+    <path d="M58 -198 L70 -122" stroke="var(--host-ink)" stroke-width="30" stroke-linecap="round"/>
+    <path d="M58 -198 L70 -122" stroke="var(--accent)" stroke-width="19" stroke-linecap="round"/>
+    <rect class="ink" x="54" y="-132" width="40" height="22" rx="4" fill="#7bc47f" style="stroke-width:4" transform="rotate(-18 74 -121)"/>
+    <circle class="ink" cx="70" cy="-120" r="14" fill="var(--host-skin-2)" style="stroke-width:4"/>
+  </g></svg>`,
 };
-const HOSTS = [], MOODS = [], LOOKS = [], POINTS = [];
+const HOSTS = [], MOODS = [], LOOKS = [], POINTS = [], WAVES = [];
 // host("#s04pip","drone","pip"): the element gets the character; `who` matches the speaker name in the script
 function host(sel, kind, who){ const el = q(sel); el.classList.add("host"); el.innerHTML = HOST_SVG[kind]; HOSTS.push({el, kind, who, n:HOSTS.length}); }
 function mood(sel, m, s, e){ MOODS.push({el:q(sel), m, s, e}); }          // "panic" | "happy"
 function look(sel, x, y, s, e){ LOOKS.push({el:q(sel), x, y, s, e}); }    // pupil direction, -1..1
-function point(sel, s, e){ POINTS.push({el:q(sel), s, e}); }             // keeper raises her arm
+function point(sel, s, e){ POINTS.push({el:q(sel), s, e}); }             // keeper or conductor raises an arm
+function wave(sel, s, e){ WAVES.push({el:q(sel), s, e}); }               // conductor waves passengers on
 function bubble(sel, s, e){
   tl.set(sel,{visibility:"visible"},s);
   tl.fromTo(sel,{scale:.3,opacity:0},{scale:1,opacity:1,duration:.35,ease:"back.out(2)"},s);
@@ -207,14 +245,19 @@ function renderHosts(t){
       el.querySelector(".h-happy").style.display = mo==="happy" ? "" : "none";
       el.querySelector(".h-sweat").style.display = mo==="panic" ? "" : "none";
     } else {
+      // keeper and conductor share a rig: breathing body, bobbing head, blinking eyes, a talking mouth, one moving arm
+      const conductor = kind === "conductor";
       rig.querySelector(".h-breathe").setAttribute("transform", `translate(0 ${(Math.sin(t*2.1)*2.5).toFixed(2)})`);
       rig.querySelector(".h-head").setAttribute("transform", talking ? `translate(0 ${(Math.sin(t*6)*1.5).toFixed(2)})` : "");
-      el.querySelector(".h-eye").setAttribute("transform", `translate(0 -259) scale(1 ${open.toFixed(3)}) translate(0 259)`);
+      const ey = conductor ? 258 : 259;
+      el.querySelector(".h-eye").setAttribute("transform", `translate(0 -${ey}) scale(1 ${open.toFixed(3)}) translate(0 ${ey})`);
       const mouth = el.querySelector(".h-mouth");
       mouth.style.display = talking ? "" : "none"; mouth.setAttribute("ry", (1.5+Math.abs(Math.sin(t*13))*4.5).toFixed(2));
       el.querySelector(".h-smile").style.display = talking ? "none" : "";
-      const p = within(POINTS, el, t), k = p ? Math.min(1,(t-p.s)/.4, (p.e-t)/.4) : 0;
-      el.querySelector(".h-arm").setAttribute("transform", `rotate(${(111*(1-Math.pow(1-k,3))).toFixed(1)} -50 -190)`);
+      const p = within(POINTS, el, t) || within(WAVES, el, t), k = p ? Math.min(1,(t-p.s)/.4, (p.e-t)/.4) : 0;
+      const waving = within(WAVES, el, t) ? Math.sin((t-p.s)*9)*16*k : 0;
+      const lift = conductor ? 139 : 111, [sx, sy] = conductor ? [-58, -198] : [-50, -190];
+      el.querySelector(".h-arm").setAttribute("transform", `rotate(${(lift*(1-Math.pow(1-k,3)) + waving).toFixed(1)} ${sx} ${sy})`);
     }
   });
 }
