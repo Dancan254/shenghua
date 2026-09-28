@@ -11,7 +11,9 @@ Two skills packaged as one plugin for Claude Code and Kimi Code CLI:
 - `voiceover-video` — the model-agnostic engine.
 - `kimi-video` — a Kimi-branded edition that reuses the engine scripts and templates.
 
-Both turn a voice recording into an animated vertical video. The shared engine scripts and templates
+Both turn a voice recording into an animated vertical video. With no recording (script mode),
+`speak.py` voices a written script with one offline voice per character, and cartoon hosts in the
+template act it out. The shared engine scripts and templates
 live in `skills/voiceover-video/`; the Kimi edition adds its own SKILL.md and brand defaults in
 `skills/kimi-video/`.
 
@@ -20,12 +22,14 @@ skills/voiceover-video/
 ├── SKILL.md                     the workflow the agent follows at run time
 ├── brand.example.json           default brand (colours, fonts, handle)
 ├── references/scene-blocks.md   scene catalogue, pacing rules, sound cues, safe zones
+├── references/explainers.md     script mode: explainer shape, analogy, cast, script format, voices
 ├── templates/                   visual theme engine + themes
 │   ├── kinetic.html             the shared HTML/JS engine + demo shots
 │   ├── templates.json           theme catalogue: mood, extra fonts, motion profile
 │   └── themes/                  shared.css (people/footage blocks) + one CSS per theme
 └── scripts/
     ├── setup.sh                 dependency check, playwright-core + Chromium, GSAP, fonts
+    ├── speak.py                 script mode: script → voice.wav + speech.json/js + estimated words.json
     ├── transcribe.py            faster-whisper, word-level timestamps
     ├── build_captions.py        applies fixes.json → words.js
     ├── init_brand.py            first-run answers → ~/.config/voiceover-video/brand.json
@@ -82,14 +86,20 @@ names, breaks this.
 9. **Every theme styles every block.** A theme CSS defines every class `kinetic.css` does plus the
    `--panel`, `--panel-fg`, `--frame`, `--radius`, `--display` tokens `shared.css` reads. A theme with its
    own typeface lists it in `templates.json` → `fonts`; `setup.sh` downloads it.
-10. **Scripts fail loud.** Every script prints a one-line result and a `Next:` line, and on failure names
+10. **Hosts are pure functions of `t`.** `renderHosts(t)` derives every mouth, blink and bob from `t` and
+   `speech.js`; a host never keeps state between frames. `speech.js` always exists (`fill_template.py`
+   writes an empty one), so a recording without speakers renders hosts idle rather than failing.
+11. **Characters are original.** The shipped hosts are original designs. Never add a host that imitates an
+   existing cartoon, film or game character.
+12. **Scripts fail loud.** Every script prints a one-line result and a `Next:` line, and on failure names
    the missing input and the fix. Match that shape.
 
 ## Conventions
 
 - **Bash:** `set -euo pipefail`, quote every variable, `SCRIPTS_DIR` resolved from `BASH_SOURCE`. Scripts
   are called from zsh too — never rely on word splitting.
-- **Python:** 3.10+, standard library plus `numpy` and `faster-whisper` only (`find_media.py` uses `urllib`). `argparse`, a `main()`
+- **Python:** 3.10+, standard library plus `numpy` and `faster-whisper` only (`find_media.py` uses `urllib`;
+  `speak.py` alone also needs `kokoro-onnx`, installed by `setup.sh --voices`). `argparse`, a `main()`
   returning an exit code, errors to stderr.
 - **JavaScript:** `render.js` depends on `playwright-core` only; the template on GSAP only.
 - **Comments** explain *why*, never *what*. One line.

@@ -39,6 +39,10 @@ your machine.
   timeline itself
 - **A music bed** that ducks automatically under the voice and drops out before the final line
 - **Film finish**: grain, vignette, loudness normalised to −14 LUFS
+- **No recording? Script mode**: give it a topic ("explain Kafka with cartoon characters") and the agent
+  writes an analogy-driven explainer, voices each character offline (a warm teacher, a squeaky
+  sidekick), and animates original cartoon hosts who talk when their lines play, with speech bubbles,
+  term labels and tokens flying into queues. `setup.sh --voices` installs the voice model once
 - **Optional face-cam bookends**: film the script on your phone in one take; your opening line and
   sign-off stay on camera and everything between is animated
 - **QA gates**: the agent reviews a contact sheet of every shot before the full render, and checks the
@@ -47,7 +51,10 @@ your machine.
 ## How it works
 
 ```
-voice.mp4
+voice.mp4                                    ┌ or, with no recording (script mode):
+  │                                          │ topic → the agent writes script.txt → you approve it
+  │                                          │ speak.py  offline voices per character → voice.wav
+  │                                          └ + speech.json (who speaks when) + estimated word times
   │  transcribe.py        faster-whisper, local, word timestamps
   ▼
 transcript.txt ── you proofread ──► build_captions.py
