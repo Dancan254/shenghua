@@ -19,6 +19,7 @@ machine, and each stays under its own licence.
 | [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx) *(script mode, `setup.sh --voices`)* | offline text-to-speech for character voices | MIT |
 | [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) model and voices, via kokoro-onnx's release files | the voices themselves | Apache 2.0 — commercial use allowed |
 | [ONNX Runtime](https://github.com/microsoft/onnxruntime) *(installed with kokoro-onnx)* | running the voice model on CPU | MIT |
+| [VoiceStudio](https://github.com/debpalash/VoiceStudio) *(optional, installed by you, never by `setup.sh`)* | your own cloned voice for a script-mode speaker, over its local API | AGPL-3.0; each voice engine's weights carry their own licence (the default OmniVoice weights are CC-BY-NC, non-commercial) |
 | [yt-dlp](https://github.com/yt-dlp/yt-dlp) *(optional, not installed by setup.sh)* | YouTube search and downloads; fetches its own [EJS](https://github.com/yt-dlp/yt-dlp/wiki/EJS) challenge solver on first use | Unlicense |
 
 ## Photos, clips and logos in your videos

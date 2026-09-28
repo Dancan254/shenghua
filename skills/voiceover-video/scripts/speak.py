@@ -12,6 +12,12 @@ Script format, one spoken line per line:
   A line with no name belongs to the narrator (--narrator, else the first speaker).
   # comments are skipped
 
+A cast file picks each speaker's voice. Kokoro (offline, built in) is the default; a speaker can use
+your own cloned voice from a running VoiceStudio app instead:
+
+  {"teacher": {"engine": "voicestudio", "voice": "<profile id>", "url": "http://localhost:3900"},
+   "pip": {"voice": "am_puck", "pitch": 1.32, "speed": 1.05}}
+
 Writes <work>/voice.wav (the recording the rest of the workflow uses), <work>/speech.json and
 <work>/speech.js (who speaks when, read by the template's hosts), <work>/words.json and
 transcript.txt (estimated word times in transcribe.py's format), and <work>/script.txt.
@@ -24,6 +30,8 @@ import re
 import subprocess
 import sys
 import tempfile
+import urllib.error
+import urllib.request
 import wave
 from pathlib import Path
 
@@ -84,17 +92,58 @@ def trim(audio, threshold=0.01):
     return audio[max(0, loud[0] - 400): loud[-1] + 800]
 
 
-def to_48k(audio, sr, pitch):
+def file_to_48k(src, sr, pitch):
     # ffmpeg resamples and pitch-shifts in one pass; pitch keeps the pace close to natural
     with tempfile.TemporaryDirectory() as tmp:
-        src, dst = Path(tmp) / "in.wav", Path(tmp) / "out.wav"
-        write_wav(src, audio, sr)
+        dst = Path(tmp) / "out.wav"
         chain = f"aresample={SR_OUT}"
         if pitch != 1.0:
             chain = f"asetrate={int(sr * pitch)},aresample={SR_OUT},atempo={1 / pitch * 1.08:.4f}"
-        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(src), "-af", chain, "-ac", "1", str(dst)], check=True)
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(src), "-af", chain, "-ac", "1",
+                        "-c:a", "pcm_s16le", str(dst)], check=True)
         with wave.open(str(dst)) as handle:
             return np.frombuffer(handle.readframes(handle.getnframes()), dtype=np.int16).astype(np.float32) / 32767
+
+
+def to_48k(audio, sr, pitch):
+    with tempfile.TemporaryDirectory() as tmp:
+        src = Path(tmp) / "in.wav"
+        write_wav(src, audio, sr)
+        return file_to_48k(src, sr, pitch)
+
+
+class VoiceStudio:
+    """A running VoiceStudio backend: the user's own cloned voice, served locally over its OpenAI-style API."""
+
+    def __init__(self, url):
+        self.url = url.rstrip("/")
+
+    def get(self, path):
+        with urllib.request.urlopen(self.url + path, timeout=10) as response:
+            return response.read()
+
+    def check(self, voice):
+        """None when the backend is up and knows the voice, else the reason it can't be used."""
+        try:
+            self.get("/health")
+            voices = self.get("/v1/audio/voices").decode("utf-8", "replace")
+        except (urllib.error.URLError, OSError) as e:
+            return f"VoiceStudio is not reachable at {self.url} ({e})"
+        # The voice list's shape varies by version; the profile id appearing in it is what matters
+        if json.dumps(voice) not in voices and voice not in voices:
+            return f"VoiceStudio at {self.url} has no voice '{voice}'"
+        return None
+
+    def speak(self, text, voice, model):
+        body = json.dumps({"model": model, "voice": voice, "input": text, "response_format": "wav"}).encode()
+        request = urllib.request.Request(self.url + "/v1/audio/speech", data=body,
+                                         headers={"Content-Type": "application/json"})
+        # A cloned voice can take a while on CPU; VoiceStudio's own CPU budget is 600 s
+        with urllib.request.urlopen(request, timeout=600) as response:
+            data = response.read()
+        if data[:4] != b"RIFF":
+            raise RuntimeError(f"VoiceStudio returned no audio: {data[:200]!r}")
+        return data
 
 
 def word_times(words, s, e):
@@ -147,17 +196,6 @@ def main() -> int:
         print(f"No such script: {args.script}", file=sys.stderr)
         print("Next: write the script as 'Name: line' lines and pass its path", file=sys.stderr)
         return 1
-    try:
-        from kokoro_onnx import Kokoro
-    except ImportError:
-        print("kokoro-onnx is not installed", file=sys.stderr)
-        print("Next: run setup.sh --voices", file=sys.stderr)
-        return 1
-    if not (MODEL_DIR / MODEL).is_file() or not (MODEL_DIR / VOICES).is_file():
-        print(f"Voice model missing in {MODEL_DIR}", file=sys.stderr)
-        print("Next: run setup.sh --voices (downloads ~350 MB once)", file=sys.stderr)
-        return 1
-
     cast = {}
     if args.cast:
         try:
@@ -181,12 +219,40 @@ def main() -> int:
         print("Next: write lines as 'Name: what they say'", file=sys.stderr)
         return 1
 
-    tts = Kokoro(str(MODEL_DIR / MODEL), str(MODEL_DIR / VOICES))
-    available = set(tts.get_voices())
     for i, who in enumerate(speakers):
         cast.setdefault(who, DEFAULT_VOICES[i % len(DEFAULT_VOICES)])
-        if cast[who].get("voice") not in available:
-            print(f"Unknown voice '{cast[who].get('voice')}' for {who}", file=sys.stderr)
+
+    tts, studios = None, {}
+    if any(cast[w].get("engine", "kokoro") == "kokoro" for w in speakers):
+        try:
+            from kokoro_onnx import Kokoro
+        except ImportError:
+            print("kokoro-onnx is not installed", file=sys.stderr)
+            print("Next: run setup.sh --voices", file=sys.stderr)
+            return 1
+        if not (MODEL_DIR / MODEL).is_file() or not (MODEL_DIR / VOICES).is_file():
+            print(f"Voice model missing in {MODEL_DIR}", file=sys.stderr)
+            print("Next: run setup.sh --voices (downloads ~350 MB once)", file=sys.stderr)
+            return 1
+        tts = Kokoro(str(MODEL_DIR / MODEL), str(MODEL_DIR / VOICES))
+    available = set(tts.get_voices()) if tts else set()
+    for who in speakers:
+        spec = cast[who]
+        engine = spec.get("engine", "kokoro")
+        if engine == "voicestudio":
+            url = spec.get("url", "http://localhost:3900")
+            studios.setdefault(url, VoiceStudio(url))
+            problem = studios[url].check(spec.get("voice", ""))
+            if problem:
+                print(f"{problem} (speaker {who})", file=sys.stderr)
+                print("Next: open VoiceStudio, create the voice profile, and put its id in the cast file as \"voice\"", file=sys.stderr)
+                return 1
+        elif engine != "kokoro":
+            print(f"Unknown engine '{engine}' for {who}", file=sys.stderr)
+            print('Next: use "kokoro" (built in) or "voicestudio" (your cloned voice)', file=sys.stderr)
+            return 1
+        elif spec.get("voice") not in available:
+            print(f"Unknown voice '{spec.get('voice')}' for {who}", file=sys.stderr)
             print(f"Next: pick one of {', '.join(sorted(available))}", file=sys.stderr)
             return 1
 
@@ -199,8 +265,23 @@ def main() -> int:
             continue
         who, words = a, b
         spec = cast[who]
-        audio, sr = tts.create(words, voice=spec["voice"], speed=float(spec.get("speed", 1.0)), lang=spec.get("lang", "en-us"))
-        audio = to_48k(trim(np.asarray(audio, dtype=np.float32)), sr, float(spec.get("pitch", 1.0)))
+        pitch = float(spec.get("pitch", 1.0))
+        if spec.get("engine", "kokoro") == "voicestudio":
+            try:
+                data = studios[spec.get("url", "http://localhost:3900")].speak(words, spec["voice"], spec.get("model", "tts-1"))
+            except (urllib.error.URLError, OSError, RuntimeError) as e:
+                print(f"VoiceStudio failed on {who}'s line \"{words[:50]}\": {e}", file=sys.stderr)
+                print("Next: check the VoiceStudio app for a missing model or a busy GPU, then re-run", file=sys.stderr)
+                return 1
+            with tempfile.TemporaryDirectory() as tmp:
+                src = Path(tmp) / "vs.wav"
+                src.write_bytes(data)
+                with wave.open(str(src)) as handle:
+                    sr = handle.getframerate()
+                audio = trim(file_to_48k(src, sr, pitch))
+        else:
+            audio, sr = tts.create(words, voice=spec["voice"], speed=float(spec.get("speed", 1.0)), lang=spec.get("lang", "en-us"))
+            audio = to_48k(trim(np.asarray(audio, dtype=np.float32)), sr, pitch)
         d = len(audio) / SR_OUT
         speech.append({"i": len(speech), "who": who, "s": round(t, 3), "e": round(t + d, 3), "text": words})
         parts += [audio, np.zeros(int(SR_OUT * args.gap), dtype=np.float32)]
@@ -222,7 +303,8 @@ def main() -> int:
             handle.write(f"[{phrase[0]['s']:.2f}] " + " ".join(f"{w['t']}@{w['s']:.2f}" for w in phrase) + "\n")
 
     end = speech[-1]["e"]
-    voices = " · ".join(f"{w}={cast[w]['voice']}" + (f"@{cast[w]['pitch']}" if cast[w].get("pitch") else "") for w in speakers)
+    voices = " · ".join(f"{w}={cast[w]['voice']}" + (" (VoiceStudio)" if cast[w].get("engine") == "voicestudio" else "")
+                        + (f"@{cast[w]['pitch']}" if cast[w].get("pitch") else "") for w in speakers)
     print(f"voice.wav · {len(speech)} lines · {end:.1f}s · {voices}")
     print(f"  words.json has estimated word times; for exact sync run transcribe.py on voice.wav")
     print(f"Next: run build_captions.py {args.work} (composition duration ≈ {end + 2.5:.1f}s)")

@@ -83,6 +83,25 @@ Useful voices: `af_heart`, `af_bella`, `af_nova` (American female); `am_michael`
 `am_puck` (American male); `bf_emma`, `bf_isabella`, `bm_george`, `bm_daniel` (British). `pitch` above 1
 makes a smaller character; keep it at or below 1.4 or words smear. `speed` 0.9–1.1.
 
+### Your own voice (VoiceStudio)
+
+The strongest teacher voice is the creator's own. [VoiceStudio](https://github.com/debpalash/VoiceStudio)
+clones a voice locally from a short, clean recording and serves it over a local API; `speak.py` can
+use it for any speaker while the others stay on Kokoro:
+
+```json
+{ "teacher": {"engine": "voicestudio", "voice": "<profile id>", "url": "http://localhost:3900"},
+  "pip":     {"voice": "am_puck", "pitch": 1.32, "speed": 1.05} }
+```
+
+The user runs the VoiceStudio app and creates the profile from their own recording: 3–10 seconds of
+clear speech plus its transcript. `speak.py` checks the app is up and the profile exists before voicing
+anything. Clone only a voice the user owns or has permission to use.
+
+**Check the engine's licence before a monetized video.** VoiceStudio's default engine (OmniVoice)
+ships non-commercial weights (CC-BY-NC). For a channel that earns money, pick an engine whose weights
+allow commercial use in VoiceStudio's model settings, and confirm on its model card.
+
 You cannot hear the voices. After `speak.py`, tell the user which voice each character got and ask
 them to listen to `voice.wav` before you build the shots. Swapping a voice then costs one re-run.
 

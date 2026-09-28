@@ -95,7 +95,9 @@ explainer shape, how to pick the analogy, the cast roles and the script format.
 
 1. Write the analogy mapping, then the script as `Name: line` lines, to `<work>/script.txt`. Show both
    to the user and wait for a yes; the script is the cheapest thing to change.
-2. Voice it (first run: `bash SKILL_DIR/scripts/setup.sh --voices` installs the offline voice model, ~350 MB):
+2. Voice it (first run: `bash SKILL_DIR/scripts/setup.sh --voices` installs the offline voice model, ~350 MB).
+   If the user wants their own cloned voice for a character, point that speaker at their running
+   VoiceStudio app in the cast file (`references/explainers.md` → *Your own voice*):
 
 ```bash
 python3 SKILL_DIR/scripts/speak.py "$work"/script.txt "$work" [--cast "$work"/cast.json]
@@ -446,6 +448,7 @@ Name any unlicensed clip on its own line.
 | Old clip sound still in the mix | a stale `clips/<name>.wav` from an earlier cut | re-run `extract_clip.sh` for that clip; it removes the old `.wav` |
 | `kokoro-onnx is not installed` / `Voice model missing` | script mode set up without voices | `setup.sh --voices` |
 | `Unknown voice` from `speak.py` | a cast file names a voice that doesn't exist | pick one from the list it prints |
+| `VoiceStudio is not reachable` / `has no voice` | the app isn't running, or the profile id is wrong | open VoiceStudio, copy the profile id into the cast file |
 | A host never moves its mouth | its `who` doesn't match the speaker name in the script | use the lowercase name from `speech.json` |
 | `speech.js has no line N for …` in `PAGE ERROR` | `line()`/`say()` asks for a line the script doesn't have | count that speaker's lines in `speech.json` from 0 |
 | Face shots look grey and washed out | HDR (HLG) phone recording, tone-mapped without metadata | record in SDR (iPhone: Settings › Camera › Formats, HDR Video off) |
