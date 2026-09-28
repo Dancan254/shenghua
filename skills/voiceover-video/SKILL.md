@@ -1,6 +1,6 @@
 ---
 name: voiceover-video
-description: "Turn a voice recording (voice note, narration, podcast snippet) into a fully animated, brand-styled video — local word-level transcription, a timed shot list, kinetic typography, camera moves, real photos and licensed video clips of the people and products it mentions, synthesized sound design and a voice-ducked music bed, rendered as a 1080x1920 Short (or 1920x1080). Also takes a to-camera phone recording: the opening line and sign-off stay on camera as face shots and everything between is animated. Use when asked to 'make a video out of this audio', 'animate this voice note', 'turn this narration into a Short', 'edit this like a pro', 'create a video from my voiceover', or 'make a reel from this recording'."
+description: "Turn a voice recording (voice note, narration, podcast snippet) into a fully animated, brand-styled video — local word-level transcription, a timed shot list, kinetic typography, camera moves, real photos and licensed video clips of the people and products it mentions, synthesized sound design and a voice-ducked music bed, rendered as a 1080x1920 Short (or 1920x1080). Also takes a to-camera phone recording: the opening line and sign-off stay on camera as face shots and everything between is animated. With no recording at all, writes an explainer script, voices each cartoon character offline, and animates talking hosts that teach the concept through an analogy. Use when asked to 'make an animated explainer about X', 'explain Kafka with cartoon characters', 'make a video with characters teaching this', or to 'make a video out of this audio', 'animate this voice note', 'turn this narration into a Short', 'edit this like a pro', 'create a video from my voiceover', or 'make a reel from this recording'."
 ---
 
 # Voiceover Video Skill
@@ -13,6 +13,10 @@ like — is yours. The scripts handle transcription, rendering, audio, and encod
 Given a to-camera video instead of audio, the opening line and the sign-off stay on camera as face
 shots; everything between them is animated over the voice from the same take.
 
+Given only a topic or a script (**script mode**), there is no recording: you write the script, Step 1b
+voices it with one synthetic voice per character, and original cartoon hosts act it out. Everything
+after Step 1b runs on the generated `<work>/voice.wav` as if it were a recording.
+
 `SKILL_DIR` = the directory containing this SKILL.md.
 
 **Always load `SKILL_DIR/references/scene-blocks.md` before writing the shot list.** It holds the
@@ -24,8 +28,9 @@ block catalogue, the pacing rules, and the sound-cue vocabulary.
 
 | Field | Required | Example |
 |-------|----------|---------|
-| `audio` or `video` | Yes | `~/Downloads/voice-note.m4a` · a to-camera recording `~/Movies/take-1.mp4` |
-| `script` | No | the script, plain or with `[FACE]` / `[VOICE]` sections; captions are checked against it. Sections start on their own line with exactly `[FACE]` or `[VOICE]` |
+| `audio`, `video` or `topic` | Yes | `~/Downloads/voice-note.m4a` · a to-camera recording `~/Movies/take-1.mp4` · `"explain Kafka consumer groups"` (script mode) |
+| `script` | No | the script, plain or with `[FACE]` / `[VOICE]` sections; captions are checked against it. Sections start on their own line with exactly `[FACE]` or `[VOICE]`. In script mode, `Name: line` lines, and it *is* the input |
+| `cast` | No | script mode: who's in it and which voice, e.g. `teacher Mama Log, sidekick Pip (squeaky)` |
 | `format` | No | `vertical` 1080x1920 (default) · `landscape` 1920x1080 |
 | `template` | No | visual theme id from `templates/templates.json` (default `kinetic`) |
 | `music` | No | `synth` (default) · path to a royalty-free track · `none` |
@@ -65,7 +70,8 @@ It derives the surface and border colours, checks the fonts against Google Fonts
 template and render one still, so they see their look before a full render. If they'd rather skip setup,
 say plainly that the video will carry the example brand's `@yourhandle`.
 
-If the audio or video path is missing or not a file, say so and stop. With a `video`, pass the video
+In script mode there is no file to check; go to Step 1b after setup. Otherwise, if the audio or video
+path is missing or not a file, say so and stop. With a `video`, pass the video
 file wherever a step below takes `<audio>`; ffmpeg reads the voice from its audio track.
 
 ---
@@ -79,6 +85,29 @@ bash SKILL_DIR/scripts/setup.sh
 Checks `ffmpeg`, `node`, `faster_whisper` and `numpy`; installs `playwright-core` and its matching
 Chromium build; downloads GSAP and the brand's fonts into `SKILL_DIR/assets/`. Prints `ready` or names
 the missing piece. Re-running is a no-op unless the brand's fonts changed.
+
+---
+
+## Step 1b — Script mode: write and voice the script
+
+Only when there is no recording. **Load `SKILL_DIR/references/explainers.md` first.** It has the
+explainer shape, how to pick the analogy, the cast roles and the script format.
+
+1. Write the analogy mapping, then the script as `Name: line` lines, to `<work>/script.txt`. Show both
+   to the user and wait for a yes; the script is the cheapest thing to change.
+2. Voice it (first run: `bash SKILL_DIR/scripts/setup.sh --voices` installs the offline voice model, ~350 MB):
+
+```bash
+python3 SKILL_DIR/scripts/speak.py "$work"/script.txt "$work" [--cast "$work"/cast.json]
+```
+
+Writes `voice.wav`, `speech.json`/`speech.js` (who speaks when; the hosts read it), and `words.json` +
+`transcript.txt` with estimated word times. Tell the user which voice each character got and ask them
+to listen to `voice.wav`; you cannot. Re-voicing a line costs seconds, re-timing thirty shots does not.
+
+From here, `<audio>` in every later step is `"$work"/voice.wav`. Skip Step 2 unless you want exact word
+sync (then run it on `voice.wav`; it overwrites `words.json`). In Step 3, `script.txt` is the reference
+and fixes are rarely needed.
 
 ---
 
@@ -158,6 +187,11 @@ flash), so it is a real choice, not a palette swap:
 | `retro` | history of tech, CLI demos, hacking stories — CRT amber, glitch cuts |
 
 If the user asked for a specific look, use that. Pass it to `fill_template.py` with `--template <id>`.
+
+In script mode, the hosts carry the video: cut shots on `line(who, n)` times from `speech.json`, give the
+sidekick a bubble for their lines (`say()`), name each term with a `.pill` the first time it's spoken,
+and use lanes and tokens for anything that queues, flows or is numbered. The *Host*, *Speech bubble*,
+*Term pill*, *Lane and tokens* and *Failure and recovery* blocks in `scene-blocks.md` cover it.
 
 With a `video`, the first and last rows are face shots (*Face hook*, *Face sign-off*). The hook runs
 from 0 to the last word of the script's first `[FACE]` section (no script: the first sentence). The
@@ -319,8 +353,11 @@ You cannot hear the result. Say so in the report and ask the user to listen.
 bash SKILL_DIR/scripts/render-frames.sh "$work"/index.html "$work"/frames <duration> [workers] [from_frame to_frame]
 ```
 
-About 3 minutes for 108s on 10 workers. Run it in the background. The optional frame range re-renders
-a single shot after a fix; each bound is its own argument, so it is safe under zsh.
+Frames render supersampled (2x) and are saved as lossless PNG: crisp edges and exact brand colours,
+about 1.2 MB a frame (~4 GB for 108s) and 2–3x slower than a draft. Run it in the background. For a
+quick preview cut, prefix `VV_QUALITY=draft` (1x JPEG); render the final with the default. The optional
+frame range re-renders a single shot after a fix; each bound is its own argument, so it is safe under
+zsh. Re-render a range with the same quality as the rest, or Step 10 refuses to mix them.
 
 ---
 
@@ -332,8 +369,9 @@ bash SKILL_DIR/scripts/mix-encode.sh "$work" <audio> <duration> "$out" [music-fi
 ```
 
 Normalises the voice, ducks the music under it, lays the SFX on top, pads everything to the full
-duration, targets −14 LUFS, and caps the video bitrate at 8M (film grain otherwise balloons the file
-past 800 MB).
+duration, and targets −14 LUFS. Video is H.264 at CRF 16 (slow preset, capped at 16 Mbps so film grain
+can't balloon the file), converted and tagged as BT.709 so phones show the brand colours as designed.
+A 108s vertical lands around 200 MB: high enough to survive the platform's own re-encode.
 
 ---
 
@@ -373,7 +411,9 @@ Name any unlicensed clip on its own line.
 - **Every file is credited.** Licensed or not, each photo and clip goes in the description credits, and
   the report names every ⚠ file.
 - **Every fix is verified in the encoded file**, not just in a still.
-- Transcription is local. Never upload the audio.
+- Transcription is local. Never upload the audio. Voices are synthesized locally too.
+- Characters are original. Never draw, name or imitate an existing cartoon, film or game character.
+- Synthetic voices are named in the report, so the user can disclose them when they post.
 - One brand accent. Green only for success states, red only for errors.
 - Timelines are deterministic: no `Math.random()`, no `Date.now()`. The grain uses a seeded PRNG.
 - Captions never cover the element the viewer is meant to read; hide them via `NOCAP` instead.
@@ -392,6 +432,9 @@ Name any unlicensed clip on its own line.
 | Fix visible in stills but not in the video | frames never re-rendered — a range passed as one quoted string renders zero frames | use `render-frames.sh` with the range as two separate args; check frame mtimes |
 | Video shorter than the audio | an audio filter trimmed the stream | `mix-encode.sh` pads and trims to the duration; don't hand-roll the mix |
 | Output file is hundreds of MB | film grain defeats compression at constant CRF | keep the `-maxrate` cap in `mix-encode.sh` |
+| `frames/ mixes high-quality PNG and draft JPEG frames` | a range was re-rendered with a different `VV_QUALITY` | re-render the whole video with one setting |
+| Accent colour looks orange or washed out on a phone | an encode without the BT.709 conversion and tags | use `mix-encode.sh`; don't hand-roll the encode |
+| Frame render fills the disk | high-quality PNG frames are ~1.2 MB each | free space, or preview with `VV_QUALITY=draft` and render the final once |
 | Wrong or fallback font in stills | fonts not downloaded for this brand | re-run `setup.sh` with the brand file |
 | `PAGE ERROR` in render output | a script error in the timeline | fix it; GSAP only warns on missing selectors, so also check each shot visually |
 | Whisper sits at low CPU for minutes | model download on first run | expected once; the model is cached afterwards |
@@ -401,4 +444,8 @@ Name any unlicensed clip on its own line.
 | YouTube fetch crawls or fails with a challenge warning | no JS runtime, or yt-dlp is out of date | needs `node` or `deno` on PATH; `pipx upgrade yt-dlp` |
 | Clip shows the wrong moment | `--from` is in the fetched clip's seconds, not the original's | subtract the `--section` start |
 | Old clip sound still in the mix | a stale `clips/<name>.wav` from an earlier cut | re-run `extract_clip.sh` for that clip; it removes the old `.wav` |
+| `kokoro-onnx is not installed` / `Voice model missing` | script mode set up without voices | `setup.sh --voices` |
+| `Unknown voice` from `speak.py` | a cast file names a voice that doesn't exist | pick one from the list it prints |
+| A host never moves its mouth | its `who` doesn't match the speaker name in the script | use the lowercase name from `speech.json` |
+| `speech.js has no line N for …` in `PAGE ERROR` | `line()`/`say()` asks for a line the script doesn't have | count that speaker's lines in `speech.json` from 0 |
 | Face shots look grey and washed out | HDR (HLG) phone recording, tone-mapped without metadata | record in SDR (iPhone: Settings › Camera › Formats, HDR Video off) |

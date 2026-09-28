@@ -16,6 +16,9 @@ machine, and each stays under its own licence.
 | [FFmpeg](https://ffmpeg.org) | mixing and encoding | LGPL / GPL depending on your build |
 | [Node.js](https://nodejs.org) + npm | running render.js and installing playwright-core | MIT |
 | [curl](https://curl.se) | downloading fonts and GSAP in setup.sh | curl licence |
+| [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx) *(script mode, `setup.sh --voices`)* | offline text-to-speech for character voices | MIT |
+| [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) model and voices, via kokoro-onnx's release files | the voices themselves | Apache 2.0 — commercial use allowed |
+| [ONNX Runtime](https://github.com/microsoft/onnxruntime) *(installed with kokoro-onnx)* | running the voice model on CPU | MIT |
 | [yt-dlp](https://github.com/yt-dlp/yt-dlp) *(optional, not installed by setup.sh)* | YouTube search and downloads; fetches its own [EJS](https://github.com/yt-dlp/yt-dlp/wiki/EJS) challenge solver on first use | Unlicense |
 
 ## Photos, clips and logos in your videos

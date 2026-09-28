@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
-# setup.sh [brand.json] — one-time setup for voiceover-video. Safe to re-run.
+# setup.sh [--voices] [brand.json] — one-time setup for voiceover-video. Safe to re-run.
+# --voices also installs the offline voice model for script mode (no recording), ~350 MB once.
 set -euo pipefail
 
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILL_DIR="$(dirname "$SCRIPTS_DIR")"
 ASSETS_DIR="$SKILL_DIR/assets"
 GSAP_VERSION="3.12.5"
+KOKORO_DIR="${VV_KOKORO_DIR:-$HOME/.cache/voiceover-video/kokoro}"
+KOKORO_URL="https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0"
+VOICES=0
+if [[ "${1:-}" == "--voices" ]]; then VOICES=1; shift; fi
 missing=()
 
 command -v ffmpeg >/dev/null || missing+=("ffmpeg (apt install ffmpeg · brew install ffmpeg)")
@@ -14,6 +19,9 @@ command -v npm >/dev/null || missing+=("npm (needed to install playwright-core)"
 command -v python3 >/dev/null || missing+=("python3 >= 3.10")
 python3 -c "import faster_whisper" 2>/dev/null || missing+=("faster-whisper (pip install faster-whisper)")
 python3 -c "import numpy" 2>/dev/null || missing+=("numpy (pip install numpy)")
+if (( VOICES )); then
+  python3 -c "import kokoro_onnx" 2>/dev/null || missing+=("kokoro-onnx, for script-mode voices (pip install kokoro-onnx)")
+fi
 
 node_major=$(node -v 2>/dev/null | sed 's/v\([0-9]*\).*/\1/') || node_major=0
 (( node_major >= 18 )) || missing+=("node >= 18 (got $(node -v 2>/dev/null || echo none))")
@@ -95,10 +103,31 @@ if [[ ! -f "$ASSETS_DIR/fonts.css" || "$(cat "$ASSETS_DIR/fonts.url" 2>/dev/null
   echo "$FONTS_URL" > "$ASSETS_DIR/fonts.url"
 fi
 
+if (( VOICES )); then
+  mkdir -p "$KOKORO_DIR"
+  for file in kokoro-v1.0.onnx voices-v1.0.bin; do
+    # Download to a temp name so an interrupted fetch never leaves a truncated model behind
+    if [[ ! -s "$KOKORO_DIR/$file" ]]; then
+      echo "downloading $file → $KOKORO_DIR"
+      if ! curl -sfL -o "$KOKORO_DIR/$file.part" "$KOKORO_URL/$file"; then
+        echo "could not download $KOKORO_URL/$file"
+        echo "Next: check the connection, or download it by hand into $KOKORO_DIR"
+        exit 1
+      fi
+      mv "$KOKORO_DIR/$file.part" "$KOKORO_DIR/$file"
+    fi
+  done
+  echo "voices ready · $KOKORO_DIR"
+fi
+
 # YouTube clips are optional; everything else works without them
 if ! command -v yt-dlp >/dev/null; then
   echo "optional: yt-dlp not found — YouTube clips disabled (pipx install yt-dlp)"
 fi
 
 echo "ready · brand $BRAND"
-echo "Next: run transcribe.py on your audio file"
+if (( VOICES )); then
+  echo "Next: write the script, then run speak.py (script mode) — or transcribe.py on a recording"
+else
+  echo "Next: run transcribe.py on your audio file"
+fi

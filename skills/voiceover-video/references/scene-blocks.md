@@ -228,6 +228,66 @@ An SVG curve drawing slowly through labelled milestones — for "found its purpo
 ### Reflective photo
 Full-bleed photo, darkened gradient, slow drift, large sentence fading in. No hits, music ducked.
 
+### Host *(script mode)*
+A cartoon character that talks when its lines play: mouth or bounce follow `speech.js`, blinks and bobs
+run on their own. `kind` is `keeper` (teacher) or `drone` (sidekick); `who` is the speaker's name in
+the script. The element is only a box; size it for the shot.
+```html
+<div class="host" id="s04pip" style="left:340px;top:520px;width:400px;height:420px"></div>
+<div class="host" id="s04k" style="left:30px;top:1020px;width:330px;height:480px"></div>
+```
+```js
+host("#s04pip","drone","pip"); host("#s04k","keeper","keeper");   // once per element, before the shots
+mood("#s04pip","panic", 3.6, 5.2);    // "panic": shakes and sweats · "happy": eye becomes a smile
+look("#s04pip", -1, .4, 0, 3.6);      // pupil direction, -1..1
+point("#s04k", 6.6, 9.0);             // keeper raises her arm while explaining
+```
+A host appears in several shots as several elements; call `host()` on each. Keep a host in the same
+spot across a scene so it reads as one character, and give the bubble side room.
+
+### Speech bubble
+The line a host is saying, on screen while it's said. Captions step aside while it's up.
+```html
+<div class="bubble tail-down" id="s04b" style="left:250px;top:330px">Which wire goes where?!</div>
+```
+```js
+say("#s04b","pip",0);                 // times itself to Pip's first line in speech.js
+bubble("#s04b", 3.5, 5.2);            // or explicit in/out
+```
+Tails: `tail-down`, `tail-up`, `tail-left`, `tail-right`; point it at the speaker. Short lines only,
+under ~8 words. The teacher's narration stays in captions; bubbles are for the lines a character
+says *in* the scene.
+
+### Term pill
+The first time a term is said, name it on screen. One pill per term, per video.
+```html
+<div class="pill" id="s05t" style="left:340px;top:250px">Topic: orders</div>
+```
+```js
+pop("#s05t", line("keeper",4).s + 1.2);
+```
+Colour a pill by what it names (`style="background:#2dd4bf"`); keep one colour per kind of thing.
+
+### Lane and tokens
+An ordered log, a queue, a pipeline stage: a lane with a label, and tokens (letters, messages, jobs)
+that fly into it. The token's number badge is its position (an offset, a ticket number).
+```html
+<div class="lane" id="s05l" style="left:190px;top:560px;width:820px;--lane:#ffb020"><span class="lane-name">P0</span></div>
+<div class="token" id="s05a" style="left:540px;top:-80px;--tag:#9b7bff"><b>0</b></div>
+```
+```js
+send("#s05a", 270, 635, 6.7);          // arc to (x, y), whoosh out, pop on landing
+tl.set("#s05l",{borderColor:"#3ddc84"}, 17); // outline turns green: "in order"
+```
+Tokens are positioned by `left`/`top` (the token's centre) so `send()` can read where they start.
+Slots in a lane: `left + 80 + i * 120`, centred on `top + 75`. `--tag` colours the strip that marks a
+key; `--lane` colours the label. Start a token off-frame (`top:-80px`) to drop it in from above.
+
+### Failure and recovery
+Break the thing the video is about, then show the concept fixing it: a host crashes (`mood(…,"panic")`,
+a red `.pill` "CRASHED", `hit()`), a lane dims (`tl.to("#s07l",{opacity:.3},t)`), then the fix lands
+with a green pill and the sidekick goes `happy`. This beat is what makes the concept stick.
+
 ### Outro
 Stacked slams for the final line, mascot bouncing in, `follow @handle`. Hold ~2.5s. With a video
 input, use *Face sign-off* instead.

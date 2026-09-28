@@ -11,7 +11,9 @@ Two skills packaged as one plugin for Claude Code and Kimi Code CLI:
 - `voiceover-video` — the model-agnostic engine.
 - `kimi-video` — a Kimi-branded edition that reuses the engine scripts and templates.
 
-Both turn a voice recording into an animated vertical video. The shared engine scripts and templates
+Both turn a voice recording into an animated vertical video. With no recording (script mode),
+`speak.py` voices a written script with one offline voice per character, and cartoon hosts in the
+template act it out. The shared engine scripts and templates
 live in `skills/voiceover-video/`; the Kimi edition adds its own SKILL.md and brand defaults in
 `skills/kimi-video/`.
 
@@ -20,12 +22,14 @@ skills/voiceover-video/
 ├── SKILL.md                     the workflow the agent follows at run time
 ├── brand.example.json           default brand (colours, fonts, handle)
 ├── references/scene-blocks.md   scene catalogue, pacing rules, sound cues, safe zones
+├── references/explainers.md     script mode: explainer shape, analogy, cast, script format, voices
 ├── templates/                   visual theme engine + themes
 │   ├── kinetic.html             the shared HTML/JS engine + demo shots
 │   ├── templates.json           theme catalogue: mood, extra fonts, motion profile
 │   └── themes/                  shared.css (people/footage blocks) + one CSS per theme
 └── scripts/
     ├── setup.sh                 dependency check, playwright-core + Chromium, GSAP, fonts
+    ├── speak.py                 script mode: script → voice.wav + speech.json/js + estimated words.json
     ├── transcribe.py            faster-whisper, word-level timestamps
     ├── build_captions.py        applies fixes.json → words.js
     ├── init_brand.py            first-run answers → ~/.config/voiceover-video/brand.json
@@ -72,24 +76,35 @@ names, breaks this.
 4. **The mix pads to the full duration.** `mix-encode.sh` uses `apad` + `atrim`; without it `loudnorm`
    trims the tail and the video comes out short.
 5. **The encoder caps bitrate.** Film grain defeats CRF alone; removing `-maxrate` produces 800 MB files.
-6. **Nothing third-party is committed.** GSAP, fonts, `node_modules`, and Chromium are downloaded by
+   The encode also converts RGB frames with the BT.709 matrix and tags the stream BT.709; without both,
+   phones shift the brand colours.
+6. **Final frames are supersampled PNG.** `render.js` renders at 2x device pixels and saves 1x PNG, so
+   edges stay crisp and red text has no JPEG chroma bleed. JPEG frames are for `VV_QUALITY=draft` only,
+   and `mix-encode.sh` refuses a frames directory that mixes the two.
+7. **Nothing third-party is committed.** GSAP, fonts, `node_modules`, and Chromium are downloaded by
    `setup.sh`. Never add them to git.
-7. **Placeholders are `{{dotted.names}}`** filled by `fill_template.py`. A new placeholder needs a value
+8. **Placeholders are `{{dotted.names}}`** filled by `fill_template.py`. A new placeholder needs a value
    there and, if it comes from the brand, a key in `brand.example.json`.
-8. **Every fetched file is credited.** `find_media.py` records each download in `credits.json` with its
+9. **Every fetched file is credited.** `find_media.py` records each download in `credits.json` with its
    licence, and marks web and YouTube files as unlicensed so the report can name them. A new source must
    do the same, and must be listed in `LICENSED_SOURCES` only if its results genuinely carry a licence.
-9. **Every theme styles every block.** A theme CSS defines every class `kinetic.css` does plus the
+10. **Every theme styles every block.** A theme CSS defines every class `kinetic.css` does plus the
    `--panel`, `--panel-fg`, `--frame`, `--radius`, `--display` tokens `shared.css` reads. A theme with its
    own typeface lists it in `templates.json` → `fonts`; `setup.sh` downloads it.
-10. **Scripts fail loud.** Every script prints a one-line result and a `Next:` line, and on failure names
+11. **Hosts are pure functions of `t`.** `renderHosts(t)` derives every mouth, blink and bob from `t` and
+   `speech.js`; a host never keeps state between frames. `speech.js` always exists (`fill_template.py`
+   writes an empty one), so a recording without speakers renders hosts idle rather than failing.
+12. **Characters are original.** The shipped hosts are original designs. Never add a host that imitates an
+   existing cartoon, film or game character.
+13. **Scripts fail loud.** Every script prints a one-line result and a `Next:` line, and on failure names
    the missing input and the fix. Match that shape.
 
 ## Conventions
 
 - **Bash:** `set -euo pipefail`, quote every variable, `SCRIPTS_DIR` resolved from `BASH_SOURCE`. Scripts
   are called from zsh too — never rely on word splitting.
-- **Python:** 3.10+, standard library plus `numpy` and `faster-whisper` only (`find_media.py` uses `urllib`). `argparse`, a `main()`
+- **Python:** 3.10+, standard library plus `numpy` and `faster-whisper` only (`find_media.py` uses `urllib`;
+  `speak.py` alone also needs `kokoro-onnx`, installed by `setup.sh --voices`). `argparse`, a `main()`
   returning an exit code, errors to stderr.
 - **JavaScript:** `render.js` depends on `playwright-core` only; the template on GSAP only.
 - **Comments** explain *why*, never *what*. One line.

@@ -39,6 +39,13 @@ your machine.
   timeline itself
 - **A music bed** that ducks automatically under the voice and drops out before the final line
 - **Film finish**: grain, vignette, loudness normalised to −14 LUFS
+- **High-quality output**: frames rendered at 2x and saved lossless, encoded at CRF 16 with correct
+  BT.709 colour, so edges stay crisp and brand colours stay true after the platform re-encodes it.
+  `VV_QUALITY=draft` gives a fast preview cut
+- **No recording? Script mode**: give it a topic ("explain Kafka with cartoon characters") and the agent
+  writes an analogy-driven explainer, voices each character offline (a warm teacher, a squeaky
+  sidekick), and animates original cartoon hosts who talk when their lines play, with speech bubbles,
+  term labels and tokens flying into queues. `setup.sh --voices` installs the voice model once
 - **Optional face-cam bookends**: film the script on your phone in one take; your opening line and
   sign-off stay on camera and everything between is animated
 - **QA gates**: the agent reviews a contact sheet of every shot before the full render, and checks the
@@ -47,7 +54,10 @@ your machine.
 ## How it works
 
 ```
-voice.mp4
+voice.mp4                                    ┌ or, with no recording (script mode):
+  │                                          │ topic → the agent writes script.txt → you approve it
+  │                                          │ speak.py  offline voices per character → voice.wav
+  │                                          └ + speech.json (who speaks when) + estimated word times
   │  transcribe.py        faster-whisper, local, word timestamps
   ▼
 transcript.txt ── you proofread ──► build_captions.py
@@ -227,10 +237,12 @@ The default type is **Archivo** — expanded black for headlines, condensed for 
 ## Good to know
 
 - **The agent cannot hear the result.** Loudness is measured, taste is not. Listen before you post.
-- **Render time.** Roughly 3 minutes of frame rendering for a 108-second Short on 10 CPU workers,
-  plus transcription at 2–3x realtime.
+- **Render time.** High-quality frames take 2–3x longer than the old 1x JPEG ones (roughly 6–9 minutes
+  for a 108-second Short on 10 CPU workers), plus transcription at 2–3x realtime. `VV_QUALITY=draft`
+  renders a fast preview first.
+- **Disk.** Lossless frames are ~1.2 MB each, about 4 GB for a 108-second Short, deleted with `work/`.
 - **File size.** Film grain resists compression; the encoder caps the bitrate so a 108-second vertical
-  lands around 110 MB. Platforms re-compress anyway.
+  lands around 200 MB. That headroom is what keeps it sharp after the platform re-compresses it.
 - **Images and logos** found during an edit keep their own licences. See [THIRD_PARTY.md](THIRD_PARTY.md).
 
 ## Contributing

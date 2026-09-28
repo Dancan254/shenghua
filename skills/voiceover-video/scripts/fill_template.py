@@ -144,6 +144,10 @@ def main() -> int:
     captions = args.work / "words.js"
     if not captions.exists():
         captions.write_text("window.PHRASES=[];", encoding="utf-8")
+    # speak.py writes speech.js in script mode; a recording has no speakers, so hosts stay idle
+    speech = args.work / "speech.js"
+    if not speech.exists():
+        speech.write_text("window.SPEECH=[];", encoding="utf-8")
     vendor = args.work / "vendor"
     if not vendor.exists():
         vendor.symlink_to(SKILL_DIR / "assets", target_is_directory=True)
