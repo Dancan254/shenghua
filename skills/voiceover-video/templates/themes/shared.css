@@ -24,11 +24,16 @@
 .host svg{width:100%;height:100%;overflow:visible}
 .host .ink{stroke:var(--host-ink);stroke-width:6;stroke-linejoin:round;stroke-linecap:round}
 .bubble{position:absolute;visibility:hidden;z-index:6;padding:22px 34px;max-width:620px;background:#fff;color:#0b0b12;border:5px solid var(--host-ink);border-radius:30px;font-family:var(--display,inherit);font-size:42px;font-weight:800;line-height:1.15;text-align:center;box-shadow:0 18px 50px rgba(0,0,0,.35)}
-.bubble::after{content:"";position:absolute;width:34px;height:34px;background:#fff;border:5px solid var(--host-ink);border-top:0;border-left:0}
-.bubble.tail-down::after{left:calc(50% - 17px);bottom:-20px;transform:rotate(45deg)}
-.bubble.tail-up::after{left:calc(50% - 17px);top:-20px;transform:rotate(225deg)}
-.bubble.tail-left::after{left:-20px;top:calc(50% - 17px);transform:rotate(135deg)}
-.bubble.tail-right::after{right:-20px;top:calc(50% - 17px);transform:rotate(-45deg)}
+/* Tail = an ink triangle with a smaller white one inside it; the white one erases the bubble's border where they join */
+.bubble::before,.bubble::after{content:"";position:absolute;width:0;height:0;border-style:solid;border-color:transparent}
+.bubble.tail-down::before{top:100%;left:calc(50% - 24px);border-width:30px 24px 0;border-top-color:var(--host-ink)}
+.bubble.tail-down::after{top:calc(100% - 1px);left:calc(50% - 16px);border-width:20px 16px 0;border-top-color:#fff}
+.bubble.tail-up::before{bottom:100%;left:calc(50% - 24px);border-width:0 24px 30px;border-bottom-color:var(--host-ink)}
+.bubble.tail-up::after{bottom:calc(100% - 1px);left:calc(50% - 16px);border-width:0 16px 20px;border-bottom-color:#fff}
+.bubble.tail-left::before{right:100%;top:calc(50% - 24px);border-width:24px 30px 24px 0;border-right-color:var(--host-ink)}
+.bubble.tail-left::after{right:calc(100% - 1px);top:calc(50% - 16px);border-width:16px 20px 16px 0;border-right-color:#fff}
+.bubble.tail-right::before{left:100%;top:calc(50% - 24px);border-width:24px 0 24px 30px;border-left-color:var(--host-ink)}
+.bubble.tail-right::after{left:calc(100% - 1px);top:calc(50% - 16px);border-width:16px 0 16px 20px;border-left-color:#fff}
 .pill{position:absolute;display:inline-block;z-index:5;padding:12px 30px;border-radius:999px;background:var(--accent);color:#0b0b12;border:5px solid var(--host-ink);font-family:var(--display,inherit);font-size:36px;font-weight:900;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
 .lane{position:absolute;height:150px;border-radius:var(--radius,18px);background:var(--panel,var(--s1));border:5px solid var(--host-ink);box-shadow:0 20px 50px rgba(0,0,0,.3)}
 .lane-name{position:absolute;left:-118px;top:31px;width:96px;height:88px;border-radius:18px;border:5px solid var(--host-ink);background:var(--lane,var(--accent));color:#0b0b12;font-family:var(--display,inherit);font-size:40px;font-weight:900;display:flex;align-items:center;justify-content:center}

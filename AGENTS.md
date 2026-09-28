@@ -76,22 +76,27 @@ names, breaks this.
 4. **The mix pads to the full duration.** `mix-encode.sh` uses `apad` + `atrim`; without it `loudnorm`
    trims the tail and the video comes out short.
 5. **The encoder caps bitrate.** Film grain defeats CRF alone; removing `-maxrate` produces 800 MB files.
-6. **Nothing third-party is committed.** GSAP, fonts, `node_modules`, and Chromium are downloaded by
+   The encode also converts RGB frames with the BT.709 matrix and tags the stream BT.709; without both,
+   phones shift the brand colours.
+6. **Final frames are supersampled PNG.** `render.js` renders at 2x device pixels and saves 1x PNG, so
+   edges stay crisp and red text has no JPEG chroma bleed. JPEG frames are for `VV_QUALITY=draft` only,
+   and `mix-encode.sh` refuses a frames directory that mixes the two.
+7. **Nothing third-party is committed.** GSAP, fonts, `node_modules`, and Chromium are downloaded by
    `setup.sh`. Never add them to git.
-7. **Placeholders are `{{dotted.names}}`** filled by `fill_template.py`. A new placeholder needs a value
+8. **Placeholders are `{{dotted.names}}`** filled by `fill_template.py`. A new placeholder needs a value
    there and, if it comes from the brand, a key in `brand.example.json`.
-8. **Every fetched file is credited.** `find_media.py` records each download in `credits.json` with its
+9. **Every fetched file is credited.** `find_media.py` records each download in `credits.json` with its
    licence, and marks web and YouTube files as unlicensed so the report can name them. A new source must
    do the same, and must be listed in `LICENSED_SOURCES` only if its results genuinely carry a licence.
-9. **Every theme styles every block.** A theme CSS defines every class `kinetic.css` does plus the
+10. **Every theme styles every block.** A theme CSS defines every class `kinetic.css` does plus the
    `--panel`, `--panel-fg`, `--frame`, `--radius`, `--display` tokens `shared.css` reads. A theme with its
    own typeface lists it in `templates.json` → `fonts`; `setup.sh` downloads it.
-10. **Hosts are pure functions of `t`.** `renderHosts(t)` derives every mouth, blink and bob from `t` and
+11. **Hosts are pure functions of `t`.** `renderHosts(t)` derives every mouth, blink and bob from `t` and
    `speech.js`; a host never keeps state between frames. `speech.js` always exists (`fill_template.py`
    writes an empty one), so a recording without speakers renders hosts idle rather than failing.
-11. **Characters are original.** The shipped hosts are original designs. Never add a host that imitates an
+12. **Characters are original.** The shipped hosts are original designs. Never add a host that imitates an
    existing cartoon, film or game character.
-12. **Scripts fail loud.** Every script prints a one-line result and a `Next:` line, and on failure names
+13. **Scripts fail loud.** Every script prints a one-line result and a `Next:` line, and on failure names
    the missing input and the fix. Match that shape.
 
 ## Conventions

@@ -77,8 +77,8 @@ LOOP_INPUT=()
 rm -rf "${WORK:?}/clips/$NAME" "$WORK/clips/$NAME.wav"
 mkdir -p "$WORK/clips/$NAME"
 ffmpeg -v error -y "${LOOP_INPUT[@]}" -ss "$SEEK" -i "$CLIP" -an \
-  -vf "fps=$FPS,scale=$WIDTH:$HEIGHT:force_original_aspect_ratio=increase,crop=$WIDTH:$HEIGHT,setsar=1" \
-  -frames:v "$COUNT" -start_number "$FIRST" -q:v 3 "$WORK/clips/$NAME/f%05d.jpg"
+  -vf "fps=$FPS,scale=$WIDTH:$HEIGHT:force_original_aspect_ratio=increase:flags=lanczos,crop=$WIDTH:$HEIGHT,setsar=1" \
+  -frames:v "$COUNT" -start_number "$FIRST" -q:v 2 "$WORK/clips/$NAME/f%05d.jpg"
 written=$(find "$WORK/clips/$NAME" -name 'f*.jpg' | wc -l)
 echo "clip $NAME ${EDIT_IN}-${EDIT_OUT}s from ${FROM}s → $written frames ($FIRST…$(( FIRST + written - 1 ))) at ${WIDTH}x${HEIGHT}"
 if (( written < COUNT )); then

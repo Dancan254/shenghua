@@ -9,12 +9,16 @@
  *
  * The page must expose window.renderAt(t) and window.SFX. Viewport size is read from the
  * composition's --W / --H CSS variables so one renderer serves vertical and landscape.
+ *
+ * Frames render at 2x device pixels and are saved at 1x as lossless PNG (supersampled: crisp
+ * edges, no JPEG chroma bleed on red text). VV_QUALITY=draft saves 1x JPEG instead, ~4x faster.
  */
 const path = require('path');
 const fs = require('fs');
 const { chromium } = require(path.join(__dirname, 'node_modules', 'playwright-core'));
 
 const FPS = 30;
+const DRAFT = process.env.VV_QUALITY === 'draft';
 const [,, mode, htmlFile, target, a, b] = process.argv;
 
 function usage(message) {
@@ -31,7 +35,7 @@ if (mode === 'frames' && (Number.isNaN(Number(a)) || Number.isNaN(Number(b)) || 
 
 (async () => {
   const browser = await chromium.launch({ headless: true, args: ['--allow-file-access-from-files'] });
-  const page = await browser.newPage({ viewport: { width: 1080, height: 1920 } });
+  const page = await browser.newPage({ viewport: { width: 1080, height: 1920 }, deviceScaleFactor: DRAFT ? 1 : 2 });
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('requestfailed', request => errors.push(`missing file ${request.url()}`));
@@ -146,16 +150,20 @@ if (mode === 'frames' && (Number.isNaN(Number(a)) || Number.isNaN(Number(b)) || 
     }
     for (const t of times) {
       await page.evaluate(x => window.renderAt(x), t);
-      await page.screenshot({ path: path.join(target, `t${String(t.toFixed(2)).padStart(7, '0')}.jpg`), type: 'jpeg', quality: 70 });
+      await page.screenshot({ path: path.join(target, `t${String(t.toFixed(2)).padStart(7, '0')}.jpg`), type: 'jpeg', quality: 85, scale: 'css' });
     }
     console.log(`${times.length} stills → ${target}`);
   }
 
   if (mode === 'frames') {
     fs.mkdirSync(target, { recursive: true });
+    const [ext, other] = DRAFT ? ['jpg', 'png'] : ['png', 'jpg'];
     for (let f = Number(a); f < Number(b); f++) {
       await page.evaluate(x => window.renderAt(x), f / FPS);
-      await page.screenshot({ path: path.join(target, `f${String(f).padStart(5, '0')}.jpg`), type: 'jpeg', quality: 92 });
+      const name = path.join(target, `f${String(f).padStart(5, '0')}`);
+      await page.screenshot({ path: `${name}.${ext}`, scale: 'css', ...(DRAFT ? { type: 'jpeg', quality: 92 } : { type: 'png' }) });
+      // A frame from an earlier render in the other quality would be encoded alongside this one
+      fs.rmSync(`${name}.${other}`, { force: true });
     }
   }
 

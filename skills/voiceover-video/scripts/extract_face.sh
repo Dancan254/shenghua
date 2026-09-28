@@ -59,8 +59,8 @@ expected=0
 for i in "${!ranges[@]}"; do
   read -r FIRST COUNT SEEK <<< "${ranges[$i]}"
   ffmpeg -v error -y -ss "$SEEK" -i "$VIDEO" -an \
-    -vf "fps=$FPS,scale=$WIDTH:$HEIGHT:force_original_aspect_ratio=increase,crop=$WIDTH:$HEIGHT,setsar=1" \
-    -frames:v "$COUNT" -start_number "$FIRST" -q:v 3 "$WORK/face/f%05d.jpg"
+    -vf "fps=$FPS,scale=$WIDTH:$HEIGHT:force_original_aspect_ratio=increase:flags=lanczos,crop=$WIDTH:$HEIGHT,setsar=1" \
+    -frames:v "$COUNT" -start_number "$FIRST" -q:v 2 "$WORK/face/f%05d.jpg"
   echo "face ${labels[$i]} → frames $FIRST…$(( FIRST + COUNT - 1 ))"
   expected=$(( expected + COUNT ))
 done

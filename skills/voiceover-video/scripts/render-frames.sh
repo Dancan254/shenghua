@@ -2,6 +2,7 @@
 # render-frames.sh <index.html> <frames-dir> <duration-seconds> [workers] [from-frame to-frame]
 #
 # Renders frames in parallel. Pass a frame range to re-render one shot after a fix.
+# Frames are supersampled lossless PNG; VV_QUALITY=draft renders fast 1x JPEG for a preview cut.
 set -euo pipefail
 
 HTML="$1"
@@ -50,8 +51,10 @@ done
 failed=0
 for pid in "${pids[@]}"; do wait "$pid" || failed=$(( failed + 1 )); done
 
-rendered=$(find "$OUT" -name 'f*.jpg' -newermt "@$started" | wc -l)
-echo "$rendered/$SPAN frames rendered in $(( $(date +%s) - started ))s · $failed worker(s) failed"
+EXT=png
+[[ "${VV_QUALITY:-}" == "draft" ]] && EXT=jpg
+rendered=$(find "$OUT" -name "f*.$EXT" -newermt "@$started" | wc -l)
+echo "$rendered/$SPAN frames rendered in $(( $(date +%s) - started ))s · $failed worker(s) failed · ${VV_QUALITY:-high} quality"
 if (( rendered < SPAN || failed > 0 )); then
   echo "Next: fix the first error printed above (PAGE ERROR = composition bug, Executable doesn't exist = run setup.sh), then re-run with the same range"
   exit 1

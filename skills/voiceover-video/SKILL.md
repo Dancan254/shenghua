@@ -353,8 +353,11 @@ You cannot hear the result. Say so in the report and ask the user to listen.
 bash SKILL_DIR/scripts/render-frames.sh "$work"/index.html "$work"/frames <duration> [workers] [from_frame to_frame]
 ```
 
-About 3 minutes for 108s on 10 workers. Run it in the background. The optional frame range re-renders
-a single shot after a fix; each bound is its own argument, so it is safe under zsh.
+Frames render supersampled (2x) and are saved as lossless PNG: crisp edges and exact brand colours,
+about 1.2 MB a frame (~4 GB for 108s) and 2–3x slower than a draft. Run it in the background. For a
+quick preview cut, prefix `VV_QUALITY=draft` (1x JPEG); render the final with the default. The optional
+frame range re-renders a single shot after a fix; each bound is its own argument, so it is safe under
+zsh. Re-render a range with the same quality as the rest, or Step 10 refuses to mix them.
 
 ---
 
@@ -366,8 +369,9 @@ bash SKILL_DIR/scripts/mix-encode.sh "$work" <audio> <duration> "$out" [music-fi
 ```
 
 Normalises the voice, ducks the music under it, lays the SFX on top, pads everything to the full
-duration, targets −14 LUFS, and caps the video bitrate at 8M (film grain otherwise balloons the file
-past 800 MB).
+duration, and targets −14 LUFS. Video is H.264 at CRF 16 (slow preset, capped at 16 Mbps so film grain
+can't balloon the file), converted and tagged as BT.709 so phones show the brand colours as designed.
+A 108s vertical lands around 200 MB: high enough to survive the platform's own re-encode.
 
 ---
 
@@ -428,6 +432,9 @@ Name any unlicensed clip on its own line.
 | Fix visible in stills but not in the video | frames never re-rendered — a range passed as one quoted string renders zero frames | use `render-frames.sh` with the range as two separate args; check frame mtimes |
 | Video shorter than the audio | an audio filter trimmed the stream | `mix-encode.sh` pads and trims to the duration; don't hand-roll the mix |
 | Output file is hundreds of MB | film grain defeats compression at constant CRF | keep the `-maxrate` cap in `mix-encode.sh` |
+| `frames/ mixes high-quality PNG and draft JPEG frames` | a range was re-rendered with a different `VV_QUALITY` | re-render the whole video with one setting |
+| Accent colour looks orange or washed out on a phone | an encode without the BT.709 conversion and tags | use `mix-encode.sh`; don't hand-roll the encode |
+| Frame render fills the disk | high-quality PNG frames are ~1.2 MB each | free space, or preview with `VV_QUALITY=draft` and render the final once |
 | Wrong or fallback font in stills | fonts not downloaded for this brand | re-run `setup.sh` with the brand file |
 | `PAGE ERROR` in render output | a script error in the timeline | fix it; GSAP only warns on missing selectors, so also check each shot visually |
 | Whisper sits at low CPU for minutes | model download on first run | expected once; the model is cached afterwards |
