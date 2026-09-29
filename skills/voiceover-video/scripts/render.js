@@ -202,10 +202,9 @@ if (mode === 'frames' && !(/^\d+$/.test(String(subframeArg ?? 1)) && subframes >
   if (mode === 'frames' && subframes > 1) {
     fs.mkdirSync(target, { recursive: true });
     const [ext, other] = DRAFT ? ['jpg', 'png'] : ['png', 'jpg'];
-    // The same clip page.screenshot({ scale: 'css' }) sends, so sub-frames are supersampled down to 1x;
-    // CDP's speed-optimised PNG is pixel-identical and ~4x faster to encode
-    const deviceScale = await page.evaluate(() => window.devicePixelRatio);
-    const clip = { x: 0, y: 0, width: size.width, height: size.height, scale: 1 / deviceScale };
+    // A scale-1 clip captures at CSS size, so the 2x page is supersampled to 1x; the pixels match
+    // page.screenshot({ scale: 'css' }) exactly and the speed-optimised PNG encodes ~4x faster
+    const clip = { x: 0, y: 0, width: size.width, height: size.height, scale: 1 };
     const cdp = await page.context().newCDPSession(page);
     const blend = await browser.newPage();
     await blend.evaluate(({ width, height }) => {
@@ -225,8 +224,11 @@ if (mode === 'frames' && !(/^\d+$/.test(String(subframeArg ?? 1)) && subframes >
           const image = new Image();
           image.src = 'data:image/png;base64,' + data;
           await image.decode();
-          window.blendContext.drawImage(image, 0, 0);
           const { width, height } = window.blendContext.canvas;
+          if (image.naturalWidth !== width || image.naturalHeight !== height) {
+            throw new Error(`sub-frame is ${image.naturalWidth}x${image.naturalHeight}, expected ${width}x${height}`);
+          }
+          window.blendContext.drawImage(image, 0, 0);
           const pixels = window.blendContext.getImageData(0, 0, width, height).data;
           for (let i = 0; i < pixels.length; i++) window.blendSum[i] += pixels[i];
         }, png);

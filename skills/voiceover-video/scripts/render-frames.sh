@@ -3,7 +3,7 @@
 #
 # Renders frames in parallel. Pass a frame range to re-render one shot after a fix.
 # Frames are supersampled lossless PNG; VV_QUALITY=draft renders fast 1x JPEG for a preview cut.
-# --blur N (1-16, first argument) blends N sub-frames per frame into motion blur; --blur 4 renders ~12× slower.
+# --blur N (1-16, first argument) blends N sub-frames per frame into motion blur; --blur 4 renders ~8× slower.
 set -euo pipefail
 
 BLUR=1

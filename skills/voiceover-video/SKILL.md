@@ -359,8 +359,8 @@ quick preview cut, prefix `VV_QUALITY=draft` (1x JPEG); render the final with th
 frame range re-renders a single shot after a fix; each bound is its own argument, so it is safe under
 zsh. Re-render a range with the same quality as the rest, or Step 10 refuses to mix them.
 
-Pass `--blur 4` (first) for the final render only: it adds motion blur and makes the render about 12×
-slower. Render drafts and single-shot fixes without it, unless re-rendering a range of a blurred final.
+Pass `--blur 4` (first) for the final render only: it adds motion blur and makes the render about 8×
+slower than the default. Render drafts and single-shot fixes without it, unless re-rendering a range of a blurred final.
 
 ---
 
