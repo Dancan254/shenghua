@@ -6,12 +6,8 @@ Drop in a voice note. Your agent transcribes it word by word, designs a shot lis
 every scene as kinetic typography and motion graphics timed to your words, adds sound design and a
 music bed that ducks under your voice, and renders a 1080×1920 Short.
 
-This repo ships two skills:
-
-- **`voiceover-video`** — the model-agnostic engine, works in Claude Code, Kimi Code CLI, or any agent
-  that can run shell commands.
-- **`kimi-video`** — a Kimi-branded edition tuned for Moonshot AI and Kimi K3 content, with a default
-  `aurora` theme and Kimi-purple brand presets.
+This repo ships one skill, `voiceover-video`: model-agnostic, it works in Claude Code, Kimi Code CLI, or
+any agent that can run shell commands.
 
 ![demo](docs/demo.gif)
 
