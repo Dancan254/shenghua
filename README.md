@@ -11,8 +11,10 @@ any agent that can run shell commands.
 
 ![A 42-second Kafka vs RabbitMQ explainer made with this skill: word-synced captions, a message-queue diagram, stamps and kinetic type on the blueprint theme](docs/demo.gif)
 
-[▶ Watch the full 42 s with sound](docs/demo.mp4) · made from one voice note; the shot list and
-composition are in [`examples/kafka-vs-rabbitmq`](skills/voiceover-video/examples/kafka-vs-rabbitmq/).
+The full 42 s with sound, made from one voice note (shot list and composition in
+[`examples/kafka-vs-rabbitmq`](skills/voiceover-video/examples/kafka-vs-rabbitmq/)):
+
+https://github.com/user-attachments/assets/ce171d59-121d-4193-b6d0-cd011345ef41
 
 No stock templates, no subscription editor, no uploads: transcription, rendering and audio all run on
 your machine.
