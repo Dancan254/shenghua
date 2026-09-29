@@ -102,12 +102,15 @@ python3 SKILL_DIR/scripts/speak.py "$work"/script.txt "$work" [--cast "$work"/ca
 ```
 
 Writes `voice.wav`, `speech.json`/`speech.js` (who speaks when; the hosts read it), and `words.json` +
-`transcript.txt` with estimated word times. Tell the user which voice each character got and ask them
-to listen to `voice.wav`; you cannot. Re-voicing a line costs seconds, re-timing thirty shots does not.
+`transcript.txt`. speak.py aligns each voiced line with faster-whisper, so every script word carries the
+time it is spoken at. A line recognition can't read (often a high-pitched voice) keeps estimated times;
+the result line names each one (`… 14/15 lines aligned (1 estimated: pip line 7)`) — tell the user.
+`--no-align` estimates every line, for a fast draft only. Tell the user which voice each character got
+and ask them to listen to `voice.wav`; you cannot. Re-voicing a line costs seconds, re-timing thirty
+shots does not.
 
-From here, `<audio>` in every later step is `"$work"/voice.wav`. Skip Step 2 unless you want exact word
-sync (then run it on `voice.wav`; it overwrites `words.json`). In Step 3, `script.txt` is the reference
-and fixes are rarely needed.
+From here, `<audio>` in every later step is `"$work"/voice.wav`. Skip Step 2: `words.json` is already
+timed and spelled as the script. In Step 3, `script.txt` is the reference and fixes are rarely needed.
 
 ---
 

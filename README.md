@@ -53,7 +53,7 @@ your machine.
 voice.mp4                                    ┌ or, with no recording (script mode):
   │                                          │ topic → the agent writes script.txt → you approve it
   │                                          │ speak.py  offline voices per character → voice.wav
-  │                                          └ + speech.json (who speaks when) + estimated word times
+  │                                          └ + speech.json (who speaks when) + aligned word times
   │  transcribe.py        faster-whisper, local, word timestamps
   ▼
 transcript.txt ── you proofread ──► build_captions.py

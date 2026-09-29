@@ -88,5 +88,5 @@ them to listen to `voice.wav` before you build the shots. Swapping a voice then 
 
 Every line has exact times in `speech.json`, and the template reads them: `line("pip", 0)` is Pip's
 first line, `{s, e, text}`. Cut shots and time bubbles from those instead of typing numbers, so a
-re-voiced script re-times itself. `words.json` from `speak.py` holds estimated word times, close
-enough for captions; for exact word sync, run `transcribe.py` on `voice.wav`.
+re-voiced script re-times itself. `words.json` from `speak.py` holds the script's words aligned to
+the voiced audio; a line it could not align keeps estimated times and is named in its output.
