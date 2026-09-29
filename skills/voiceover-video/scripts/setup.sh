@@ -17,7 +17,11 @@ command -v ffmpeg >/dev/null || missing+=("ffmpeg (apt install ffmpeg · brew in
 command -v node >/dev/null || missing+=("node >= 18")
 command -v npm >/dev/null || missing+=("npm (needed to install playwright-core)")
 command -v python3 >/dev/null || missing+=("python3 >= 3.10")
-python3 -c "import faster_whisper" 2>/dev/null || missing+=("faster-whisper (pip install faster-whisper)")
+python3 -c "import faster_whisper" 2>/dev/null || missing+=("faster-whisper (pip install faster-whisper 'av<19')")
+# PyAV 19 dropped the metadata_errors argument faster-whisper 1.2.1 passes; lift once faster-whisper supports it
+python3 -c "import av, sys; sys.exit(int(av.__version__.split('.')[0]) >= 19)" 2>/dev/null \
+  || ! python3 -c "import av" 2>/dev/null \
+  || missing+=("PyAV < 19, faster-whisper cannot decode audio with 19+ (pip install 'av<19')")
 python3 -c "import numpy" 2>/dev/null || missing+=("numpy (pip install numpy)")
 if (( VOICES )); then
   python3 -c "import kokoro_onnx" 2>/dev/null || missing+=("kokoro-onnx, for script-mode voices (pip install kokoro-onnx)")
