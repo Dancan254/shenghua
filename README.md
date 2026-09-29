@@ -9,7 +9,10 @@ music bed that ducks under your voice, and renders a 1080×1920 Short.
 This repo ships one skill, `voiceover-video`: model-agnostic, it works in Claude Code, Kimi Code CLI, or
 any agent that can run shell commands.
 
-![demo](docs/demo.gif)
+![A 42-second Kafka vs RabbitMQ explainer made with this skill: word-synced captions, a message-queue diagram, stamps and kinetic type on the blueprint theme](docs/demo.gif)
+
+[▶ Watch the full 42 s with sound](docs/demo.mp4) · made from one voice note; the shot list and
+composition are in [`examples/kafka-vs-rabbitmq`](skills/voiceover-video/examples/kafka-vs-rabbitmq/).
 
 No stock templates, no subscription editor, no uploads: transcription, rendering and audio all run on
 your machine.
