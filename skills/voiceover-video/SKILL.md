@@ -95,19 +95,23 @@ explainer shape, how to pick the analogy, the cast roles and the script format.
 
 1. Write the analogy mapping, then the script as `Name: line` lines, to `<work>/script.txt`. Show both
    to the user and wait for a yes; the script is the cheapest thing to change.
-2. Voice it (first run: `bash SKILL_DIR/scripts/setup.sh --voices` installs the offline voice model, ~350 MB):
+2. Voice it (first run: `bash SKILL_DIR/scripts/setup.sh --voices` fetches the voice and alignment models, ~500 MB):
 
 ```bash
 python3 SKILL_DIR/scripts/speak.py "$work"/script.txt "$work" [--cast "$work"/cast.json]
 ```
 
 Writes `voice.wav`, `speech.json`/`speech.js` (who speaks when; the hosts read it), and `words.json` +
-`transcript.txt` with estimated word times. Tell the user which voice each character got and ask them
-to listen to `voice.wav`; you cannot. Re-voicing a line costs seconds, re-timing thirty shots does not.
+`transcript.txt`. speak.py runs faster-whisper over the voice track and maps what it hears onto each
+line, so every script word carries the time it is spoken at. A line recognition can't read (a short line
+with a hard name, a very squeaky voice) keeps estimated times;
+the result line names each one (`… 14/15 lines aligned (1 estimated: pip line 7)`) — tell the user.
+`--no-align` estimates every line, for a fast draft only. Tell the user which voice each character got
+and ask them to listen to `voice.wav`; you cannot. Re-voicing a line costs seconds, re-timing thirty
+shots does not.
 
-From here, `<audio>` in every later step is `"$work"/voice.wav`. Skip Step 2 unless you want exact word
-sync (then run it on `voice.wav`; it overwrites `words.json`). In Step 3, `script.txt` is the reference
-and fixes are rarely needed.
+From here, `<audio>` in every later step is `"$work"/voice.wav`. Skip Step 2: `words.json` is already
+timed and spelled as the script. In Step 3, `script.txt` is the reference and fixes are rarely needed.
 
 ---
 
@@ -450,7 +454,7 @@ Name any unlicensed clip on its own line.
 | YouTube fetch crawls or fails with a challenge warning | no JS runtime, or yt-dlp is out of date | needs `node` or `deno` on PATH; `pipx upgrade yt-dlp` |
 | Clip shows the wrong moment | `--from` is in the fetched clip's seconds, not the original's | subtract the `--section` start |
 | Old clip sound still in the mix | a stale `clips/<name>.wav` from an earlier cut | re-run `extract_clip.sh` for that clip; it removes the old `.wav` |
-| `kokoro-onnx is not installed` / `Voice model missing` | script mode set up without voices | `setup.sh --voices` |
+| `kokoro-onnx is not installed` / `Voice model missing` / `Cannot load the 'base' alignment model` | script mode set up without voices, or offline before the models were fetched | `setup.sh --voices` (online, once) |
 | `Unknown voice` from `speak.py` | a cast file names a voice that doesn't exist | pick one from the list it prints |
 | A host never moves its mouth | its `who` doesn't match the speaker name in the script | use the lowercase name from `speech.json` |
 | `speech.js has no line N for …` in `PAGE ERROR` | `line()`/`say()` asks for a line the script doesn't have | count that speaker's lines in `speech.json` from 0 |

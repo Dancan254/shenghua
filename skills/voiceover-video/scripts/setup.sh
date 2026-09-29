@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # setup.sh [--voices] [brand.json] — one-time setup for voiceover-video. Safe to re-run.
-# --voices also installs the offline voice model for script mode (no recording), ~350 MB once.
+# --voices also fetches script mode's voice model (~350 MB) and word-alignment model (~145 MB), once.
 set -euo pipefail
 
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -28,6 +28,17 @@ node_major=$(node -v 2>/dev/null | sed 's/v\([0-9]*\).*/\1/') || node_major=0
 
 python_minor=$(python3 --version 2>/dev/null | sed 's/.* 3\.\([0-9]*\).*/\1/') || python_minor=0
 (( python_minor >= 10 )) || missing+=("python3 >= 3.10 (got $(python3 --version 2>/dev/null || echo none))")
+
+# speak.py aligns word times with this model; fetch it now so script mode never downloads mid-run
+if (( VOICES )) && python3 -c "import faster_whisper" 2>/dev/null; then
+  echo "checking the alignment model (faster-whisper base, ~145 MB on first run)"
+  if ! fetch_error=$(python3 -c 'from faster_whisper import download_model; download_model("base")' 2>&1 >/dev/null); then
+    echo "could not fetch the faster-whisper base model (speak.py word alignment): ${fetch_error##*$'\n'}"
+    echo "Next: check the connection, then re-run setup.sh --voices"
+    exit 1
+  fi
+  echo "alignment model ready · faster-whisper base"
+fi
 
 if [[ ${#missing[@]} -gt 0 ]]; then
   echo "setup incomplete — missing ${#missing[@]}:"

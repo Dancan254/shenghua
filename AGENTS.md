@@ -23,7 +23,7 @@ skills/voiceover-video/
 │   └── themes/                  shared.css (people/footage blocks) + one CSS per theme
 └── scripts/
     ├── setup.sh                 dependency check, playwright-core + Chromium, GSAP, fonts
-    ├── speak.py                 script mode: script → voice.wav + speech.json/js + estimated words.json
+    ├── speak.py                 script mode: script → voice.wav + speech.json/js + aligned words.json
     ├── transcribe.py            faster-whisper, word-level timestamps
     ├── build_captions.py        applies fixes.json → words.js
     ├── init_brand.py            first-run answers → ~/.config/voiceover-video/brand.json
