@@ -314,8 +314,8 @@ Measure first — this needs no eyes and runs in seconds:
 node SKILL_DIR/scripts/render.js check "$work"/index.html ["$work"/check.json]
 ```
 
-It seeks to each shot's midpoint and reports text past the frame edge, text sitting under the caption
-box, shots that render nothing, and `PAGE ERROR` lines. Exit 1 means findings. Fix and re-run until it
+It seeks to each shot at 25%, 50% and 85% of its window and reports text past the frame edge, text sitting under the caption
+box, shots that render nothing at all three moments, and `PAGE ERROR` lines. Exit 1 means findings. Fix and re-run until it
 is clean; it catches clipped headlines that a full render would waste minutes on.
 
 Then, **if you can view images**, read `contact.jpg` for what measurement cannot judge: crops that cut
