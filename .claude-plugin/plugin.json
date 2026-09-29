@@ -1,6 +1,6 @@
 {
   "name": "voiceover-video",
-  "description": "Turn a voice recording into a fully animated, captioned, sound-designed short video. Includes the voiceover-video engine and the Kimi-branded kimi-video edition.",
+  "description": "Turn a voice recording into a fully animated, captioned, sound-designed short video.",
   "version": "1.3.0",
   "author": {
     "name": "Dancan254",

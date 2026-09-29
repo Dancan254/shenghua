@@ -5,7 +5,7 @@
     "url": "https://github.com/Dancan254"
   },
   "metadata": {
-    "description": "Turn a voice recording into a fully animated, captioned, sound-designed short video. Includes the voiceover-video engine and the Kimi-branded kimi-video edition.",
+    "description": "Turn a voice recording into a fully animated, captioned, sound-designed short video.",
     "version": "1.3.0",
     "repository": "https://github.com/Dancan254/voiceover-video-skill"
   },
@@ -14,10 +14,9 @@
       "name": "voiceover-video",
       "source": "./",
       "strict": true,
-      "description": "Voice note in, animated vertical Short out: word-level captions, kinetic typography, camera moves, synthesized sound design and a voice-ducked music bed. Includes a Kimi-branded edition for Moonshot AI and Kimi K3 content.",
+      "description": "Voice note in, animated vertical Short out: word-level captions, kinetic typography, camera moves, synthesized sound design and a voice-ducked music bed.",
       "skills": [
-        "./skills/voiceover-video",
-        "./skills/kimi-video"
+        "./skills/voiceover-video"
       ]
     }
   ]

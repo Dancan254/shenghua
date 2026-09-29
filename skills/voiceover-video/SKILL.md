@@ -210,7 +210,7 @@ Commons, Openverse, Internet Archive, and Pexels with `PEXELS_API_KEY`) alongsid
 images) and YouTube:
 
 ```bash
-python3 SKILL_DIR/scripts/find_media.py search "$work" "Yang Zhilin Moonshot AI"                    # photos
+python3 SKILL_DIR/scripts/find_media.py search "$work" "Yang Zhilin portrait"                       # photos
 python3 SKILL_DIR/scripts/find_media.py search "$work" "Yang Zhilin keynote" --kind video           # talks
 python3 SKILL_DIR/scripts/find_media.py fetch "$work" m6 --name yang-launch
 python3 SKILL_DIR/scripts/find_media.py fetch "$work" m8 --name yang-gtc --section 120-150
