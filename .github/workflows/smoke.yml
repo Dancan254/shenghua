@@ -1,0 +1,186 @@
+name: smoke
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  VV_QUALITY: draft
+  SKILL: skills/voiceover-video
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Validate every JSON file
+        run: |
+          set -euo pipefail
+          git ls-files '*.json' | while read -r file; do
+            python3 -m json.tool "$file" > /dev/null || { echo "::error file=$file::invalid JSON"; exit 1; }
+          done
+
+      # /plugin update reads marketplace.json, so a manifest left behind ships the old version silently
+      - name: Check the three manifests agree
+        run: |
+          set -euo pipefail
+          claude=$(jq -r .version .claude-plugin/plugin.json)
+          marketplace=$(jq -r .metadata.version .claude-plugin/marketplace.json)
+          kimi=$(jq -r .version .kimi-plugin/plugin.json)
+          echo "plugin.json $claude · marketplace.json $marketplace · kimi plugin.json $kimi"
+          if [[ "$claude" != "$marketplace" || "$claude" != "$kimi" ]]; then
+            echo "::error::Manifest versions differ; set all three to the same version"
+            exit 1
+          fi
+
+      - name: Syntax-check shell scripts
+        run: |
+          set -euo pipefail
+          git ls-files '*.sh' | while read -r file; do
+            bash -n "$file" || { echo "::error file=$file::bash syntax error"; exit 1; }
+          done
+
+      - name: Syntax-check render.js
+        run: node --check "$SKILL/scripts/render.js"
+
+      - name: Compile Python scripts
+        env:
+          PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache
+        run: |
+          set -euo pipefail
+          git ls-files '*.py' | while read -r file; do
+            python3 -m py_compile "$file" || { echo "::error file=$file::python syntax error"; exit 1; }
+          done
+
+  smoke:
+    needs: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: .github/workflows/smoke.yml
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Install ffmpeg and espeak-ng
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg espeak-ng
+
+      - name: Install Python dependencies
+        run: pip install faster-whisper numpy
+
+      # setup.sh fills these; keyed on what decides their contents so a stale hit is impossible
+      - name: Cache setup.sh downloads
+        uses: actions/cache@v6
+        with:
+          path: |
+            ${{ env.SKILL }}/scripts/node_modules
+            ${{ env.SKILL }}/assets
+            ~/.cache/ms-playwright
+          key: vendor-${{ runner.os }}-${{ hashFiles('skills/voiceover-video/scripts/package-lock.json', 'skills/voiceover-video/scripts/setup.sh', 'skills/voiceover-video/templates/templates.json', 'skills/voiceover-video/brand.example.json') }}
+
+      - name: Cache the whisper model
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/huggingface
+          key: whisper-tiny-${{ runner.os }}
+
+      # No --voices: the offline TTS model (~350 MB) is only for speak.py, which this run does not use
+      - name: Set up the skill
+        run: |
+          set -euo pipefail
+          out=$(bash "$SKILL/scripts/setup.sh" "$SKILL/brand.example.json")
+          echo "$out"
+          grep -q '^ready' <<< "$out" || { echo "::error::setup.sh did not print ready"; exit 1; }
+
+      - name: Synthesize a speech clip
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/smoke"
+          espeak-ng -s 150 -w "$RUNNER_TEMP/smoke/clip.wav" "Cache your queries, then measure. Slow code hides in plain sight."
+          duration=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$RUNNER_TEMP/smoke/clip.wav")
+          echo "DURATION=$duration" >> "$GITHUB_ENV"
+          echo "clip is ${duration}s"
+
+      - name: Transcribe
+        run: |
+          set -euo pipefail
+          python3 "$SKILL/scripts/transcribe.py" "$RUNNER_TEMP/smoke/clip.wav" --outdir "$RUNNER_TEMP/smoke/work" --model tiny
+          python3 "$SKILL/scripts/build_captions.py" "$RUNNER_TEMP/smoke/work"
+
+      - name: Build the composition
+        run: |
+          set -euo pipefail
+          S="$SKILL/scripts"; W="$RUNNER_TEMP/smoke/work"
+          python3 "$S/fill_template.py" "$W" "$DURATION" --brand "$SKILL/brand.example.json"
+          node "$S/render.js" stills "$W/index.html" "$W/stills" 0.5,1.5,2.5
+          bash "$S/contact-sheet.sh" "$W/stills" "$W/contact.jpg"
+          node "$S/render.js" cues "$W/index.html" "$W/cues.json"
+          # render.js check is omitted: the stock demo shots are hard-timed to 6.1 s+, so a shorter clip leaves s03 empty
+
+      - name: Render and mix
+        run: |
+          set -euo pipefail
+          S="$SKILL/scripts"; W="$RUNNER_TEMP/smoke/work"
+          python3 "$S/synth_audio.py" "$W/cues.json" "$DURATION" "$W"
+          bash "$S/render-frames.sh" "$W/index.html" "$W/frames" "$DURATION" 2
+          bash "$S/mix-encode.sh" "$W" "$RUNNER_TEMP/smoke/clip.wav" "$DURATION" "$W/out.mp4"
+
+      - name: Assert duration, size and loudness
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/smoke/work/out.mp4"
+          actual=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$out")
+          size=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$out")
+          ffmpeg -hide_banner -nostats -i "$out" -af ebur128=framelog=quiet -f null - 2> "$RUNNER_TEMP/smoke/ebur128.txt"
+          lufs=$(awk '/^ *I:/ {v=$2} END {print v}' "$RUNNER_TEMP/smoke/ebur128.txt")
+          echo "duration $actual (want $DURATION) · size $size · ${lufs} LUFS"
+          python3 - "$actual" "$DURATION" "$size" "$lufs" <<'PY'
+          import sys
+          actual, want, size, lufs = float(sys.argv[1]), float(sys.argv[2]), sys.argv[3], float(sys.argv[4])
+          errors = []
+          if abs(actual - want) > 0.05:
+              errors.append(f"duration {actual}s is not {want}s ±0.05")
+          if size != "1080x1920":
+              errors.append(f"size {size} is not 1080x1920")
+          if abs(lufs + 14) > 1.5:
+              errors.append(f"loudness {lufs} LUFS is not -14 ±1.5")
+          if errors:
+              sys.exit("::error::" + "; ".join(errors))
+          PY
+
+      - name: Keep the contact sheet
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: smoke-output
+          path: ${{ runner.temp }}/smoke/work/contact.jpg
+          if-no-files-found: ignore
+          retention-days: 7
