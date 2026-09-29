@@ -99,7 +99,7 @@ always produces the same video, however slow the machine.
 Runs on macOS and Linux. On Windows, run your agent inside WSL: the scripts are bash.
 
 ```bash
-pip install faster-whisper numpy
+pip install faster-whisper 'av<19' numpy
 # macOS: brew install ffmpeg node   ·   Debian/Ubuntu: sudo apt install ffmpeg nodejs npm
 ```
 
