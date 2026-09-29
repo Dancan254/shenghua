@@ -331,10 +331,11 @@ Step 9. Do not start Step 9 with a known defect — a full render costs minutes.
 
 ```bash
 node SKILL_DIR/scripts/render.js cues "$work"/index.html "$work"/cues.json
-python3 SKILL_DIR/scripts/synth_audio.py "$work"/cues.json <duration> "$work" --drop <time-of-final-slam>
+python3 SKILL_DIR/scripts/synth_audio.py "$work"/cues.json <duration> "$work" --template <template-id> --drop <time-of-final-slam>
 ```
 
-Writes `sfx.wav` and `music.wav`. Omit `--drop` if the video has no final slam; otherwise use the time
+Writes `sfx.wav` and `music.wav`. Pass the same `<template-id>` as Step 6: the music follows the theme's
+tempo, key and layers, and varies per video (the slug folder). Omit `--drop` if the video has no final slam; otherwise use the time
 of the last big hit. Optional pacing flags:
 
 - `--drums-from <t>` — bring the drums in at `<t>` seconds.

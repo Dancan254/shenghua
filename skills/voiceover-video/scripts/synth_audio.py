@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """Synthesize the sound design for a composition.
 
-  synth_audio.py <cues.json> <duration> <work-dir> [--drop T] [--quiet A:B] [--no-music]
+  synth_audio.py <cues.json> <duration> <work-dir> [--template ID] [--drop T] [--quiet A:B] [--no-music]
 
-Writes sfx.wav (every cue the timeline pushed) and music.wav (an 88 bpm pad, sub bass and
-plucks, drums from --drums-from onward). Everything is generated here, so there is nothing
-to license.
+Writes sfx.wav (every cue the timeline pushed) and music.wav (the theme's pad, bass, pluck and
+pulse layers at its own tempo and key, drums from --drums-from onward). The chord order and pluck
+pattern vary per video (the slug folder above work/). Everything is generated here, so there is nothing to license.
 """
 
 import argparse
+import hashlib
 import json
 import sys
 import wave
@@ -17,6 +18,7 @@ from pathlib import Path
 import numpy as np
 
 SR = 48000
+TEMPLATES_JSON = Path(__file__).resolve().parent.parent / "templates" / "templates.json"
 rng = np.random.default_rng(7)
 
 
@@ -149,26 +151,41 @@ def build_sfx(cues, samples):
     return sfx, unknown
 
 
-def build_music(duration, samples, drums_from, drop, quiet):
-    beat = 60 / 88
+def pulse_note(midi, seconds):
+    t = t_axis(seconds)
+    saw = sum(np.sin(2 * np.pi * note(midi) * k * t) / k for k in range(1, 7))
+    return saw * np.exp(-t * 18) * 0.05
+
+
+def build_music(duration, samples, drums_from, drop, quiet, profile, music_rng):
+    beat = 60 / profile["bpm"]
     bar = beat * 4
-    chords = [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]]
-    bass = [45, 41, 36, 43]
+    root, layers = profile["root"], profile["layers"]
+    rotation = int(music_rng.integers(0, 4))
+    progression = profile["progression"][rotation:] + profile["progression"][:rotation]
+    pluck_order = [int(i) for i in music_rng.permutation(3)]
     music = np.zeros(samples)
     for b in range(int(duration / bar) + 2):
         start = b * bar
-        chord = chords[b % 4]
-        pad_t = t_axis(bar + 0.5)
-        pad = sum(
-            np.sin(2 * np.pi * note(m) * 2 ** (d / 12) * pad_t) + 0.3 * np.sin(4 * np.pi * note(m) * 2 ** (d / 12) * pad_t)
-            for m in chord for d in (-0.12, 0.0, 0.12)
-        ) / 9
-        place(music, pad * envelope(len(pad_t), 0.6, 0.8) * 0.16, start)
-        bass_t = t_axis(bar)
-        place(music, np.sin(2 * np.pi * note(bass[b % 4]) * bass_t) * envelope(len(bass_t), 0.05, 0.4) * 0.14, start)
-        for i in range(8):
-            pluck_t = t_axis(0.25)
-            place(music, np.sin(2 * np.pi * note(chord[(i * 2) % 3] + 12) * pluck_t) * np.exp(-pluck_t * 14) * 0.05, start + i * beat / 2)
+        offsets = progression[b % 4]
+        chord = [root + o for o in offsets]
+        if "pad" in layers:
+            pad_t = t_axis(bar + 0.5)
+            pad = sum(
+                np.sin(2 * np.pi * note(m) * 2 ** (d / 12) * pad_t) + 0.3 * np.sin(4 * np.pi * note(m) * 2 ** (d / 12) * pad_t)
+                for m in chord for d in (-0.12, 0.0, 0.12)
+            ) / 9
+            place(music, pad * envelope(len(pad_t), 0.6, 0.8) * 0.16, start)
+        if "bass" in layers:
+            bass_t = t_axis(bar)
+            place(music, np.sin(2 * np.pi * note(root + offsets[0] - 12) * bass_t) * envelope(len(bass_t), 0.05, 0.4) * 0.14, start)
+        if "pluck" in layers:
+            for i in range(8):
+                pluck_t = t_axis(0.25)
+                place(music, np.sin(2 * np.pi * note(chord[pluck_order[i % 3]] + 12) * pluck_t) * np.exp(-pluck_t * 14) * 0.05, start + i * beat / 2)
+        if "pulse" in layers:
+            for i in range(8):
+                place(music, pulse_note(root + offsets[0], beat / 2), start + i * beat / 2)
         if drums_from is not None and start >= drums_from:
             for i in range(4):
                 kick_t = t_axis(0.3)
@@ -203,6 +220,7 @@ def main() -> int:
     parser.add_argument("cues", type=Path)
     parser.add_argument("duration", type=float)
     parser.add_argument("work", type=Path)
+    parser.add_argument("--template", default="kinetic", help="theme id whose music profile to use")
     parser.add_argument("--drop", type=float, default=None, help="time of the final slam")
     parser.add_argument("--drums-from", type=float, default=None, help="bring drums in at this time")
     parser.add_argument("--quiet", action="append", default=[], help="A:B range where music sits lower")
@@ -213,6 +231,14 @@ def main() -> int:
         print(f"No such cues file: {args.cues}", file=sys.stderr)
         print("Next: run render.js cues first", file=sys.stderr)
         return 1
+
+    templates = json.loads(TEMPLATES_JSON.read_text())["templates"]
+    profiles = {entry["id"]: entry["music"] for entry in templates}
+    if args.template not in profiles:
+        print(f"Unknown template: {args.template} (valid: {', '.join(profiles)})", file=sys.stderr)
+        print("Next: pass the same --template id you gave fill_template.py", file=sys.stderr)
+        return 1
+    profile = profiles[args.template]
 
     samples = int(SR * args.duration)
     cues = json.loads(args.cues.read_text())
@@ -235,10 +261,15 @@ def main() -> int:
                 print("Next: pass a numeric range like --quiet 2.5:4.0", file=sys.stderr)
                 return 1
             quiet.append((a, b))
-        write_wav(args.work / "music.wav", build_music(args.duration, samples, args.drums_from, args.drop, quiet))
+        resolved_work = args.work.resolve()
+        seed_key = f"{resolved_work.parent.name}/{resolved_work.name}"
+        seed = int.from_bytes(hashlib.sha256(seed_key.encode()).digest()[:8], "big")
+        music = build_music(args.duration, samples, args.drums_from, args.drop, quiet, profile, np.random.default_rng(seed))
+        write_wav(args.work / "music.wav", music)
         written.append("music.wav")
 
-    print(f"{len(cues)} cues · {args.duration:.1f}s → {' + '.join(written)}")
+    tempo = f" · {args.template} {profile['bpm']} bpm" if not args.no_music else ""
+    print(f"{len(cues)} cues · {args.duration:.1f}s{tempo} → {' + '.join(written)}")
     if unknown:
         print(f"  ignored unknown cue types: {', '.join(sorted(unknown))}")
     print("Next: run render-frames.sh, then mix-encode.sh")

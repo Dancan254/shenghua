@@ -9,6 +9,7 @@
       "mood": "fast, high-energy, dark-and-neon",
       "best_for": ["tech explainers", "product launches", "hot takes", "listicles"],
       "motion": {"enter": null, "shake": 1, "flash": 1, "pulse": 1},
+      "music": {"bpm": 88, "root": 57, "progression": [[0,3,7],[-4,0,3],[-9,-5,-2],[-2,2,5]], "layers": ["pad", "bass", "pluck"]},
       "blocks": ["slam", "strike", "highlight-box", "stacked-slams", "counter", "terminal", "stamp", "vhs", "crt", "diagram", "chart", "logo-wall", "path", "lower-third", "clip", "broll", "quote", "outro", "host", "bubble", "pill", "lane"]
     },
     {
@@ -18,6 +19,7 @@
       "mood": "clean, spacious, confident",
       "best_for": ["thought leadership", "deep dives", "monologues", "soft announcements"],
       "motion": {"enter": "fade", "shake": 0.4, "flash": 0.3, "pulse": 0.5},
+      "music": {"bpm": 76, "root": 60, "progression": [[0,4,7],[-3,0,4],[-7,-3,0],[-5,-1,2]], "layers": ["pad", "pluck"]},
       "blocks": ["slam", "highlight-box", "counter", "terminal", "diagram", "quote", "lower-third", "clip", "broll", "outro", "host", "bubble", "pill", "lane"]
     },
     {
@@ -27,6 +29,7 @@
       "mood": "CRT glow, phosphor, 80s/90s computing",
       "best_for": ["history of tech", "hacking stories", "CLI demos", "retro gaming"],
       "motion": {"enter": "glitch", "shake": 0.8, "flash": 0.6, "pulse": 0.6},
+      "music": {"bpm": 110, "root": 52, "progression": [[0,3,7],[-4,0,3],[-2,2,5],[-5,-2,2]], "layers": ["pulse", "bass", "pluck"]},
       "blocks": ["terminal", "counter", "stamp", "crt", "vhs", "diagram", "typewriter", "clip", "broll", "outro", "host", "bubble", "pill", "lane"]
     },
     {
@@ -37,6 +40,7 @@
       "best_for": ["founder stories", "company origins", "biographies", "the story behind a product"],
       "fonts": "Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900",
       "motion": {"enter": "fade", "shake": 0.35, "flash": 0.3, "pulse": 0.3},
+      "music": {"bpm": 66, "root": 50, "progression": [[0,3,7],[-4,0,3],[3,7,10],[-2,2,5]], "layers": ["pad", "bass"]},
       "blocks": ["photo", "ken-burns", "lower-third", "clip", "broll", "quote", "duo", "counter", "stamp", "path", "reflective-photo", "outro", "host", "bubble", "pill", "lane"]
     },
     {
@@ -47,6 +51,7 @@
       "best_for": ["announcements", "funding and acquisitions", "outages and incidents", "this week in tech"],
       "fonts": "Oswald:wght@400..700",
       "motion": {"enter": "wipe", "shake": 0.6, "flash": 0.5, "pulse": 0.6},
+      "music": {"bpm": 120, "root": 55, "progression": [[0,3,7],[-4,0,3],[3,7,10],[-2,2,5]], "layers": ["pulse", "pad", "bass"]},
       "blocks": ["ticker", "lower-third", "clip", "broll", "photo", "duo", "counter", "chart", "stamp", "quote", "outro", "host", "bubble", "pill", "lane"]
     },
     {
@@ -56,6 +61,7 @@
       "mood": "engineering drawing, grid paper, dashed outlines, precise",
       "best_for": ["system design", "architecture explainers", "how X works under the hood", "protocols"],
       "motion": {"enter": "wipe", "shake": 0.4, "flash": 0.3, "pulse": 0.5},
+      "music": {"bpm": 96, "root": 59, "progression": [[0,3,7],[-4,0,3],[3,7,10],[-2,2,5]], "layers": ["pluck", "pad", "bass"]},
       "blocks": ["diagram", "path", "terminal", "counter", "highlight-box", "logo-wall", "chart", "lower-third", "outro", "host", "bubble", "pill", "lane"]
     },
     {
@@ -66,6 +72,7 @@
       "best_for": ["hot takes", "myth busting", "unpopular opinions", "rants"],
       "fonts": "Anton",
       "motion": {"enter": null, "shake": 1.5, "flash": 0.25, "pulse": 1.2},
+      "music": {"bpm": 128, "root": 52, "progression": [[0,7,12],[3,10,15],[-2,5,10],[5,12,17]], "layers": ["pulse", "bass"]},
       "blocks": ["slam", "stacked-slams", "strike", "highlight-box", "stamp", "counter", "photo", "duo", "quote", "outro", "host", "bubble", "pill", "lane"]
     },
     {
@@ -75,6 +82,7 @@
       "mood": "soft gradients, frosted glass cards, polished and modern",
       "best_for": ["AI and product launches", "SaaS features", "startup announcements", "developer tools"],
       "motion": {"enter": "soft", "shake": 0.5, "flash": 0.4, "pulse": 0.5},
+      "music": {"bpm": 92, "root": 62, "progression": [[0,4,7],[-5,-1,2],[-3,0,4],[-7,-3,0]], "layers": ["pad", "pluck", "bass"]},
       "blocks": ["slam", "highlight-box", "counter", "terminal", "logo-wall", "diagram", "lower-third", "clip", "broll", "quote", "outro", "host", "bubble", "pill", "lane"]
     }
   ]
