@@ -3,7 +3,6 @@ skills/voiceover-video/assets/
 __pycache__/
 work/
 *.mp4
-!docs/demo.mp4
 *.mov
 *.wav
 brand.json
