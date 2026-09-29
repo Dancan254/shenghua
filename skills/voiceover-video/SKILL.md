@@ -170,6 +170,7 @@ Load `references/scene-blocks.md`. Write a shot table — one row per shot, cut 
 
 Rules: a new shot every 1–4 seconds; a hit only on a word that deserves it; captions hidden whenever
 the spoken word *is* the visual. Find photos and clips before the table is final (Step 5).
+See `SKILL_DIR/examples/kafka-vs-rabbitmq/` for a complete worked shot list.
 
 **Pick the template (theme) now.** Read `templates/templates.json` and choose the `id` whose mood
 matches the topic. Each theme changes type, colour, captions *and* motion (default shot entry, shake,
@@ -291,6 +292,7 @@ Replace the demo shots between `BEGIN SHOTS` / `END SHOTS` (markup) and `BEGIN T
 outer `#world` and `#cam` containers intact:
 `shot()`, `slam()`, `hit()`, `rise()`, `pop()`, `stagger()`, `drift()`, `kenBurns()`, `lowerThird()`, `ticker()`,
 `typer()`, `counter()`, `terminal()`, `faceCam()`, `clip()`, `broll()`, the `NOCAP` ranges, and the `CAP_STYLE` constant. Every helper that makes noise pushes its own sound cue.
+See `SKILL_DIR/examples/kafka-vs-rabbitmq/` for a complete worked composition.
 
 The display style (`.xl`) is uppercase and width-expanded; captions are condensed. Size headlines
 for the expanded width — a vertical frame fits ~6 characters at 250px.
