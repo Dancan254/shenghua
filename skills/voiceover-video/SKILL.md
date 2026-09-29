@@ -350,7 +350,7 @@ You cannot hear the result. Say so in the report and ask the user to listen.
 ## Step 9 — Render frames
 
 ```bash
-bash SKILL_DIR/scripts/render-frames.sh "$work"/index.html "$work"/frames <duration> [workers] [from_frame to_frame]
+bash SKILL_DIR/scripts/render-frames.sh [--blur 4] "$work"/index.html "$work"/frames <duration> [workers] [from_frame to_frame]
 ```
 
 Frames render supersampled (2x) and are saved as lossless PNG: crisp edges and exact brand colours,
@@ -358,6 +358,9 @@ about 1.2 MB a frame (~4 GB for 108s) and 2–3x slower than a draft. Run it in 
 quick preview cut, prefix `VV_QUALITY=draft` (1x JPEG); render the final with the default. The optional
 frame range re-renders a single shot after a fix; each bound is its own argument, so it is safe under
 zsh. Re-render a range with the same quality as the rest, or Step 10 refuses to mix them.
+
+Pass `--blur 4` (first) for the final render only: it adds motion blur and makes the render about 12×
+slower. Render drafts and single-shot fixes without it, unless re-rendering a range of a blurred final.
 
 ---
 

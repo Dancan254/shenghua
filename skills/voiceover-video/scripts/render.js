@@ -3,7 +3,7 @@
  * render.js — drive a composition deterministically in headless Chromium
  *
  *   node render.js stills <index.html> <out-dir> <t1,t2,…>
- *   node render.js frames <index.html> <out-dir> <from-frame> <to-frame>  (to-frame is exclusive)
+ *   node render.js frames <index.html> <out-dir> <from-frame> <to-frame> [subframes]  (to-frame is exclusive)
  *   node render.js cues   <index.html> <cues.json>
  *   node render.js check  <index.html> [report.json]
  *
@@ -19,7 +19,7 @@ const { chromium } = require(path.join(__dirname, 'node_modules', 'playwright-co
 
 const FPS = 30;
 const DRAFT = process.env.VV_QUALITY === 'draft';
-const [,, mode, htmlFile, target, a, b] = process.argv;
+const [,, mode, htmlFile, target, a, b, subframeArg] = process.argv;
 
 function usage(message) {
   console.error(message);
@@ -31,6 +31,10 @@ if (!['stills', 'frames', 'cues', 'check'].includes(mode)) usage(`Unknown mode: 
 if (!htmlFile || !fs.existsSync(htmlFile)) usage(`No such composition: ${htmlFile}`);
 if (mode === 'frames' && (Number.isNaN(Number(a)) || Number.isNaN(Number(b)) || b === undefined)) {
   usage(`frames needs <from-frame> <to-frame> as two separate numbers, got: ${a} ${b}`);
+}
+const subframes = Number(subframeArg ?? 1);
+if (mode === 'frames' && !(/^\d+$/.test(String(subframeArg ?? 1)) && subframes >= 1 && subframes <= 16)) {
+  usage(`frames [subframes] must be an integer from 1 to 16, got: ${subframeArg}`);
 }
 
 (async () => {
@@ -183,7 +187,7 @@ if (mode === 'frames' && (Number.isNaN(Number(a)) || Number.isNaN(Number(b)) || 
     console.log(`${times.length} stills → ${target}`);
   }
 
-  if (mode === 'frames') {
+  if (mode === 'frames' && subframes === 1) {
     fs.mkdirSync(target, { recursive: true });
     const [ext, other] = DRAFT ? ['jpg', 'png'] : ['png', 'jpg'];
     for (let f = Number(a); f < Number(b); f++) {
@@ -191,6 +195,51 @@ if (mode === 'frames' && (Number.isNaN(Number(a)) || Number.isNaN(Number(b)) || 
       const name = path.join(target, `f${String(f).padStart(5, '0')}`);
       await page.screenshot({ path: `${name}.${ext}`, scale: 'css', ...(DRAFT ? { type: 'jpeg', quality: 92 } : { type: 'png' }) });
       // A frame from an earlier render in the other quality would be encoded alongside this one
+      fs.rmSync(`${name}.${other}`, { force: true });
+    }
+  }
+
+  if (mode === 'frames' && subframes > 1) {
+    fs.mkdirSync(target, { recursive: true });
+    const [ext, other] = DRAFT ? ['jpg', 'png'] : ['png', 'jpg'];
+    // The same clip page.screenshot({ scale: 'css' }) sends, so sub-frames are supersampled down to 1x;
+    // CDP's speed-optimised PNG is pixel-identical and ~4x faster to encode
+    const deviceScale = await page.evaluate(() => window.devicePixelRatio);
+    const clip = { x: 0, y: 0, width: size.width, height: size.height, scale: 1 / deviceScale };
+    const cdp = await page.context().newCDPSession(page);
+    const blend = await browser.newPage();
+    await blend.evaluate(({ width, height }) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      window.blendContext = canvas.getContext('2d', { willReadFrequently: true });
+      window.blendSum = new Uint32Array(width * height * 4);
+    }, size);
+    for (let f = Number(a); f < Number(b); f++) {
+      await blend.evaluate(() => window.blendSum.fill(0));
+      for (let k = 0; k < subframes; k++) {
+        // 180° shutter: sub-frames span half a frame, so renderAt's Math.round keeps frame f's grain and footage
+        await page.evaluate(x => window.renderAt(x), f / FPS + k / (2 * subframes * FPS));
+        const { data: png } = await cdp.send('Page.captureScreenshot', { format: 'png', optimizeForSpeed: true, clip });
+        await blend.evaluate(async data => {
+          const image = new Image();
+          image.src = 'data:image/png;base64,' + data;
+          await image.decode();
+          window.blendContext.drawImage(image, 0, 0);
+          const { width, height } = window.blendContext.canvas;
+          const pixels = window.blendContext.getImageData(0, 0, width, height).data;
+          for (let i = 0; i < pixels.length; i++) window.blendSum[i] += pixels[i];
+        }, png);
+      }
+      const blended = await blend.evaluate(({ count, type }) => {
+        const { width, height } = window.blendContext.canvas;
+        const averaged = new ImageData(width, height);
+        for (let i = 0; i < averaged.data.length; i++) averaged.data[i] = Math.round(window.blendSum[i] / count);
+        window.blendContext.putImageData(averaged, 0, 0);
+        return window.blendContext.canvas.toDataURL(type, 0.92).split(',')[1];
+      }, { count: subframes, type: DRAFT ? 'image/jpeg' : 'image/png' });
+      const name = path.join(target, `f${String(f).padStart(5, '0')}`);
+      fs.writeFileSync(`${name}.${ext}`, Buffer.from(blended, 'base64'));
       fs.rmSync(`${name}.${other}`, { force: true });
     }
   }

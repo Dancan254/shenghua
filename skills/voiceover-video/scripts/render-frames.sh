@@ -1,9 +1,21 @@
 #!/usr/bin/env bash
-# render-frames.sh <index.html> <frames-dir> <duration-seconds> [workers] [from-frame to-frame]
+# render-frames.sh [--blur N] <index.html> <frames-dir> <duration-seconds> [workers] [from-frame to-frame]
 #
 # Renders frames in parallel. Pass a frame range to re-render one shot after a fix.
 # Frames are supersampled lossless PNG; VV_QUALITY=draft renders fast 1x JPEG for a preview cut.
+# --blur N (1-16, first argument) blends N sub-frames per frame into motion blur; --blur 4 renders ~12× slower.
 set -euo pipefail
+
+BLUR=1
+if [[ "${1:-}" == "--blur" ]]; then
+  BLUR="${2:-}"
+  if ! [[ "$BLUR" =~ ^[1-9][0-9]*$ ]] || (( BLUR > 16 )); then
+    echo "--blur must be an integer from 1 to 16, got: $BLUR"
+    echo "Next: pass --blur 4 as the first two arguments, or drop it for a sharp render"
+    exit 1
+  fi
+  shift 2
+fi
 
 HTML="$1"
 OUT="$2"
@@ -44,7 +56,7 @@ for (( i = 0; i < WORKERS; i++ )); do
   end=$(( start + STEP < TO ? start + STEP : TO ))
   (( start >= end )) && break
   # Bounds are separate arguments on purpose: a single quoted "a b" renders zero frames silently
-  node "$SCRIPTS_DIR/render.js" frames "$HTML" "$OUT" "$start" "$end" &
+  node "$SCRIPTS_DIR/render.js" frames "$HTML" "$OUT" "$start" "$end" "$BLUR" &
   pids+=($!)
 done
 
@@ -54,7 +66,9 @@ for pid in "${pids[@]}"; do wait "$pid" || failed=$(( failed + 1 )); done
 EXT=png
 [[ "${VV_QUALITY:-}" == "draft" ]] && EXT=jpg
 rendered=$(find "$OUT" -name "f*.$EXT" -newermt "@$started" | wc -l)
-echo "$rendered/$SPAN frames rendered in $(( $(date +%s) - started ))s · $failed worker(s) failed · ${VV_QUALITY:-high} quality"
+blur_note=""
+(( BLUR > 1 )) && blur_note=" · blur $BLUR"
+echo "$rendered/$SPAN frames rendered in $(( $(date +%s) - started ))s$blur_note · $failed worker(s) failed · ${VV_QUALITY:-high} quality"
 if (( rendered < SPAN || failed > 0 )); then
   echo "Next: fix the first error printed above (PAGE ERROR = composition bug, Executable doesn't exist = run setup.sh), then re-run with the same range"
   exit 1
