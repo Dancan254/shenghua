@@ -25,7 +25,7 @@ jobs:
 
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.13"
+          python-version: "3.14"
 
       - uses: actions/setup-node@v7
         with:
@@ -33,6 +33,7 @@ jobs:
 
       - name: Validate every JSON file
         run: |
+          set -euo pipefail
           git ls-files '*.json' | while read -r file; do
             python3 -m json.tool "$file" > /dev/null || { echo "::error file=$file::invalid JSON"; exit 1; }
           done
@@ -40,6 +41,7 @@ jobs:
       # /plugin update reads marketplace.json, so a manifest left behind ships the old version silently
       - name: Check the three manifests agree
         run: |
+          set -euo pipefail
           claude=$(jq -r .version .claude-plugin/plugin.json)
           marketplace=$(jq -r .metadata.version .claude-plugin/marketplace.json)
           kimi=$(jq -r .version .kimi-plugin/plugin.json)
@@ -51,6 +53,7 @@ jobs:
 
       - name: Syntax-check shell scripts
         run: |
+          set -euo pipefail
           git ls-files '*.sh' | while read -r file; do
             bash -n "$file" || { echo "::error file=$file::bash syntax error"; exit 1; }
           done
@@ -62,6 +65,7 @@ jobs:
         env:
           PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache
         run: |
+          set -euo pipefail
           git ls-files '*.py' | while read -r file; do
             python3 -m py_compile "$file" || { echo "::error file=$file::python syntax error"; exit 1; }
           done
@@ -75,7 +79,7 @@ jobs:
 
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.13"
+          python-version: "3.14"
           cache: pip
           cache-dependency-path: .github/workflows/smoke.yml
 
@@ -85,6 +89,7 @@ jobs:
 
       - name: Install ffmpeg and espeak-ng
         run: |
+          set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ffmpeg espeak-ng
 
@@ -110,12 +115,14 @@ jobs:
       # No --voices: the offline TTS model (~350 MB) is only for speak.py, which this run does not use
       - name: Set up the skill
         run: |
+          set -euo pipefail
           out=$(bash "$SKILL/scripts/setup.sh" "$SKILL/brand.example.json")
           echo "$out"
           grep -q '^ready' <<< "$out" || { echo "::error::setup.sh did not print ready"; exit 1; }
 
       - name: Synthesize a speech clip
         run: |
+          set -euo pipefail
           mkdir -p "$RUNNER_TEMP/smoke"
           espeak-ng -s 150 -w "$RUNNER_TEMP/smoke/clip.wav" "Cache your queries, then measure. Slow code hides in plain sight."
           duration=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$RUNNER_TEMP/smoke/clip.wav")
@@ -124,19 +131,23 @@ jobs:
 
       - name: Transcribe
         run: |
+          set -euo pipefail
           python3 "$SKILL/scripts/transcribe.py" "$RUNNER_TEMP/smoke/clip.wav" --outdir "$RUNNER_TEMP/smoke/work" --model tiny
           python3 "$SKILL/scripts/build_captions.py" "$RUNNER_TEMP/smoke/work"
 
       - name: Build the composition
         run: |
+          set -euo pipefail
           S="$SKILL/scripts"; W="$RUNNER_TEMP/smoke/work"
           python3 "$S/fill_template.py" "$W" "$DURATION" --brand "$SKILL/brand.example.json"
           node "$S/render.js" stills "$W/index.html" "$W/stills" 0.5,1.5,2.5
           bash "$S/contact-sheet.sh" "$W/stills" "$W/contact.jpg"
           node "$S/render.js" cues "$W/index.html" "$W/cues.json"
+          # render.js check is omitted: the stock demo shots are hard-timed to 6.1 s+, so a shorter clip leaves s03 empty
 
       - name: Render and mix
         run: |
+          set -euo pipefail
           S="$SKILL/scripts"; W="$RUNNER_TEMP/smoke/work"
           python3 "$S/synth_audio.py" "$W/cues.json" "$DURATION" "$W"
           bash "$S/render-frames.sh" "$W/index.html" "$W/frames" "$DURATION" 2
@@ -144,6 +155,7 @@ jobs:
 
       - name: Assert duration, size and loudness
         run: |
+          set -euo pipefail
           out="$RUNNER_TEMP/smoke/work/out.mp4"
           actual=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$out")
           size=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$out")
