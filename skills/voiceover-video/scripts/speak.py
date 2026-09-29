@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Voice a script with one synthetic voice per character, entirely offline.
+"""Voice a script with one synthetic voice per character, on this machine.
 
   speak.py <script.txt> <work-dir> [--cast cast.json] [--narrator NAME] [--gap S] [--scene-gap S]
            [--align-model base | --no-align]
@@ -15,8 +15,10 @@ Script format, one spoken line per line:
 
 Writes <work>/voice.wav (the recording the rest of the workflow uses), <work>/speech.json and
 <work>/speech.js (who speaks when, read by the template's hosts), <work>/words.json and
-transcript.txt (word times in transcribe.py's format), and <work>/script.txt. Each line's voiced
-audio is aligned with faster-whisper, so the script's own words get the times they are spoken at.
+transcript.txt (word times in transcribe.py's format), and <work>/script.txt. The voiced track is
+aligned with faster-whisper, so the script's own words get the times they are spoken at.
+
+The voice and alignment models download once with setup.sh --voices; after that it runs offline.
 """
 
 import argparse
@@ -45,9 +47,10 @@ DEFAULT_VOICES = [
     {"voice": "am_fenrir"},
     {"voice": "af_nova"},
 ]
-os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
 SPEAKER = re.compile(r"^([A-Za-z][\w'-]*(?: [A-Za-z][\w'-]*)?)\s*:\s*(.+)$")
 PAUSE = re.compile(r"^\(pause\s+([0-9.]+)\)$", re.I)
+# Real lines, even noisy or pitched, average ≥0.62 over matched words; below this the times were worse than estimates
+MIN_PROBABILITY = 0.55
 
 
 def slug(name):
@@ -119,33 +122,35 @@ def normalise(token):
     return re.sub(r"[^\w]", "", token.lower())
 
 
-def align_line(model, audio, text, s, e, language=None):
-    """Time the script's own tokens from recognition of the line's voiced audio; None when too few match."""
+def recognise(model, voice, language=None):
+    """Every word faster-whisper hears in the whole voice track, with times in the track."""
     with tempfile.TemporaryDirectory() as tmp:
-        clip = Path(tmp) / "line.wav"
-        write_wav(clip, audio, SR_OUT)
-        # No temperature retries: a line greedy decoding can't read falls back to estimates anyway
+        path = Path(tmp) / "voice.wav"
+        write_wav(path, voice, SR_OUT)
+        # No prompt: a prompt of the script is echoed back over audio that says nothing
         segments, _ = model.transcribe(
-            str(clip), beam_size=5, word_timestamps=True, vad_filter=False,
-            initial_prompt=text, language=language, temperature=0.0,
+            str(path), beam_size=1, temperature=0.0, word_timestamps=True, vad_filter=False, language=language,
         )
-        heard = [w for segment in segments for w in (segment.words or []) if normalise(w.word)]
+        return [w for segment in segments for w in (segment.words or []) if normalise(w.word)]
 
+
+def align_line(heard, text, s, e):
+    """Time the script's own tokens from the words heard inside [s, e]; None when they don't match the line."""
+    inside = [w for w in heard if s <= (w.start + w.end) / 2 <= e]
     tokens = text.split()
     keys = [normalise(w) for w in tokens]
-    matcher = difflib.SequenceMatcher(None, keys, [normalise(w.word) for w in heard], autojunk=False)
-    times = [None] * len(tokens)
+    matcher = difflib.SequenceMatcher(None, keys, [normalise(w.word) for w in inside], autojunk=False)
+    times, confidence = [None] * len(tokens), []
     for block in matcher.get_matching_blocks():
         for k in range(block.size):
-            word = heard[block.b + k]
+            word = inside[block.b + k]
             times[block.a + k] = (word.start, word.end)
+            confidence.append(word.probability)
     spoken = [i for i, key in enumerate(keys) if key]
-    matched = sum(1 for i in spoken if times[i] is not None)
-    if matched * 2 < len(spoken):
+    if not confidence or len(confidence) * 2 < len(spoken) or sum(confidence) / len(confidence) < MIN_PROBABILITY:
         return None
 
     # Unmatched tokens share the gap between their matched neighbours by length, as word_times() does
-    length = e - s
     i = 0
     while i < len(tokens):
         if times[i] is not None:
@@ -154,8 +159,8 @@ def align_line(model, audio, text, s, e, language=None):
         j = i
         while j < len(tokens) and times[j] is None:
             j += 1
-        start = times[i - 1][1] if i > 0 else 0.0
-        end = times[j][0] if j < len(tokens) else length
+        start = times[i - 1][1] if i > 0 else s
+        end = times[j][0] if j < len(tokens) else e
         weights = [len(keys[k]) + 2 for k in range(i, j)]
         unit = max(end - start, 0.0) / sum(weights)
         cursor = start
@@ -166,8 +171,8 @@ def align_line(model, audio, text, s, e, language=None):
 
     out, last = [], s
     for token, (ws, we) in zip(tokens, times):
-        start = min(max(s + ws, last), e)
-        end = min(max(s + we, start), e)
+        start = min(max(ws, last), e)
+        end = min(max(we, start), e)
         out.append({"t": token, "s": round(start, 2), "e": round(end, 2)})
         last = start
     return out
@@ -222,18 +227,6 @@ def main() -> int:
         print(f"Voice model missing in {MODEL_DIR}", file=sys.stderr)
         print("Next: run setup.sh --voices (downloads ~350 MB once)", file=sys.stderr)
         return 1
-    aligner, align_seconds = None, 0.0
-    if not args.no_align:
-        try:
-            from faster_whisper import WhisperModel
-        except ImportError:
-            print("faster-whisper is not installed; it aligns word times to the voices", file=sys.stderr)
-            print("Next: run setup.sh, or pass --no-align for estimated word times", file=sys.stderr)
-            return 1
-        started = time.time()
-        aligner = WhisperModel(args.align_model, device="cpu", compute_type="int8")
-        align_seconds = time.time() - started
-
     cast = {}
     if args.cast:
         try:
@@ -266,8 +259,27 @@ def main() -> int:
             print(f"Next: pick one of {', '.join(sorted(available))}", file=sys.stderr)
             return 1
 
+    aligner, align_seconds = None, 0.0
+    if not args.no_align:
+        # One thread: CTranslate2's threaded MKL kernels shift a word by a frame between runs; ~5% slower
+        os.environ["OMP_NUM_THREADS"] = os.environ["MKL_NUM_THREADS"] = "1"
+        try:
+            from faster_whisper import WhisperModel
+        except ImportError:
+            print("faster-whisper is not installed; it aligns word times to the voices", file=sys.stderr)
+            print("Next: run setup.sh, or pass --no-align for estimated word times", file=sys.stderr)
+            return 1
+        started = time.time()
+        # A missing download or a broken cache surfaces as several library error types
+        try:
+            aligner = WhisperModel(args.align_model, device="cpu", compute_type="int8", cpu_threads=1)
+        except Exception as error:
+            print(f"Cannot load the '{args.align_model}' alignment model: {error}", file=sys.stderr)
+            print("Next: run setup.sh --voices, or pass --no-align", file=sys.stderr)
+            return 1
+        align_seconds = time.time() - started
+
     parts, speech, t = [np.zeros(int(SR_OUT * args.lead), dtype=np.float32)], [], args.lead
-    words, estimated = [], []
     for kind, a, b in items:
         if kind in ("scene", "pause"):
             seconds = args.scene_gap if kind == "scene" else a
@@ -281,20 +293,23 @@ def main() -> int:
         d = len(audio) / SR_OUT
         line = {"i": len(speech), "who": who, "s": round(t, 3), "e": round(t + d, 3), "text": text}
         speech.append(line)
-        timed = None
-        if aligner is not None:
-            started = time.time()
-            lang = spec.get("lang", "en-us")
-            timed = align_line(aligner, audio, text, line["s"], line["e"], "en" if lang.startswith("en") else None)
-            align_seconds += time.time() - started
-            if timed is None:
-                estimated.append(f"{who} line {line['i'] + 1}")
-        words += timed or word_times(text, line["s"], line["e"])
         parts += [audio, np.zeros(int(SR_OUT * args.gap), dtype=np.float32)]
         t += d + args.gap
 
     voice = np.concatenate(parts)
     voice *= 0.9 / (np.max(np.abs(voice)) or 1.0)
+    heard = []
+    if aligner is not None:
+        started = time.time()
+        english = all(cast[w].get("lang", "en-us").startswith("en") for w in speakers)
+        heard = recognise(aligner, voice, "en" if english else None)
+        align_seconds += time.time() - started
+    words, estimated = [], []
+    for line in speech:
+        timed = align_line(heard, line["text"], line["s"], line["e"]) if aligner is not None else None
+        if aligner is not None and timed is None:
+            estimated.append(f"{line['who']} line {line['i'] + 1}")
+        words += timed or word_times(line["text"], line["s"], line["e"])
     args.work.mkdir(parents=True, exist_ok=True)
     write_wav(args.work / "voice.wav", voice, SR_OUT)
     (args.work / "speech.json").write_text(json.dumps(speech, indent=1), encoding="utf-8")
