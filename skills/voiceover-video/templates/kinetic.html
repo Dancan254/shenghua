@@ -4,7 +4,7 @@
 <link rel="stylesheet" href="kit/fonts.css">
 <style>{{theme.css}}</style></head>
 <body>
-<div id="world"><div id="bg" class="bg-{{brand.background}}"><i class="b1"></i><i class="b2"></i><i class="b3"></i></div><div id="cam">
+<div id="world"><div id="bg" class="bg-{{brand.background}}"><i class="b1"></i><i class="b2"></i><i class="b3"></i></div><div id="cam"><div id="presenter"><i></i><img id="prImg" alt=""></div>
 <!-- BEGIN SHOTS -->
 
 <section class="shot" id="s01">
@@ -112,6 +112,59 @@ const MEDIA = [];
 function faceCam(id, s, e, enter){ shot(id, s, e, enter); MEDIA.push({img:q("#"+id+">img"),dir:"face",fix:"extract_face.sh",s,e}); }
 function clip(sel, name, s, e){ MEDIA.push({img:q(sel),dir:"clips/"+name,fix:`extract_clip.sh … ${name} ${s} ${e}`,s,e}); }
 function broll(sel, name, s, e){ clip(sel, name, s, e); }   // alias: b-roll is just a clip under narration
+
+// Presenter mode: the keyed speaker from key_greenscreen.py (presenter/fNNNNN.webp, numbered by edit frame) on a
+// layer under every shot. Layouts are fractions of the frame, so one shot list works landscape and vertical
+const W = {{width}}, H = {{height}};
+const PRESENTER_LAYOUTS = W >= H
+  ? {full:{x:0,y:0,scale:1}, split:{x:-.26*W,y:.028*H,scale:.96}, close:{x:0,y:.037*H,scale:1.16}}
+  : {full:{x:0,y:0,scale:1}, split:{x:0,y:.28*H,scale:.78}, close:{x:0,y:.02*H,scale:1.12}};
+// push zooms the speaker slowly through each layout; off by default because it softens footage
+const PRESENTER = {push:0, halo:false, fade:null};
+let presenterLayout = null, presenterOn = false;
+function presenterStyle(options){
+  Object.assign(PRESENTER, options);
+  const el = q("#presenter");
+  el.classList.toggle("halo", !!PRESENTER.halo);
+  el.classList.remove("fade-left", "fade-right");
+  if(PRESENTER.fade) el.classList.add("fade-" + PRESENTER.fade);
+}
+function presenter(layout, s, e){
+  const to = PRESENTER_LAYOUTS[layout];
+  if(!to) throw new Error(`presenter layout "${layout}" is not full, split or close`);
+  MEDIA.push({img:q("#prImg"), dir:"presenter", ext:"webp", fix:"key_greenscreen.py", s, e});
+  document.body.classList.add("has-presenter");
+  // fromTo with explicit start values, so frames rendered out of order by parallel workers agree
+  if(presenterOn) tl.fromTo("#presenter", {...PRESENTER_LAYOUTS[presenterLayout]}, {...to, duration:.7, ease:"power3.inOut", immediateRender:false}, s);
+  else tl.fromTo("#presenter", {...to, opacity:0}, {...to, opacity:1, duration:s ? .35 : 0, ease:E, immediateRender:false}, s);
+  if(PRESENTER.push) tl.fromTo("#prImg", {scale:1}, {scale:1 + PRESENTER.push, duration:e - s, ease:"none", immediateRender:false}, s);
+  presenterLayout = layout; presenterOn = true;
+}
+function presenterOff(s){
+  if(!presenterOn) return;
+  // Keep decoding through the fade, so the speaker never freezes as it fades
+  MEDIA.push({img:q("#prImg"), dir:"presenter", ext:"webp", fix:"key_greenscreen.py", s, e:s + .35});
+  tl.fromTo("#presenter", {opacity:1}, {opacity:0, duration:.3, ease:E, immediateRender:false}, s);
+  presenterOn = false;
+}
+
+// Building blocks for long-form and presenter edits; scene-blocks.md shows each one
+function fromRight(sel, t, d=.55){ tl.fromTo(sel,{x:80,opacity:0},{x:0,opacity:1,duration:d,ease:EX},t); }
+function grow(sel, t, d=.4){ tl.fromTo(sel,{scaleX:0},{scaleX:1,duration:d,ease:EX},t); }
+function draw(sel, t, d=.8){ tl.fromTo(sel,{strokeDashoffset:1},{strokeDashoffset:0,duration:d,ease:"power2.inOut"},t); }   // path with pathLength="1"
+function check(sel, t){ tl.fromTo(sel,{scale:.4,opacity:0},{scale:1,opacity:1,duration:.4,ease:"back.out(2)"},t); SFX.push({t, type:"ding"}); }
+function cross(sel, t){ tl.fromTo(sel,{scale:.4,opacity:0},{scale:1,opacity:1,duration:.35,ease:"back.out(2)"},t); SFX.push({t, type:"error"}); }
+function fadeOut(sel, t, d=.3){ tl.fromTo(sel,{opacity:1},{opacity:0,duration:d,ease:E,immediateRender:false},t); }
+function slide(sel, x0, x1, t, d=.9){ tl.fromTo(sel,{left:x0},{left:x1,duration:d,ease:"power2.inOut"},t); SFX.push({t, type:"whoosh"}); }
+// A chapter card is its own shot; the speaker steps out for it
+function chapter(id, s, e, number, title){
+  const el = document.createElement("section");
+  el.className = "shot"; el.id = id;
+  el.innerHTML = `<div class="chap"><div class="no">CHAPTER ${number}</div><div class="tt">${title}</div><div class="rule"></div></div>`;
+  q("#cam").appendChild(el);
+  presenterOff(s); shot(id, s, e, "wipe");
+  rise(`#${id} .no`, s + .1, .4); rise(`#${id} .tt`, s + .2, .5); grow(`#${id} .rule`, s + .5, .6);
+}
 
 // Lines with mixed colours: [{t, e, html}] rebuilt every frame so seeking stays deterministic
 const TERMINALS = [];
@@ -308,8 +361,8 @@ function renderGrain(frame){
 
 // The renderer awaits this, so a screenshot never captures a camera or clip frame that hasn't decoded yet
 function renderMedia(t, frame){
-  return Promise.all(MEDIA.filter(({s,e})=>t>=s&&t<e).map(({img,dir,fix})=>{
-    const src = `${dir}/f${String(frame).padStart(5,"0")}.jpg`;
+  return Promise.all(MEDIA.filter(({s,e})=>t>=s&&t<e).map(({img,dir,fix,ext})=>{
+    const src = `${dir}/f${String(frame).padStart(5,"0")}.${ext || "jpg"}`;
     if(img.getAttribute("src")===src) return null;
     img.src = src;
     return img.decode().catch(()=>{ throw new Error(`missing frame ${src} at t=${t.toFixed(2)}; re-run ${fix} with this shot's in/out`); });
@@ -322,7 +375,7 @@ function renderBg(t){
   BG.forEach((el,i)=>{ el.style.transform = `translate(${(Math.sin(t*(.11+i*.02)+i)*160).toFixed(1)}px,${(Math.cos(t*(.08+i*.015)+i*2)*90).toFixed(1)}px)`; });
 }
 
-window.SFX = SFX; window.DURATION = D; window.SHOTS = SHOTS;
+window.SFX = SFX; window.DURATION = D; window.SHOTS = SHOTS; window.BRAND = BRAND;
 window.renderAt = t => { const frame = Math.round(t*30); tl.seek(t,false); renderCaptions(t); renderText(t); renderHosts(t); renderGrain(frame); renderBg(t); return renderMedia(t, frame); };
 </script>
 </body></html>

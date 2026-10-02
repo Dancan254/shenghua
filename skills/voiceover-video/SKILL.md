@@ -13,6 +13,11 @@ like — is yours. The scripts handle transcription, rendering, audio, and encod
 Given a to-camera video instead of audio, the opening line and the sign-off stay on camera as face
 shots; everything between them is animated over the voice from the same take.
 
+Given a to-camera video shot against a **green screen** (**presenter mode**), the speaker is keyed out and
+stays on screen in the brand's background for the whole video, moving between full-frame, split and
+close-up layouts while graphics build beside them, with full-screen cutaways for diagrams and chapter
+cards. Steps 2a and 2b trim and key the take; the *Presenter* blocks in `scene-blocks.md` lay it out.
+
 Given only a topic or a script (**script mode**), there is no recording: you write the script, Step 1b
 voices it with one synthetic voice per character, and original cartoon hosts act it out. Everything
 after Step 1b runs on the generated `<work>/voice.wav` as if it were a recording.
@@ -32,6 +37,7 @@ block catalogue, the pacing rules, and the sound-cue vocabulary.
 | `script` | No | the script, plain or with `[FACE]` / `[VOICE]` sections; captions are checked against it. Sections start on their own line with exactly `[FACE]` or `[VOICE]`. In script mode, `Name: line` lines, and it *is* the input |
 | `cast` | No | script mode: who's in it and which voice, e.g. `teacher Mama Log, sidekick Pip (squeaky)` |
 | `format` | No | `vertical` 1080x1920 (default) · `landscape` 1920x1080 |
+| `style` | No | for a `video`: `bookends` (default: face shots open and close) · `presenter` (green screen: the speaker stays on screen throughout) |
 | `kit` | No | brand kit folder for this video, e.g. a client's `~/clients/acme-kit` (default: the user's own kit) |
 | `template` | No | visual theme id from `templates/templates.json` (default `kinetic`) |
 | `music` | No | `synth` (default) · path to a royalty-free track · `none` |
@@ -163,6 +169,40 @@ Writes `words.json` (every word with start/end) and `transcript.txt` — one phr
 Run it in the background for anything over two minutes. Never wait silently. The first run downloads
 the model, so it may sit at low CPU for a few minutes.
 
+**Long steps outlast shell time limits.** Transcribing, keying, rendering frames and encoding a take of
+several minutes can each run longer than an agent's command timeout, and a killed step loses its work.
+Start them detached and poll the log: `nohup <command> > "$work"/<step>.log 2>&1 &`, then read the log
+until it prints its `Next:` line. `key_greenscreen.py` resumes where it stopped. A killed `render-frames.sh`
+doesn't: re-run it with a frame range starting at the first frame missing from `frames/`.
+
+## Step 2a — Trim the take (audio, and presenter mode)
+
+```bash
+python3 SKILL_DIR/scripts/trim_take.py <audio-or-video> "$work" [--in auto] [--out auto]
+```
+
+Cuts the dead air before the first word (keeps 0.5s) and after the last (keeps 2.5s for the outro), writes
+a lossless `voice.wav`, shifts `words.json` and `transcript.txt` so the first kept moment is 0, and records
+the cut in `take.json`. Pass `--in`/`--out` in seconds to cut by hand (a false start, a reach for the
+camera); cut points inside the speech make an excerpt, such as a Short from a long talk, and drop the words
+outside them. From here on, `<audio>` is `"$work"/voice.wav` and `<duration>` is the length it prints. Skip it for
+`bookends` video: face shots are cut from the untrimmed recording.
+
+## Step 2b — Key the speaker (presenter mode)
+
+```bash
+python3 SKILL_DIR/scripts/key_greenscreen.py "$work" --preview 30 [--mask x,y,w,h …]
+python3 SKILL_DIR/scripts/key_greenscreen.py "$work" [--mask x,y,w,h …] [--quality master]   # detached for long takes
+```
+
+It measures the screen from the take and prints its colour and margin; a take with no usable screen fails
+with the reason, so fall back to `bookends`. Look at `presenter-preview.png` first: hair, glasses and
+shoulders should have clean edges. A name banner or logo burned into the recording needs a `--mask` over it
+(source pixels); a mask that cuts a shoulder leaves a notch, which `presenterStyle({fade:"left"})` hides.
+The full run writes `presenter/fNNNNN.webp`, one per edit frame (~4 frames/s on 6 cores, so a 6-minute take
+is about 45 minutes): tell the user, run it detached, and re-run the same command if it stops; it keys only
+what is missing. `--quality master` keeps full colour for the sharpest edges at about ten times the disk.
+
 ---
 
 ## Step 3 — Proofread the captions
@@ -232,7 +272,12 @@ sidekick a bubble for their lines (`say()`), name each term with a `.pill` the f
 and use lanes and tokens for anything that queues, flows or is numbered. The *Host*, *Speech bubble*,
 *Term pill*, *Lane and tokens* and *Failure and recovery* blocks in `scene-blocks.md` cover it.
 
-With a `video`, the first and last rows are face shots (*Face hook*, *Face sign-off*). The hook runs
+In presenter mode, every row names a layout: `full` (the speaker centred, a tag or headline beside them),
+`split` (speaker left, a panel building the point on the right), `close` (punch in for a slam), or `cut` (a
+full-screen graphic, the speaker stepped out), plus chapter cards for long talks. A layout may hold 3–8s
+in a talk of several minutes as long as something in it moves; a Short still cuts every 1–4s.
+
+With a `video` in `bookends` style, the first and last rows are face shots (*Face hook*, *Face sign-off*). The hook runs
 from 0 to the last word of the script's first `[FACE]` section (no script: the first sentence). The
 sign-off runs from the first word of the last `[FACE]` section to the end. A series badge goes on shot 02.
 
@@ -308,7 +353,22 @@ ffprobe -v error -show_entries format=duration -of csv=p=0 <video>
 Writes `<work>/index.html` from the template with brand, geometry and duration filled, and links the
 vendored assets as `<work>/vendor`.
 
-With a `video`, extract the camera frames for both face shots, using the shot list's in/out times:
+In presenter mode, the speaker layer is already in the template. Set its look once, then give every
+shot the layout from the shot list; `presenterOff()` before a full-screen cutaway, and `chapter()` builds a
+chapter card and steps the speaker out for it:
+
+```js
+presenterStyle({halo:true, fade:"left"});        // push:.03 adds a slow zoom, off by default: it softens footage
+presenter("full", 0, 2.8);  shot("s01", 0, 2.8, "cut");
+presenter("split", 2.8, 6.4); shot("s02", 2.8, 6.4); fromRight("#s02p", 2.85);
+presenterOff(6.4);          shot("s03", 6.4, 10.3, "zoom");
+chapter("s12", 58.0, 61.1, "01", "The patch was never<br>the bottleneck");
+```
+
+The *Presenter* blocks in `scene-blocks.md` show the panel, checklist, diagram and stamp pieces these
+layouts use.
+
+With a `video` in `bookends` style, extract the camera frames for both face shots, using the shot list's in/out times:
 
 ```bash
 bash SKILL_DIR/scripts/extract_face.sh <video> <work> vertical <hook-in> <hook-out> <signoff-in> <signoff-out>

@@ -27,6 +27,8 @@ skills/voiceover-video/
     ├── setup.sh                 dependency check, playwright-core + Chromium, GSAP, fonts
     ├── speak.py                 script mode: script → voice.wav + speech.json/js + aligned words.json
     ├── transcribe.py            faster-whisper, word-level timestamps
+    ├── trim_take.py             cut dead air: lossless voice.wav, word times shifted to 0, take.json
+    ├── key_greenscreen.py       green-screen take → presenter/fNNNNN.webp with alpha, resumable
     ├── build_captions.py        applies fixes.json → words.js
     ├── brand_kit.py             kit validation, colour derivation, contrast report, per-kit font/logo install
     ├── init_kit.py              answers or client files → a kit; --from converts a version-1 brand.json
@@ -98,6 +100,14 @@ names, breaks this.
    existing cartoon, film or game character.
 13. **Scripts fail loud.** Every script prints a one-line result and a `Next:` line, and on failure names
    the missing input and the fix. Match that shape.
+14. **Presenter frames are numbered by edit frame and keying resumes.** `key_greenscreen.py` applies
+   `take.json`'s cut when it keys, so frame N of the edit is `presenter/fNNNNN.webp` with no runtime offset.
+   A re-run keys only frames whose WebP is incomplete, and workers stop when their parent dies, so a killed
+   run never leaves a process writing frames a resumed run is also writing. Keep both properties: agents run
+   this step for most of an hour, often past their shell's time limit.
+15. **No render on a fallback font.** `render.js` loads every kit family by name before `stills`,
+   `frames`, `check` and `board`, and exits 1 if one has no face: a lost font otherwise renders silently in
+   a lookalike with different spacing, which no one notices until the captions shift.
 
 ## Conventions
 

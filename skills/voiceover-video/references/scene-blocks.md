@@ -362,6 +362,60 @@ times must exactly match the `extract_face.sh` range for this shot.
 
 ---
 
+## Presenter blocks *(green-screen video, presenter mode)*
+
+The keyed speaker (`key_greenscreen.py`) is a layer under every shot; each shot says where it stands.
+Positions below are landscape 1920x1080; in vertical, `split` moves the speaker down and the panel goes on top.
+
+### Presenter full
+The speaker centred, one short thing beside their head: a tag, a quote, a two-line headline at x ≥ 1300.
+```html
+<section class="shot" id="s04"><div class="h2" id="s04q" style="position:absolute;left:1300px;top:380px;width:560px">“Sounds like the answer.”</div></section>
+```
+```js
+presenter("full", 10.3, 15.4); shot("s04", 10.3, 15.4, "cut"); rise("#s04q", 14.2);
+```
+
+### Presenter split with panel
+Speaker on the left, a panel on the right building the point line by line. The workhorse of a long talk.
+```html
+<section class="shot" id="s06"><div class="panel" id="s06p" style="left:940px;top:110px;width:900px">
+  <div class="kk">Their pitch</div>
+  <div class="li" id="s06a"><span class="ic no">✕</span>Stay on Java 8</div>
+  <div class="li" id="s06b"><span class="ic ok">✓</span>Upgrade with tooling</div></div></section>
+```
+```js
+presenter("split", 22.3, 29.2); shot("s06", 22.3, 29.2);
+fromRight("#s06p", 22.35); cross("#s06a", 22.64); check("#s06b", 26.4);
+```
+Keep the panel above the captions (bottom ≤ 840 in landscape). `.ic.ok` / `.ic.no` / `.ic.mu` are tick,
+cross and neutral; `check()` and `cross()` pop them with a ding or a buzz.
+
+### Presenter close-up with slam
+Punch in on the line that lands the point, with the slam beside the speaker.
+```js
+presenter("close", 53.6, 58.0); shot("s11", 53.6, 58.0, "cut"); slam("#s11a", 54.44, .8);
+```
+
+### Full-screen cutaway
+Diagrams, stats and comparisons need the whole frame: step the speaker out, step them back in after.
+```js
+presenterOff(40.3); shot("s09", 40.3, 46.9, "zoom");
+presenter("split", 46.9, 53.6);   // fades back in
+```
+Diagram pieces: `.box` nodes (`.on` lit, `.dead` greyed), `.ln` lines in an `svg.full` drawn with
+`draw()` when the path has `pathLength="1"`, `.chip` labels, `.stampx` verdicts, `.vbar` bars grown
+with `tl.fromTo(sel,{scaleY:0},{scaleY:1,…})`.
+
+### Chapter card
+A long talk's section headings, from the article or script. The speaker steps out for the card.
+```js
+chapter("s12", 58.0, 61.1, "01", "The patch was never<br>the bottleneck");
+```
+Hide captions under the card with `NOCAP` when the heading is the spoken line.
+
+---
+
 ## Captions
 
 Captions are burned in automatically from `words.js`. Hide them whenever the spoken word *is* the
