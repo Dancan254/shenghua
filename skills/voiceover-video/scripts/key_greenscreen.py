@@ -14,6 +14,7 @@ import argparse
 import concurrent.futures
 import json
 import math
+import multiprocessing
 import os
 import subprocess
 import sys
@@ -146,6 +147,16 @@ def encoder_args(quality):
     return ["-c:v", "libwebp", "-quality", "94", "-compression_level", "4", "-pix_fmt", "yuva420p"]
 
 
+def alive(pid):
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
 def key_run(video, out_dir, first_edit, count, take, matte, width, height, quality, parent):
     """Key `count` edit frames starting at `first_edit`; returns how many were written."""
     start = (take["firstFrame"] + first_edit) / FPS
@@ -157,8 +168,9 @@ def key_run(video, out_dir, first_edit, count, take, matte, width, height, quali
                                "-start_number", str(first_edit), str(out_dir / "f%05d.webp")], stdin=subprocess.PIPE)
     size, written = width * height * 3, 0
     while written < count:
-        # A killed run must not leave workers writing frames a resumed run is also writing
-        if os.getppid() != parent:
+        # A killed run must not leave workers writing frames a resumed run is also writing. Ask whether the
+        # main process lives rather than comparing parent ids: under forkserver or spawn the parent is a helper
+        if not alive(parent):
             reader.terminate()
             break
         raw = reader.stdout.read(size)
@@ -254,7 +266,8 @@ def main() -> int:
     print(f"keying {len(missing)} of {frames} frames ({frames - len(missing)} already done) · {len(jobs)} jobs · "
           f"{args.workers} workers", flush=True)
     started, done = time.time(), 0
-    with concurrent.futures.ProcessPoolExecutor(max_workers=args.workers) as pool:
+    # spawn on every platform and Python version, so workers behave the same on Linux, macOS and CI
+    with concurrent.futures.ProcessPoolExecutor(max_workers=args.workers, mp_context=multiprocessing.get_context("spawn")) as pool:
         futures = [pool.submit(key_run, video, out_dir, first, count, take, matte, width, height, args.quality, os.getpid())
                    for first, count in jobs]
         for future in concurrent.futures.as_completed(futures):
