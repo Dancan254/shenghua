@@ -70,6 +70,37 @@ jobs:
             python3 -m py_compile "$file" || { echo "::error file=$file::python syntax error"; exit 1; }
           done
 
+      # AGENTS.md invariant 10: themes take every colour from the kit, so any brand renders in any theme
+      - name: Themes use only brand colours
+        run: |
+          python3 - "$SKILL/templates/themes" <<'PY'
+          import re, sys, pathlib
+          # Pure black/white are neutral; --fx-* (effects) and --host-* (cartoon hosts) are the declared exceptions
+          ALLOWED = re.compile(r"^(#(?:fff|ffffff|000|000000)|rgba?\((?:0,\s*0,\s*0|255,\s*255,\s*255)(?:,\s*[\d.]+)?\))$", re.I)
+          COLOUR = re.compile(r"(?<![\w-])(#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\))")
+          bad = 0
+          for path in sorted(pathlib.Path(sys.argv[1]).glob("*.css")):
+              for number, line in enumerate(path.read_text().splitlines(), 1):
+                  if path.name == "shared.css" and re.match(r"\s*:root\{--(fx|host)-", line):
+                      continue
+                  for match in COLOUR.finditer(line):
+                      value = match.group(1)
+                      # An id selector such as #face{ is not a colour; colours are values, so they follow ':' ',' '(' or a space
+                      if not re.search(r"[:(,\s]$", line[:match.start()]):
+                          continue
+                      if not ALLOWED.match(value.replace(" ", "")):
+                          print(f"::error file={path},line={number}::theme colour literal {value}; use a --brand-* token")
+                          bad += 1
+          sys.exit(1 if bad else 0)
+          PY
+
+      - name: Validate the bundled kits
+        run: |
+          set -euo pipefail
+          for kit in "$SKILL/brand.example.json" "$SKILL"/examples/kits/*/; do
+            python3 "$SKILL/scripts/brand_kit.py" check "$kit"
+          done
+
   smoke:
     needs: lint
     runs-on: ubuntu-latest
@@ -105,7 +136,7 @@ jobs:
             ${{ env.SKILL }}/scripts/node_modules
             ${{ env.SKILL }}/assets
             ~/.cache/ms-playwright
-          key: vendor-${{ runner.os }}-${{ hashFiles('skills/voiceover-video/scripts/package-lock.json', 'skills/voiceover-video/scripts/setup.sh', 'skills/voiceover-video/templates/templates.json', 'skills/voiceover-video/brand.example.json') }}
+          key: vendor-${{ runner.os }}-${{ hashFiles('skills/voiceover-video/scripts/package-lock.json', 'skills/voiceover-video/scripts/setup.sh', 'skills/voiceover-video/templates/templates.json', 'skills/voiceover-video/brand.example.json', 'skills/voiceover-video/scripts/brand_kit.py', 'skills/voiceover-video/examples/kits/**') }}
 
       - name: Cache the whisper model
         uses: actions/cache@v6
@@ -117,9 +148,22 @@ jobs:
       - name: Set up the skill
         run: |
           set -euo pipefail
-          out=$(bash "$SKILL/scripts/setup.sh" "$SKILL/brand.example.json")
+          out=$(bash "$SKILL/scripts/setup.sh" "$SKILL/examples/kits/northwind")
           echo "$out"
           grep -q '^ready' <<< "$out" || { echo "::error::setup.sh did not print ready"; exit 1; }
+          python3 "$SKILL/scripts/brand_kit.py" install "$SKILL/examples/kits/lumen"
+
+      # A dark and a light kit, each in a dark and a light theme: the four ways a kit meets a canvas
+      - name: Render brand boards
+        run: |
+          set -euo pipefail
+          for kit in northwind lumen; do
+            for theme in aurora minimal; do
+              B="$RUNNER_TEMP/smoke/boards/$kit-$theme"
+              python3 "$SKILL/scripts/fill_template.py" "$B" 6 --format landscape --brand "$SKILL/examples/kits/$kit" --template "$theme" --board
+              node "$SKILL/scripts/render.js" board "$B/board.html" "$RUNNER_TEMP/smoke/boards/$kit-$theme.png"
+            done
+          done
 
       - name: Synthesize a speech clip
         run: |
@@ -140,7 +184,7 @@ jobs:
         run: |
           set -euo pipefail
           S="$SKILL/scripts"; W="$RUNNER_TEMP/smoke/work"
-          python3 "$S/fill_template.py" "$W" "$DURATION" --brand "$SKILL/brand.example.json"
+          python3 "$S/fill_template.py" "$W" "$DURATION" --brand "$SKILL/examples/kits/northwind"
           node "$S/render.js" stills "$W/index.html" "$W/stills" 0.5,1.5,2.5
           bash "$S/contact-sheet.sh" "$W/stills" "$W/contact.jpg"
           node "$S/render.js" cues "$W/index.html" "$W/cues.json"
@@ -182,6 +226,8 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: smoke-output
-          path: ${{ runner.temp }}/smoke/work/contact.jpg
+          path: |
+            ${{ runner.temp }}/smoke/work/contact.jpg
+            ${{ runner.temp }}/smoke/boards/*.png
           if-no-files-found: ignore
           retention-days: 7

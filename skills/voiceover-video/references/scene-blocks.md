@@ -292,6 +292,39 @@ with a green pill and the sidekick goes `happy`. This beat is what makes the con
 Stacked slams for the final line, mascot bouncing in, `follow @handle`. Hold ~2.5s. With a video
 input, use *Face sign-off* instead.
 
+### Logo end card
+The brand's wordmark over its name or call to action, for the last ~2.5s. Pick the wordmark for the
+canvas: `BRAND.scheme` is `dark` or `light`. SVG logos often carry only a `viewBox`, so always give the
+`<img>` a height; the width follows the aspect ratio.
+```html
+<section class="shot" id="s30">
+  <div class="cx" style="top:760px"><img id="s30logo" alt="" style="height:140px;width:auto"></div>
+  <div class="cx kick" style="top:960px">acme.com</div>
+</section>
+```
+```js
+q("#s30logo").src = BRAND.logos[BRAND.scheme === "dark" ? "wordmark.onDark" : "wordmark.onLight"] || BRAND.logos.mark;
+shot("s30", 27.5, D, "fade"); pop("#s30logo", 27.7); rise("#s30 .kick", 28.1);
+```
+Without a wordmark in the kit, slam the brand name instead. Never draw or approximate a logo the kit
+doesn't contain.
+
+### Corner mark
+Automatic: when the kit has `logos.mark`, the corner signature shows it next to the handle instead of
+`</>`. Nothing to author.
+
+### Lower third with mark
+The kit's mark beside a speaker's name, for a company's own people. Same as *Lower third*, with
+`<img src="kit/logos/mark.svg" style="height:56px;width:auto">` before `.lower-name`, reading the path from
+`BRAND.logos.mark`.
+
+## Kit backgrounds
+
+The kit's `background.style` lays a layer under every shot: `theme` (the theme's own canvas), `solid`,
+`glow` (three soft brand-coloured glows that drift as a pure function of `t`), `gradient`, `grid`, or
+`image`. Shots stay transparent over it; a shot with its own background (a full-bleed photo, a terminal
+scene) covers it as before.
+
 ### Face hook *(video input)*
 The speaker on camera saying the opening line. Always shot 01, ending on the hook's last word.
 ```html

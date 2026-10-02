@@ -192,45 +192,71 @@ you to listen to the mix before posting.
 
 ## Make it yours
 
-The first time you use the skill, the agent asks for your handle, your colours (a named look or your own
-accent and background), your fonts and where videos should go, then writes the brand file for you. Every
-question has a default, so "just use the defaults" is a valid answer. Skip it and your video carries the
-example brand's `@yourhandle`.
+Every video wears a **brand kit**: a folder with a `brand.json` and the fonts and logos it names. The
+first time you use the skill, the agent asks for your name and handle, your colours (a named look or your
+own), your fonts and where videos should go, then writes your kit to `~/.config/voiceover-video/`. Every
+question has a default, so "just use the defaults" is a valid answer.
 
-To set it up yourself instead, write `~/.config/voiceover-video/brand.json` directly:
-
-```bash
-# Adjust the path if you installed the skill as a plugin or copied it elsewhere
-python3 ~/.claude/skills/voiceover-video/scripts/init_brand.py --handle @yourhandle --preset carbon-cyan
-# or, if you copied the skill into Kimi Code CLI's skill directory:
-python3 ~/.kimi-code/skills/voiceover-video/scripts/init_brand.py --handle @yourhandle --preset carbon-cyan
+```
+acme-kit/
+  brand.json
+  fonts/       AcmeSans.woff2            (or Google Fonts names in brand.json)
+  logos/       mark.svg, wordmark-white.svg, wordmark.svg
 ```
 
 ```json
 {
-  "handle": "@yourhandle",
-  "colors": {
-    "bg": "#0f0f17",
-    "surface1": "#181824",
-    "surface2": "#212133",
-    "border": "#2c2c42",
-    "accent": "#ff3d5a",
-    "textBody": "#e8e8ee",
-    "textMuted": "#737a94"
-  },
-  "fonts": {
-    "heading": "Archivo",
-    "mono": "Geist Mono",
-    "googleFontsUrl": "https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Geist+Mono:wght@400..700&display=swap"
-  },
-  "output": { "dir": "~/voiceover-videos" }
+  "version": 2,
+  "name": "Acme",
+  "handle": "acme.com",
+  "colors": { "primary": "#e50914", "secondary": "#ff8a00", "bg": "#0a0a0a", "text": "#f2f2f2" },
+  "fonts": { "display": { "file": "fonts/AcmeSans.woff2" }, "mono": { "google": "JetBrains Mono" } },
+  "logos": { "mark": "logos/mark.svg", "wordmark": { "onDark": "logos/wordmark-white.svg", "onLight": "logos/wordmark.svg" } },
+  "background": { "style": "glow" }
 }
 ```
 
-Any Google Font works. After changing fonts, ask the agent to re-run the skill's setup. A `./brand.json` in the current
-directory overrides the global one, so each project can have its own look.
+Only `primary`, `bg` and a display font are required. Everything else is derived and checked: panel and
+border shades, a readable text shade of the brand colour, caption contrast against WCAG AA, and a light
+(or dark) canvas for themes designed for the other one. Before the first render the agent shows a
+**brand board**, one image of the kit inside the chosen theme, so a wrong colour costs seconds, not a
+render. Fonts can be any Google Font or the brand's own files; logos come from the brand, never from a
+web search. `examples/kits/` has two fictional kits to copy.
 
-The default type is **Archivo** — expanded black for headlines, condensed for captions — with
+Create one yourself:
+
+```bash
+# Adjust the path if you installed the skill as a plugin or copied it elsewhere
+python3 ~/.claude/skills/voiceover-video/scripts/init_kit.py --name "Your Name" --handle @yourhandle --preset carbon-cyan
+```
+
+**Upgrading from 2.0:** brand files changed format in 2.1. Convert yours once; the original is kept as
+`brand.v1.json`:
+
+```bash
+python3 ~/.claude/skills/voiceover-video/scripts/init_kit.py --from ~/.config/voiceover-video/brand.json
+```
+
+### Editing for a company
+
+Each client gets their own kit folder, and kits install side by side, so their fonts never mix. A
+prompt that gets the best result:
+
+```text
+Use the voiceover-video skill to edit this video.
+
+Video:        ~/Projects/acme/keynote-take3.mp4
+Brand kit:    ~/Projects/acme/brand-kit/   (or: colours #e50914 / #0a0a0a, fonts in ./fonts, logos in ./logos)
+Script:       ~/Projects/acme/script.md    (spelling reference for names and terms)
+Company:      Acme. We are the client; these brand assets are approved for this video
+Audience:     developers on YouTube; landscape
+Tone:         confident and calm, not hype
+Must show:    the 3 product names, the 40% latency stat, our logo on the end card
+Avoid:        competitor logos, red except for errors
+Deliver:      brand board first, then the shot list, then a draft, then the final
+```
+
+The default type is **Archivo** (expanded black for headlines, condensed for captions) with
 **Geist Mono** for code.
 
 ---

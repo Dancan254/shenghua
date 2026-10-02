@@ -11,6 +11,8 @@ machine, and each stays under its own licence.
 | [Fraunces](https://fonts.google.com/specimen/Fraunces) | `documentary` theme type | SIL Open Font License 1.1 |
 | [Oswald](https://fonts.google.com/specimen/Oswald) | `newsroom` theme type | SIL Open Font License 1.1 |
 | [Anton](https://fonts.google.com/specimen/Anton) | `brutalist` theme type | SIL Open Font License 1.1 |
+| [Space Grotesk](https://fonts.google.com/specimen/Space+Grotesk), [JetBrains Mono](https://fonts.google.com/specimen/JetBrains+Mono) | the fictional Northwind example kit | SIL Open Font License 1.1 |
+| [Manrope](https://fonts.google.com/specimen/Manrope), [IBM Plex Mono](https://fonts.google.com/specimen/IBM+Plex+Mono) | the fictional Lumen example kit | SIL Open Font License 1.1 |
 | [playwright-core](https://github.com/microsoft/playwright) + Chromium headless shell | deterministic frame rendering | Apache 2.0 (Chromium: BSD-style) |
 | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) | local transcription | MIT |
 | [FFmpeg](https://ffmpeg.org) | mixing and encoding | LGPL / GPL depending on your build |
@@ -37,3 +39,10 @@ YouTube and, with API keys, [Pexels](https://www.pexels.com/license/) and [GIPHY
   Don't imply someone endorses you or your product.
 - Brand logos are trademarks of their owners. Simple Icons' [legal disclaimer](https://github.com/simple-icons/simple-icons/blob/develop/DISCLAIMER.md)
   applies; check a brand's guidelines before using its mark.
+
+## Brand kits
+
+A kit's fonts and logos come from whoever owns the brand. `setup.sh` copies a kit's local font files and
+logos into `assets/kits/<id>/` on your machine; they are never committed and stay under the brand owner's
+terms. Commercial fonts in particular are licensed per user or per company: use a client's fonts only for
+that client's videos. The logos in `examples/kits/` are original placeholder marks for fictional brands.

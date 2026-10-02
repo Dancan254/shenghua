@@ -32,43 +32,61 @@ block catalogue, the pacing rules, and the sound-cue vocabulary.
 | `script` | No | the script, plain or with `[FACE]` / `[VOICE]` sections; captions are checked against it. Sections start on their own line with exactly `[FACE]` or `[VOICE]`. In script mode, `Name: line` lines, and it *is* the input |
 | `cast` | No | script mode: who's in it and which voice, e.g. `teacher Mama Log, sidekick Pip (squeaky)` |
 | `format` | No | `vertical` 1080x1920 (default) · `landscape` 1920x1080 |
+| `kit` | No | brand kit folder for this video, e.g. a client's `~/clients/acme-kit` (default: the user's own kit) |
 | `template` | No | visual theme id from `templates/templates.json` (default `kinetic`) |
 | `music` | No | `synth` (default) · path to a royalty-free track · `none` |
 | `model` | No | `small` (default) · `base` for clean audio, ~2x faster |
 | `vocab` | No | names and terms the speaker uses: `"Kubernetes, Kafka, Jane Doe"` |
 | `slug` | No | inferred from the topic, e.g. `java-origin` |
 
-Brand: `./brand.json`, then `~/.config/voiceover-video/brand.json`, then the bundled
-`SKILL_DIR/brand.example.json`. Output goes to `<brand.output.dir>/<slug>/`; work files go to
-`<brand.output.dir>/<slug>/work/`. Create it now and set `<work>` to that path for the rest of the
-workflow:
+Brand kit: `kit` if given, then `./brand.json`, then `~/.config/voiceover-video/brand.json`, then the
+bundled `SKILL_DIR/brand.example.json`. A kit is a folder holding `brand.json` (version 2) and the fonts
+and logos it names; `SKILL_DIR/examples/kits/` has two to copy. Output goes to `<kit output.dir>/<slug>/`
+(default `~/voiceover-videos`); work files go to `<output dir>/<slug>/work/`. Create it now and set `<work>`
+to that path for the rest of the workflow:
 
 ```bash
-mkdir -p <brand.output.dir>/<slug>/work
-work="<brand.output.dir>/<slug>/work"
+mkdir -p <output dir>/<slug>/work
+work="<output dir>/<slug>/work"
 ```
 
 Pick the defaults and proceed. Don't interrogate.
 
-**First run only — no brand file anywhere:** the example brand ships someone else's handle and colours,
-so ask before rendering. Four questions, each with its default, answered in one message:
+**A version-1 brand file** (no `"version": 2`; scripts say so): convert it once. The original is kept as
+`brand.v1.json`:
+
+```bash
+python3 SKILL_DIR/scripts/init_kit.py --from ~/.config/voiceover-video/brand.json
+```
+
+**First run only — no kit anywhere:** the example kit ships someone else's handle and colours, so ask
+before rendering. Four questions, each with its default, answered in one message:
 
 | Ask | Default |
 |---|---|
-| Handle shown in the corner | required, no default |
-| Look: `midnight-pink`, `carbon-cyan`, `ink-amber`, `violet-signal`, or their own accent and background | `midnight-pink` |
-| Fonts: display and code | `Archivo` / `Geist Mono` |
+| Name and handle shown on the video | required, no default |
+| Look: `midnight-pink`, `carbon-cyan`, `ink-amber`, `violet-signal`, or their own colours | `midnight-pink` |
+| Fonts: display and code — a Google font name, or a font file they have | `Archivo` / `Geist Mono` |
 | Where finished videos go | `~/voiceover-videos` |
 
 ```bash
-python3 SKILL_DIR/scripts/init_brand.py --handle @theirhandle [--preset carbon-cyan] \
-  [--accent '#ff6600' --bg '#0d1117'] [--heading Archivo --mono 'Geist Mono'] [--output-dir ~/voiceover-videos]
+python3 SKILL_DIR/scripts/init_kit.py --name "Their Name" --handle @theirhandle [--preset carbon-cyan] \
+  [--primary '#ff6600' --bg '#0d1117'] [--display Archivo --mono 'Geist Mono'] [--output-dir ~/voiceover-videos]
 ```
 
-It derives the surface and border colours, checks the fonts against Google Fonts, and writes
-`~/.config/voiceover-video/brand.json`. Then run Step 1 so the fonts download. Offer a preview: fill the
-template and render one still, so they see their look before a full render. If they'd rather skip setup,
-say plainly that the video will carry the example brand's `@yourhandle`.
+**A client's brand** (a company video): build a kit from what the client supplies — never fetch a
+company's logo or font from the web. Ask for the brand colours, the font files or Google names, and the
+logo files (a mark, and a wordmark for dark and for light backgrounds), then:
+
+```bash
+python3 SKILL_DIR/scripts/init_kit.py --name Acme --handle acme.com --primary '#e50914' --bg '#0a0a0a' \
+  --display ~/client/fonts/AcmeSans.woff2 --mono 'JetBrains Mono' --mark ~/client/logo-mark.svg \
+  --wordmark-on-dark ~/client/wordmark-white.svg --wordmark-on-light ~/client/wordmark.svg \
+  --background glow --out ~/clients/acme-kit
+```
+
+A light brand also passes `--bg-alt` and `--text-alt`: dark themes use them. `--background` is `theme`
+(the theme's own canvas), `solid`, `glow`, `gradient` or `grid`; `--background-image <file>` uses a picture.
 
 In script mode there is no file to check; go to Step 1b after setup. Otherwise, if the audio or video
 path is missing or not a file, say so and stop. With a `video`, pass the video
@@ -76,15 +94,31 @@ file wherever a step below takes `<audio>`; ffmpeg reads the voice from its audi
 
 ---
 
-## Step 1 — Setup (first run only)
+## Step 1 — Setup (first run, and whenever the kit changes)
 
 ```bash
-bash SKILL_DIR/scripts/setup.sh
+bash SKILL_DIR/scripts/setup.sh [<kit>]
 ```
 
 Checks `ffmpeg`, `node`, `faster_whisper` and `numpy`; installs `playwright-core` and its matching
-Chromium build; downloads GSAP and the brand's fonts into `SKILL_DIR/assets/`. Prints `ready` or names
-the missing piece. Re-running is a no-op unless the brand's fonts changed.
+Chromium build; downloads GSAP and the themes' fonts into `SKILL_DIR/assets/`, and installs the kit's fonts
+and logos into `SKILL_DIR/assets/kits/<id>/`, so several clients' kits live side by side. Prints `ready` or
+names the missing piece. Re-running is a no-op for an unchanged kit.
+
+## Step 1a — Approve the look (first run, and every new kit)
+
+```bash
+python3 SKILL_DIR/scripts/fill_template.py "$work" 6 --format landscape --brand <kit> --template <template-id> --board
+node SKILL_DIR/scripts/render.js board "$work"/board.html "$work"/board.png
+python3 SKILL_DIR/scripts/brand_kit.py check <kit>
+```
+
+The board shows the kit inside the theme: headline and highlight, a panel, a lower third, captions, a
+pill, a stamp, the end card with the logo, and the colour swatches. `render.js board` fails if a kit font
+fell back to a default face. `brand_kit.py check` prints the contrast report (exit 1 below WCAG AA) and
+warns when a logo has no variant for the canvas. Show the board and wait for a yes; if you cannot view
+images, give the user `board.png` and the contrast report. A wrong colour costs seconds here and a full
+render later. Pick the theme in Step 4 first if the user hasn't — the board renders one theme.
 
 ---
 
@@ -253,10 +287,16 @@ which footage belongs to someone else before posting.
 ## Step 6 — Author the composition
 
 ```bash
-python3 SKILL_DIR/scripts/fill_template.py "$work" <duration> --format vertical --template <template-id>
+python3 SKILL_DIR/scripts/fill_template.py "$work" <duration> --format vertical --template <template-id> [--brand <kit>]
 # or --format landscape for 1920x1080
 # omit --template to use the default kinetic theme
 ```
+
+Colours in shots come from the kit: write `var(--brand-primary)`, `var(--brand-primary-ink)` (the brand
+colour as readable text), `var(--brand-text)`, `var(--brand-muted)`, `var(--brand-surface2)`,
+`var(--brand-success)`, `var(--brand-error)`, never a hex value, so the same shots render in any client's
+colours. Logos are in `BRAND.logos` (`mark`, `wordmark.onDark`, `wordmark.onLight`); see *Logo end card*
+and *Corner mark* in `scene-blocks.md`.
 
 `<duration>` = last word end + ~2.5s for the outro; with a `video`, last word end + 0.5s, and never past
 the recording's length. Get the recording length with:
@@ -424,7 +464,8 @@ Name any unlicensed clip on its own line.
 - Transcription is local. Never upload the audio. Voices are synthesized locally too.
 - Characters are original. Never draw, name or imitate an existing cartoon, film or game character.
 - Synthetic voices are named in the report, so the user can disclose them when they post.
-- One brand accent. Green only for success states, red only for errors.
+- Colours come from the kit's `--brand-*` tokens, never hex values in shots. One brand accent; `--brand-success` only for success states, `--brand-error` only for errors.
+- A client's logos and fonts come from the client. Never fetch a company's logo or font from the web, and never put a competitor's logo in a video unless the client asks for it.
 - Timelines are deterministic: no `Math.random()`, no `Date.now()`. The grain uses a seeded PRNG.
 - Captions never cover the element the viewer is meant to read; hide them via `NOCAP` instead.
 - Report every image credit and every invented detail (dates, labels) that isn't in the audio.
@@ -459,3 +500,7 @@ Name any unlicensed clip on its own line.
 | A host never moves its mouth | its `who` doesn't match the speaker name in the script | use the lowercase name from `speech.json` |
 | `speech.js has no line N for …` in `PAGE ERROR` | `line()`/`say()` asks for a line the script doesn't have | count that speaker's lines in `speech.json` from 0 |
 | Face shots look grey and washed out | HDR (HLG) phone recording, tone-mapped without metadata | record in SDR (iPhone: Settings › Camera › Formats, HDR Video off) |
+| `… is a version-1 brand file` | a brand.json from before kits | `init_kit.py --from <that file>` (keeps the original as `brand.v1.json`) |
+| `Brand kit … is not installed, or changed since it was` | the kit is new or was edited after setup | `setup.sh <kit>` |
+| `font … did not load` from `render.js board` | a kit font file is missing or broken, or a Google family name is misspelled | fix the kit's `fonts`, re-run `setup.sh <kit>` |
+| Logo invisible on the end card | a dark logo on a dark canvas, or an SVG with no size | add `wordmark.onDark`; give the `<img>` a height (see *Logo end card*) |
