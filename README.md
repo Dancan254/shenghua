@@ -263,6 +263,9 @@ The default type is **Archivo** (expanded black for headlines, condensed for cap
 
 ## Good to know
 
+- **The recording sets the ceiling.** Sharp graphics can't rescue a soft, heavily compressed face. Before a
+  shoot, send the speaker the [recording guide](docs/recording-guide.md): 1080p at 20 Mbps or more
+  (4K recommended), the phone's own camera app rather than a browser or Zoom, an external mic.
 - **The agent cannot hear the result.** Loudness is measured, taste is not. Listen before you post.
 - **Render time.** High-quality frames take 2–3x longer than the old 1x JPEG ones (roughly 6–9 minutes
   for a 108-second Short on 10 CPU workers), plus transcription at 2–3x realtime. `VV_QUALITY=draft`
