@@ -1,21 +1,27 @@
 #!/usr/bin/env python3
 """Copy the composition template into a work directory with every placeholder filled.
 
-  fill_template.py <work-dir> <duration> [--format vertical|landscape] [--brand path] [--template id]
+  fill_template.py <work-dir> <duration> [--format vertical|landscape] [--brand kit] [--template id] [--board]
 
-Brand resolution order: --brand, ./brand.json, ~/.config/voiceover-video/brand.json,
-then the bundled brand.example.json.
+Brand kit resolution order: --brand (a kit folder or its brand.json), ./brand.json,
+~/.config/voiceover-video/brand.json, then the bundled brand.example.json. setup.sh must have
+installed the kit, so its fonts and logos are on disk.
 
 Template (theme) selection: --template picks a visual theme from templates/templates.json.
-If omitted, the default theme is used. Each theme brings its CSS and a motion profile
-(default shot entry, shake, flash, caption pulse); templates.json says which mood each suits.
+If omitted, the default theme is used. Each theme brings its CSS, the canvas it wants (dark or
+light) and a motion profile; the kit brings every colour, font and logo.
+
+--board writes board.html instead: one still showing the kit in the theme, for approval.
 """
 
 import argparse
+import html as markup
 import json
 import re
 import sys
 from pathlib import Path
+
+import brand_kit
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
 FORMATS = {
@@ -29,16 +35,6 @@ def load_templates():
     if not manifest_path.is_file():
         return {"templates": []}
     return json.loads(manifest_path.read_text(encoding="utf-8"))
-
-
-def resolve_brand(explicit):
-    candidates = [explicit] if explicit else []
-    candidates += [Path("brand.json"), Path.home() / ".config" / "voiceover-video" / "brand.json",
-                   SKILL_DIR / "brand.example.json"]
-    for candidate in candidates:
-        if candidate and candidate.is_file():
-            return candidate
-    return None
 
 
 def resolve_template(template_id):
@@ -58,40 +54,42 @@ def resolve_template(template_id):
     return None
 
 
+def signature(manifest):
+    handle = markup.escape(manifest.get("handle", ""))
+    mark = manifest["logos"].get("mark")
+    if mark:
+        return f'<img class="sig-mark" src="{mark}" alt="">{handle}'
+    return f"<b>&lt;/&gt;</b> {handle}" if handle else ""
+
+
+def link(path, target):
+    if path.is_symlink() or path.exists():
+        path.unlink()
+    path.symlink_to(target, target_is_directory=True)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("work", type=Path)
     parser.add_argument("duration", type=float)
     parser.add_argument("--format", choices=FORMATS, default="vertical")
-    parser.add_argument("--brand", type=Path, default=None)
+    parser.add_argument("--brand", type=Path, default=None, help="brand kit folder or its brand.json")
     parser.add_argument("--template", default=None, help="theme id from templates/templates.json")
+    parser.add_argument("--board", action="store_true", help="write board.html, the kit shown in this theme")
     args = parser.parse_args()
 
-    brand_path = resolve_brand(args.brand)
-    if brand_path is None:
-        print("No brand file found", file=sys.stderr)
-        print(f"Next: copy {SKILL_DIR / 'brand.example.json'} to ./brand.json and edit it", file=sys.stderr)
+    try:
+        kit, root = brand_kit.load(brand_kit.resolve(args.brand))
+    except brand_kit.KitError as error:
+        print(error.problem, file=sys.stderr)
+        print(f"Next: {error.fix}", file=sys.stderr)
         return 1
-
-    brand = json.loads(brand_path.read_text(encoding="utf-8"))
-
-    required = {
-        "handle": brand.get("handle"),
-        "fonts.heading": brand.get("fonts", {}).get("heading"),
-        "fonts.mono": brand.get("fonts", {}).get("mono"),
-        "colors.bg": brand.get("colors", {}).get("bg"),
-        "colors.accent": brand.get("colors", {}).get("accent"),
-        "colors.surface1": brand.get("colors", {}).get("surface1"),
-        "colors.surface2": brand.get("colors", {}).get("surface2"),
-        "colors.border": brand.get("colors", {}).get("border"),
-        "colors.textBody": brand.get("colors", {}).get("textBody"),
-        "colors.textMuted": brand.get("colors", {}).get("textMuted"),
-    }
-    missing = [k for k, v in required.items() if v is None]
-    if missing:
-        print(f"Brand file {brand_path} is missing keys: {', '.join(missing)}", file=sys.stderr)
-        print("Next: add them or run init_brand.py to generate a complete brand file", file=sys.stderr)
+    kit_assets = brand_kit.installed(kit, root)
+    if kit_assets is None:
+        print(f"Brand kit {root} is not installed, or changed since it was", file=sys.stderr)
+        print(f"Next: bash {SKILL_DIR / 'scripts' / 'setup.sh'} {root}", file=sys.stderr)
         return 1
+    manifest = json.loads((kit_assets / "kit.json").read_text(encoding="utf-8"))
 
     if args.duration <= 0:
         print(f"Duration must be positive, got {args.duration}", file=sys.stderr)
@@ -104,6 +102,8 @@ def main() -> int:
         print("Next: check that templates/ contains a templates.json manifest", file=sys.stderr)
         return 1
 
+    colors = brand_kit.palette(kit, template.get("scheme"))
+    background = manifest["background"]
     geometry = FORMATS[args.format]
     values = {
         "width": geometry["width"],
@@ -112,13 +112,18 @@ def main() -> int:
         "grainWidth": geometry["width"] // 2,
         "grainHeight": geometry["height"] // 2,
         "duration": f"{args.duration:.2f}",
-        "brand.handleWithoutAt": brand["handle"].lstrip("@"),
-        "brand.fonts.heading": brand["fonts"]["heading"],
-        "brand.fonts.mono": brand["fonts"]["mono"],
+        "brand.tokens": brand_kit.css_tokens(colors),
+        "brand.fonts.display": manifest["families"]["display"],
+        "brand.fonts.mono": manifest["families"].get("mono", "ui-monospace"),
+        "brand.signature": signature(manifest),
+        "brand.background": background.get("style", "theme"),
+        "brand.backgroundImage": f"url('{background['image']}')" if background.get("image") else "none",
+        "brand.json": json.dumps({"name": manifest["name"], "handle": manifest["handle"],
+                                  "logos": manifest["logos"], "scheme": colors["scheme"]}),
     }
-    values.update({f"brand.colors.{key}": value for key, value in brand["colors"].items()})
 
-    html = (SKILL_DIR / "templates" / template["file"]).read_text(encoding="utf-8")
+    page = "board.html" if args.board else template["file"]
+    html = (SKILL_DIR / "templates" / page).read_text(encoding="utf-8")
 
     # Inject the theme CSS so each work dir is self-contained and the agent can switch themes
     themes_dir = SKILL_DIR / "templates" / "themes"
@@ -134,12 +139,13 @@ def main() -> int:
 
     unfilled = sorted(set(re.findall(r"\{\{[^}]+\}\}", html)))
     if unfilled:
-        print(f"Brand file {brand_path} is missing: {', '.join(unfilled)}", file=sys.stderr)
-        print("Next: add those keys (see brand.example.json)", file=sys.stderr)
+        print(f"{page} has placeholders nothing fills: {', '.join(unfilled)}", file=sys.stderr)
+        print("Next: give each one a value in fill_template.py (AGENTS.md invariant 8)", file=sys.stderr)
         return 1
 
     args.work.mkdir(parents=True, exist_ok=True)
-    (args.work / "index.html").write_text(html, encoding="utf-8")
+    out = args.work / page.replace(template["file"], "index.html")
+    out.write_text(html, encoding="utf-8")
     # The page loads words.js; without a placeholder a preview render fails before captions exist
     captions = args.work / "words.js"
     if not captions.exists():
@@ -148,12 +154,15 @@ def main() -> int:
     speech = args.work / "speech.js"
     if not speech.exists():
         speech.write_text("window.SPEECH=[];", encoding="utf-8")
-    vendor = args.work / "vendor"
-    if not vendor.exists():
-        vendor.symlink_to(SKILL_DIR / "assets", target_is_directory=True)
+    link(args.work / "vendor", SKILL_DIR / "assets")
+    # Re-pointed every run, so switching kits in one work dir never renders the old brand
+    link(args.work / "kit", kit_assets)
 
-    print(f"{args.work / 'index.html'} · {geometry['width']}x{geometry['height']} · {args.duration:.2f}s · template {template['id']} · brand {brand_path}")
-    print("Next: replace the demo shots between BEGIN/END SHOTS and BEGIN/END TIMELINE")
+    print(f"{out} · {geometry['width']}x{geometry['height']} · {args.duration:.2f}s · template {template['id']} · kit {manifest['name'] or root}")
+    if args.board:
+        print(f"Next: node {SKILL_DIR / 'scripts' / 'render.js'} board {out} {args.work / 'board.png'}")
+    else:
+        print("Next: replace the demo shots between BEGIN/END SHOTS and BEGIN/END TIMELINE")
     return 0
 
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup.sh [--voices] [brand.json] — one-time setup for voiceover-video. Safe to re-run.
+# setup.sh [--voices] [kit] — one-time setup for voiceover-video. Safe to re-run.
 # --voices also fetches script mode's voice model (~350 MB) and word-alignment model (~145 MB), once.
 set -euo pipefail
 
@@ -51,45 +51,19 @@ if [[ ${#missing[@]} -gt 0 ]]; then
   exit 1
 fi
 
-BRAND="${1:-}"
-for candidate in "$BRAND" "./brand.json" "$HOME/.config/voiceover-video/brand.json" "$SKILL_DIR/brand.example.json"; do
-  if [[ -n "$candidate" && -f "$candidate" ]]; then BRAND="$candidate"; break; fi
-done
+KIT_ARG="${1:-}"
 
-FONTS_URL=$(python3 - "$BRAND" "$SKILL_DIR/templates/templates.json" <<'PY'
+# The catalogue's own typefaces (Fraunces, Oswald, Anton…) are shared by every kit; kit fonts install below
+FONTS_URL=$(python3 - "$SKILL_DIR/templates/templates.json" <<'PY'
 import json, sys
-path = sys.argv[1]
 try:
-    brand = json.load(open(path, encoding="utf-8"))
+    themes = json.load(open(sys.argv[1], encoding="utf-8")).get("templates", [])
 except (json.JSONDecodeError, OSError) as e:
-    print(f"cannot read brand file {path}: {e}", file=sys.stderr)
-    print("Next: fix the JSON, or run init_brand.py to create a brand file", file=sys.stderr)
-    sys.exit(1)
-for key in ("handle", "fonts", "colors"):
-    if key not in brand:
-        print(f"brand file missing key: {key}", file=sys.stderr)
-        print("Next: add it, or run init_brand.py to create a brand file", file=sys.stderr)
-        sys.exit(1)
-if "googleFontsUrl" not in brand.get("fonts", {}):
-    print("brand file missing fonts.googleFontsUrl", file=sys.stderr)
-    print("Next: add it, or run init_brand.py to create a brand file", file=sys.stderr)
-    sys.exit(1)
-# Themes with their own typefaces add families to the brand's request, so one download covers every theme
-url = brand["fonts"]["googleFontsUrl"]
-manifest = sys.argv[2]
-try:
-    themes = json.load(open(manifest, encoding="utf-8")).get("templates", [])
-except (json.JSONDecodeError, OSError) as e:
-    print(f"cannot read theme catalogue {manifest}: {e}", file=sys.stderr)
+    print(f"cannot read theme catalogue {sys.argv[1]}: {e}", file=sys.stderr)
     print("Next: restore templates/templates.json from git", file=sys.stderr)
     sys.exit(1)
-extra = [t["fonts"] for t in themes if t.get("fonts")]
-if extra:
-    base, _, query = url.partition("?")
-    params = [p for p in query.split("&") if p and not p.startswith("display=")]
-    params += ["family=" + f for f in extra if "family=" + f not in params]
-    url = base + "?" + "&".join(params + ["display=swap"])
-print(url)
+families = sorted({t["fonts"] for t in themes if t.get("fonts")})
+print("https://fonts.googleapis.com/css2?" + "&".join("family=" + f for f in families) + "&display=swap")
 PY
 )
 
@@ -105,7 +79,7 @@ if [[ ! -f "$ASSETS_DIR/gsap.min.js" ]]; then
   curl -sfL -o "$ASSETS_DIR/gsap.min.js" "https://cdnjs.cloudflare.com/ajax/libs/gsap/$GSAP_VERSION/gsap.min.js"
 fi
 
-# Re-fetch whenever the brand's font URL changes, so switching brands never renders stale type
+# Re-fetch whenever the catalogue's families change
 if [[ ! -f "$ASSETS_DIR/fonts.css" || "$(cat "$ASSETS_DIR/fonts.url" 2>/dev/null)" != "$FONTS_URL" ]]; then
   rm -f "$ASSETS_DIR"/*.woff2
   # A desktop UA makes Google Fonts serve woff2
@@ -117,6 +91,13 @@ if [[ ! -f "$ASSETS_DIR/fonts.css" || "$(cat "$ASSETS_DIR/fonts.url" 2>/dev/null
   done
   echo "$FONTS_URL" > "$ASSETS_DIR/fonts.url"
 fi
+
+# Each kit installs into its own assets/kits/<id>/, so two clients' fonts never overwrite each other
+if ! KIT_LINE=$(python3 "$SCRIPTS_DIR/brand_kit.py" install ${KIT_ARG:+"$KIT_ARG"} 2>&1); then
+  echo "$KIT_LINE"
+  exit 1
+fi
+KIT_NAME="${KIT_LINE%% installed*}"
 
 if (( VOICES )); then
   mkdir -p "$KOKORO_DIR"
@@ -140,7 +121,7 @@ if ! command -v yt-dlp >/dev/null; then
   echo "optional: yt-dlp not found — YouTube clips disabled (pipx install yt-dlp)"
 fi
 
-echo "ready · brand $BRAND"
+echo "ready · kit $KIT_NAME"
 if (( VOICES )); then
   echo "Next: write the script, then run speak.py (script mode) — or transcribe.py on a recording"
 else

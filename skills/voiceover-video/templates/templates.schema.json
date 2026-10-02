@@ -8,12 +8,13 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "file", "name", "mood", "best_for", "music", "blocks"],
+        "required": ["id", "file", "name", "scheme", "mood", "best_for", "music", "blocks"],
         "properties": {
           "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
           "file": { "type": "string" },
           "name": { "type": "string" },
           "default": { "type": "boolean" },
+          "scheme": { "enum": ["dark", "light"], "description": "the canvas the theme is designed for; a kit on the other canvas gets its bgAlt or a derived one" },
           "mood": { "type": "string" },
           "best_for": { "type": "array", "items": { "type": "string" } },
           "fonts": { "type": "string" },

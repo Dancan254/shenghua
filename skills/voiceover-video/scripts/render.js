@@ -6,6 +6,7 @@
  *   node render.js frames <index.html> <out-dir> <from-frame> <to-frame> [subframes]  (to-frame is exclusive)
  *   node render.js cues   <index.html> <cues.json>
  *   node render.js check  <index.html> [report.json]
+ *   node render.js board  <board.html> <board.png>      (fill_template.py --board writes board.html)
  *
  * The page must expose window.renderAt(t) and window.SFX. Viewport size is read from the
  * composition's --W / --H CSS variables so one renderer serves vertical and landscape.
@@ -23,11 +24,12 @@ const [,, mode, htmlFile, target, a, b, subframeArg] = process.argv;
 
 function usage(message) {
   console.error(message);
-  console.error('Usage: render.js stills|frames|cues|check <index.html> [out] [args]');
+  console.error('Usage: render.js stills|frames|cues|check|board <index.html> [out] [args]');
   process.exit(1);
 }
 
-if (!['stills', 'frames', 'cues', 'check'].includes(mode)) usage(`Unknown mode: ${mode}`);
+if (!['stills', 'frames', 'cues', 'check', 'board'].includes(mode)) usage(`Unknown mode: ${mode}`);
+if (mode === 'board' && !target) usage('board needs an output path, e.g. board.png');
 if (!htmlFile || !fs.existsSync(htmlFile)) usage(`No such composition: ${htmlFile}`);
 if (mode === 'frames' && (Number.isNaN(Number(a)) || Number.isNaN(Number(b)) || b === undefined)) {
   usage(`frames needs <from-frame> <to-frame> as two separate numbers, got: ${a} ${b}`);
@@ -57,6 +59,28 @@ if (mode === 'frames' && !(/^\d+$/.test(String(subframeArg ?? 1)) && subframes >
   });
   await page.setViewportSize(size);
   await page.evaluate(() => document.fonts.ready);
+
+  if (mode === 'board') {
+    // A face that never loaded means Chromium drew the board in a fallback font; fail rather than pass it
+    // Only families the theme actually sets count: retro, for one, draws everything in the mono face
+    const unloaded = await page.evaluate(() => {
+      const used = new Set([...document.querySelectorAll('body *')].map(el => getComputedStyle(el).fontFamily.split(',')[0].trim().replace(/["']/g, '')));
+      return (window.BOARD_FONTS || []).filter(family => used.has(family) &&
+        ![...document.fonts].some(face => face.family.replace(/["']/g, '') === family && face.status === 'loaded'));
+    });
+    await page.screenshot({ path: target, type: 'png', scale: 'css' });
+    errors.forEach(message => console.error(`PAGE ERROR ${message}`));
+    if (unloaded.length || errors.length) {
+      unloaded.forEach(family => console.error(`font ${family} did not load; the board shows a fallback face`));
+      console.error('Next: re-run setup.sh with this kit, and check the kit\'s font files or Google family names');
+      await browser.close();
+      process.exit(1);
+    }
+    console.log(`brand board → ${target}`);
+    console.log('Next: show the board for approval, with brand_kit.py check for the contrast report');
+    await browser.close();
+    process.exit(0);
+  }
 
   if (mode === 'cues') {
     const cues = await page.evaluate(() => window.SFX);

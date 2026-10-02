@@ -1,9 +1,10 @@
 <!doctype html>
 <html><head><meta charset="utf-8">
 <link rel="stylesheet" href="vendor/fonts.css">
+<link rel="stylesheet" href="kit/fonts.css">
 <style>{{theme.css}}</style></head>
 <body>
-<div id="world"><div id="cam">
+<div id="world"><div id="bg" class="bg-{{brand.background}}"><i class="b1"></i><i class="b2"></i><i class="b3"></i></div><div id="cam">
 <!-- BEGIN SHOTS -->
 
 <section class="shot" id="s01">
@@ -20,7 +21,7 @@
   <div class="cx xl" id="s02d" style="top:960px;font-size:96px">problem.</div>
 </section>
 
-<section class="shot" id="s03" style="background:#08080f">
+<section class="shot" id="s03" style="background:var(--brand-surface1)">
   <div class="term" style="top:360px;height:760px">
     <div class="bar"><i></i><i></i><i></i>&nbsp;terminal</div>
     <pre id="s03pre"></pre>
@@ -32,7 +33,7 @@
 <canvas id="grain" width="{{grainWidth}}" height="{{grainHeight}}"></canvas>
 <div id="vig"></div><div id="flash"></div><div id="pinkflash"></div>
 <div id="captions"><div id="capbox"></div></div>
-<div id="sig"><b>&lt;/&gt;</b> {{brand.handleWithoutAt}}</div>
+<div id="sig">{{brand.signature}}</div>
 <div id="prog"></div>
 
 <script src="vendor/gsap.min.js"></script>
@@ -42,6 +43,7 @@
 const D = {{duration}}, E = "power2.out", EI = "power2.inOut", EX = "expo.out";
 const tl = gsap.timeline({paused:true});
 // Per-theme motion profile from templates.json: default entry, shake and flash strength, caption pulse
+const BRAND = {{brand.json}};
 const THEME = Object.assign({enter:null, shake:1, flash:1, pulse:1}, {{theme.motion}});
 const SFX = [];
 const q = s => document.querySelector(s);
@@ -314,7 +316,13 @@ function renderMedia(t, frame){
   }));
 }
 
+// The kit's background drifts as a pure function of t; styles other than glow and gradient stay still
+const BG = [...document.querySelectorAll("#bg > i")];
+function renderBg(t){
+  BG.forEach((el,i)=>{ el.style.transform = `translate(${(Math.sin(t*(.11+i*.02)+i)*160).toFixed(1)}px,${(Math.cos(t*(.08+i*.015)+i*2)*90).toFixed(1)}px)`; });
+}
+
 window.SFX = SFX; window.DURATION = D; window.SHOTS = SHOTS;
-window.renderAt = t => { const frame = Math.round(t*30); tl.seek(t,false); renderCaptions(t); renderText(t); renderHosts(t); renderGrain(frame); return renderMedia(t, frame); };
+window.renderAt = t => { const frame = Math.round(t*30); tl.seek(t,false); renderCaptions(t); renderText(t); renderHosts(t); renderGrain(frame); renderBg(t); return renderMedia(t, frame); };
 </script>
 </body></html>

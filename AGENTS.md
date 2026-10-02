@@ -14,24 +14,27 @@ template act it out. Everything lives in `skills/voiceover-video/`.
 ```
 skills/voiceover-video/
 ├── SKILL.md                     the workflow the agent follows at run time
-├── brand.example.json           default brand (colours, fonts, handle)
+├── brand.example.json           fallback brand kit (version 2) when the user has none
+├── examples/kits/               two fictional kits (dark Northwind, light Lumen) for testing and copying
 ├── references/scene-blocks.md   scene catalogue, pacing rules, sound cues, safe zones
 ├── references/explainers.md     script mode: explainer shape, analogy, cast, script format, voices
 ├── templates/                   visual theme engine + themes
 │   ├── kinetic.html             the shared HTML/JS engine + demo shots
-│   ├── templates.json           theme catalogue: mood, extra fonts, motion profile
-│   └── themes/                  shared.css (people/footage blocks) + one CSS per theme
+│   ├── board.html               the brand board: one kit shown in one theme, for approval
+│   ├── templates.json           theme catalogue: canvas (dark/light), mood, extra fonts, motion profile
+│   └── themes/                  shared.css (kit tokens, backgrounds, people/footage blocks) + one CSS per theme
 └── scripts/
     ├── setup.sh                 dependency check, playwright-core + Chromium, GSAP, fonts
     ├── speak.py                 script mode: script → voice.wav + speech.json/js + aligned words.json
     ├── transcribe.py            faster-whisper, word-level timestamps
     ├── build_captions.py        applies fixes.json → words.js
-    ├── init_brand.py            first-run answers → ~/.config/voiceover-video/brand.json
-    ├── fill_template.py         brand + geometry + duration → work/index.html
+    ├── brand_kit.py             kit validation, colour derivation, contrast report, per-kit font/logo install
+    ├── init_kit.py              answers or client files → a kit; --from converts a version-1 brand.json
+    ├── fill_template.py         kit + theme + geometry + duration → work/index.html (or board.html)
     ├── extract_face.sh          to-camera video → face/fNNNNN.jpg, numbered by edit frame
     ├── find_media.py            photo/video search (Commons, Openverse, Archive, Pexels, web, YouTube) + credits.json
     ├── extract_clip.sh          fetched clip → clips/<name>/fNNNNN.jpg (+ clips/<name>.wav)
-    ├── render.js                stills | frames | cues | check, driven by window.renderAt(t)
+    ├── render.js                stills | frames | cues | check | board, driven by window.renderAt(t)
     ├── render-frames.sh         parallel frame rendering
     ├── contact-sheet.sh         stills → one review image
     ├── synth_audio.py           cues.json → sfx.wav + music.wav
@@ -78,13 +81,16 @@ names, breaks this.
 7. **Nothing third-party is committed.** GSAP, fonts, `node_modules`, and Chromium are downloaded by
    `setup.sh`. Never add them to git.
 8. **Placeholders are `{{dotted.names}}`** filled by `fill_template.py`. A new placeholder needs a value
-   there and, if it comes from the brand, a key in `brand.example.json`.
+   there and, if it comes from the kit, a field `brand_kit.py` validates and `brand.example.json` shows.
 9. **Every fetched file is credited.** `find_media.py` records each download in `credits.json` with its
    licence, and marks web and YouTube files as unlicensed so the report can name them. A new source must
    do the same, and must be listed in `LICENSED_SOURCES` only if its results genuinely carry a licence.
-10. **Every theme styles every block.** A theme CSS defines every class `kinetic.css` does plus the
-   `--panel`, `--panel-fg`, `--frame`, `--radius`, `--display` tokens `shared.css` reads. A theme with its
-   own typeface lists it in `templates.json` → `fonts`; `setup.sh` downloads it.
+10. **Every theme styles every block, in the kit's colours.** A theme CSS defines every class `kinetic.css`
+   does plus the `--panel`, `--panel-fg`, `--frame`, `--radius`, `--display` tokens `shared.css` reads. Every
+   colour is a `--brand-*` token or a `color-mix()` of one; the only literals are pure black and white and
+   the `--fx-*` (effect) and `--host-*` (cartoon host) declarations in `shared.css`, and CI fails on any
+   other. A theme declares its canvas (`scheme`: dark or light) in `templates.json`; the kit's display font
+   always wins, and a theme's own typeface (`templates.json` → `fonts`) is only its fallback.
 11. **Hosts are pure functions of `t`.** `renderHosts(t)` derives every mouth, blink and bob from `t` and
    `speech.js`; a host never keeps state between frames. `speech.js` always exists (`fill_template.py`
    writes an empty one), so a recording without speakers renders hosts idle rather than failing.
@@ -111,10 +117,14 @@ cached setup hides broken installs.
 
 ```bash
 C=$(mktemp -d) && cp -r skills/voiceover-video "$C/skill" && S="$C/skill/scripts" && W="$C/work"
-bash "$S/setup.sh"                                   # must print "ready"
+K="$C/skill/examples/kits/northwind"                # repeat the run with examples/kits/lumen
+bash "$S/setup.sh" "$K"                              # must print "ready"
+python3 "$S/brand_kit.py" check "$K"                 # contrast report, exit 0
+python3 "$S/fill_template.py" "$W" 6 --format landscape --brand "$K" --template aurora --board
+node "$S/render.js" board "$W/board.html" "$W/board.png"     # look at it
 python3 "$S/transcribe.py" <any short speech clip> --outdir "$W" --model base
 python3 "$S/build_captions.py" "$W"
-python3 "$S/fill_template.py" "$W" 9.5
+python3 "$S/fill_template.py" "$W" 9.5 --brand "$K"
 node "$S/render.js" stills "$W/index.html" "$W/stills" 1.0,2.4,5.0,7.8
 bash "$S/contact-sheet.sh" "$W/stills" "$W/contact.jpg"      # look at it
 node "$S/render.js" cues "$W/index.html" "$W/cues.json"
@@ -135,4 +145,5 @@ Do not pipe a step through `tail`/`head` when checking it — the pipe hides the
 - Changes to the workflow belong in `SKILL.md`; changes to visual vocabulary belong in
   `references/scene-blocks.md` *and* the template helpers.
 - Keep `SKILL.md` imperative and short enough for an agent to follow in one pass.
-- Do not add per-user or per-brand content to the repo; that lives in the user's `brand.json`.
+- Do not add per-user or per-brand content to the repo; it lives in the user's own kit folder. The only
+  kits in the repo are the fictional ones in `examples/kits/`; never add a real company's brand there.

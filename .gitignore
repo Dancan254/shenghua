@@ -6,4 +6,6 @@ work/
 *.mov
 *.wav
 brand.json
+# Example kits are fictional brands that ship with the skill
+!skills/voiceover-video/examples/kits/*/brand.json
 .DS_Store
