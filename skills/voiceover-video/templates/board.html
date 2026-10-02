@@ -46,8 +46,7 @@ q("#boardLogo").innerHTML = logo ? `<img src="${logo}" alt="">` : `<div class="b
 const root = getComputedStyle(document.documentElement);
 q("#boardSwatches").innerHTML = ["primary","primary-ink","secondary","bg","surface2","text","muted","error"]
   .map(name => `<div><i style="background:var(--brand-${name})"></i>${name}<br>${root.getPropertyValue("--brand-"+name).trim()}</div>`).join("");
-// The renderer checks these loaded, so a substituted font fails the board instead of passing silently
-window.BOARD_FONTS = ["{{brand.fonts.display}}", "{{brand.fonts.mono}}"].filter(f => f !== "ui-monospace");
+window.BRAND = BRAND;
 window.SFX = []; window.SHOTS = []; window.DURATION = {{duration}};
 window.renderAt = () => Promise.resolve();
 </script>

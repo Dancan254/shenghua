@@ -60,19 +60,28 @@ if (mode === 'frames' && !(/^\d+$/.test(String(subframeArg ?? 1)) && subframes >
   await page.setViewportSize(size);
   await page.evaluate(() => document.fonts.ready);
 
+  // Load each kit family outright: a family with no faces at all (fonts.css lost it) or a broken file would
+  // otherwise render silently in a fallback face. Loading by name also covers families a theme never uses
+  const unloaded = await page.evaluate(async () => {
+    const missing = [];
+    for (const family of (window.BRAND && window.BRAND.fonts) || []) {
+      try { if (!(await document.fonts.load(`16px "${family}"`)).length) missing.push(family); }
+      catch { missing.push(family); }
+    }
+    return missing;
+  });
+  if (unloaded.length && mode !== 'cues') {
+    unloaded.forEach(family => console.error(`font ${family} did not load; every word in it would render in a fallback face`));
+    console.error('Next: re-run setup.sh with this kit (fill_template.py links the kit into the work folder), or fix its fonts');
+    await browser.close();
+    process.exit(1);
+  }
+
   if (mode === 'board') {
-    // A face that never loaded means Chromium drew the board in a fallback font; fail rather than pass it
-    // Only families the theme actually sets count: retro, for one, draws everything in the mono face
-    const unloaded = await page.evaluate(() => {
-      const used = new Set([...document.querySelectorAll('body *')].map(el => getComputedStyle(el).fontFamily.split(',')[0].trim().replace(/["']/g, '')));
-      return (window.BOARD_FONTS || []).filter(family => used.has(family) &&
-        ![...document.fonts].some(face => face.family.replace(/["']/g, '') === family && face.status === 'loaded'));
-    });
     await page.screenshot({ path: target, type: 'png', scale: 'css' });
     errors.forEach(message => console.error(`PAGE ERROR ${message}`));
-    if (unloaded.length || errors.length) {
-      unloaded.forEach(family => console.error(`font ${family} did not load; the board shows a fallback face`));
-      console.error('Next: re-run setup.sh with this kit, and check the kit\'s font files or Google family names');
+    if (errors.length) {
+      console.error('Next: fix the first PAGE ERROR, usually a kit file setup.sh has not installed');
       await browser.close();
       process.exit(1);
     }

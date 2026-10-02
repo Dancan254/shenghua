@@ -68,6 +68,9 @@ footage. They earn their place for live shows and interviews with guests. When y
 
 ## Green screen (only when the background is replaced)
 
+A green screen enables **presenter mode**: the speaker is keyed out and placed in the brand's background
+for the whole video. The skill measures the screen and refuses a take it can't key cleanly, so these matter:
+
 - [ ] **Screen lit evenly and separately** from the speaker: no shadows, no wrinkles
 - [ ] Speaker **at least 1.5 m in front of the screen**, so green light doesn't spill onto skin and hair
 - [ ] **No green clothing or accessories**; watch for reflections in glasses

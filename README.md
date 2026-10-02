@@ -49,6 +49,10 @@ your machine.
   term labels and tokens flying into queues. `setup.sh --voices` installs the voice model once
 - **Optional face-cam bookends**: film the script on your phone in one take; your opening line and
   sign-off stay on camera and everything between is animated
+- **Presenter mode for green-screen talks**: the speaker is keyed out and stays on screen in your brand's
+  background, moving between full-frame, split and close-up layouts while panels, checklists and diagrams
+  build beside them; dead air at both ends is trimmed automatically. Keying measures the screen itself
+  and resumes if interrupted
 - **QA gates**: the agent reviews a contact sheet of every shot before the full render, and checks the
   encoded file, not just the preview
 

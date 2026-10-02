@@ -119,7 +119,8 @@ def main() -> int:
         "brand.background": background.get("style", "theme"),
         "brand.backgroundImage": f"url('{background['image']}')" if background.get("image") else "none",
         "brand.json": json.dumps({"name": manifest["name"], "handle": manifest["handle"],
-                                  "logos": manifest["logos"], "scheme": colors["scheme"]}),
+                                  "logos": manifest["logos"], "scheme": colors["scheme"],
+                                  "fonts": sorted(set(manifest["families"].values()))}),
     }
 
     page = "board.html" if args.board else template["file"]

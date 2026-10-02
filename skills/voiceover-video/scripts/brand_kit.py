@@ -196,6 +196,7 @@ def palette(kit, scheme=None):
         "border": mix(mix(bg, lift, 0.13), primary, 0.08),
         "on-primary": readable_on(primary),
         "success": colors.get("success", DEFAULT_SUCCESS),
+        "on-success": readable_on(colors.get("success", DEFAULT_SUCCESS)),
         "error": colors.get("error", DEFAULT_ERROR),
         "on-error": readable_on(colors.get("error", DEFAULT_ERROR)),
     }

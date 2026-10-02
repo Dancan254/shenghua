@@ -221,6 +221,62 @@ jobs:
               sys.exit("::error::" + "; ".join(errors))
           PY
 
+      # A synthetic green screen with a moving subject exercises trim, keying and every presenter layout
+      - name: Presenter mode
+        run: |
+          set -euo pipefail
+          S="$SKILL/scripts"; G="$RUNNER_TEMP/presenter"; mkdir -p "$G"
+          ffmpeg -v error -y -f lavfi -i "color=c=0x77983c:s=1920x1080:r=30:d=$DURATION" -i "$RUNNER_TEMP/smoke/clip.wav" \
+            -filter_complex "[0]drawbox=x='760+120*sin(t*2)':y=180:w=400:h=900:color=0x7d6a62:t=fill[v]" \
+            -map "[v]" -map 1:a -c:v libx264 -crf 16 -pix_fmt yuv420p -c:a aac -shortest "$G/take.mp4"
+          python3 "$S/transcribe.py" "$G/take.mp4" --outdir "$G/w" --model tiny
+          python3 "$S/trim_take.py" "$G/take.mp4" "$G/w"
+          python3 "$S/build_captions.py" "$G/w"
+          python3 "$S/key_greenscreen.py" "$G/w" --workers 2
+          python3 - "$G/w" <<'PY'
+          import json, math, subprocess, sys
+          from pathlib import Path
+          w = Path(sys.argv[1]); take = json.loads((w / "take.json").read_text())
+          frames = sorted((w / "presenter").glob("f*.webp")); want = math.ceil(take["duration"] * 30)
+          assert len(frames) == want, f"{len(frames)} presenter frames, want {want}"
+          raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(frames[len(frames) // 2]), "-f", "rawvideo", "-pix_fmt", "rgba", "-"],
+                               capture_output=True, check=True).stdout
+          alpha = lambda x, y: raw[(y * 1920 + x) * 4 + 3]
+          assert alpha(40, 40) == 0 and alpha(1880, 1000) == 0, "screen corners are not transparent"
+          assert max(alpha(x, 600) for x in range(700, 1300, 50)) == 255, "the subject is not opaque"
+          print(f"{want} presenter frames keyed; screen transparent, subject opaque")
+          PY
+          cat > "$G/inject.py" <<'PY'
+          # Replaces the demo shots with one of each presenter layout, as an agent following scene-blocks.md would
+          import re, sys
+          path, duration = sys.argv[1], float(sys.argv[2])
+          html = open(path).read()
+          third = duration / 3
+          shots = """<!-- BEGIN SHOTS -->
+          <section class="shot" id="p1"><div class="h2" style="position:absolute;right:8%;top:30%;width:30%">Full</div></section>
+          <section class="shot" id="p2"><div class="panel" id="p2p" style="right:4%;top:8%;width:46%"><div class="kk">Split</div><div class="li"><span class="ic ok">✓</span>Panel</div></div></section>
+          <section class="shot" id="p3"><div class="h1" style="position:absolute;right:6%;top:30%">Close</div></section>
+          <!-- END SHOTS -->"""
+          timeline = f"""// BEGIN TIMELINE
+          presenterStyle({{halo:true}});
+          presenter("full", 0, {third:.2f}); shot("p1", 0, {third:.2f}, "cut");
+          presenter("split", {third:.2f}, {2*third:.2f}); shot("p2", {third:.2f}, {2*third:.2f}); fromRight("#p2p", {third + .05:.2f});
+          presenter("close", {2*third:.2f}, D); shot("p3", {2*third:.2f}, D, "cut");
+          // END TIMELINE"""
+          html = re.sub(r"<!-- BEGIN SHOTS -->.*<!-- END SHOTS -->", lambda _: shots, html, flags=re.S)
+          html = re.sub(r"// BEGIN TIMELINE.*// END TIMELINE", lambda _: timeline, html, flags=re.S)
+          html = re.sub(r"const NOCAP = \[.*?\];", "const NOCAP = [];", html, count=1)
+          open(path, "w").write(html)
+          PY
+          D=$(python3 -c "import json; print(json.load(open('$G/w/take.json'))['duration'])")
+          for format in landscape vertical; do
+            cp -r "$G/w" "$G/$format"
+            python3 "$S/fill_template.py" "$G/$format" "$D" --format "$format" --brand "$SKILL/examples/kits/northwind" --template aurora
+            python3 "$G/inject.py" "$G/$format/index.html" "$D"
+            node "$S/render.js" check "$G/$format/index.html"
+            node "$S/render.js" stills "$G/$format/index.html" "$RUNNER_TEMP/smoke/boards/presenter-$format" 0.5,1.5,2.5
+          done
+
       - name: Keep the contact sheet
         if: always()
         uses: actions/upload-artifact@v7
@@ -229,5 +285,6 @@ jobs:
           path: |
             ${{ runner.temp }}/smoke/work/contact.jpg
             ${{ runner.temp }}/smoke/boards/*.png
+            ${{ runner.temp }}/smoke/boards/presenter-*/*.jpg
           if-no-files-found: ignore
           retention-days: 7
