@@ -1,13 +1,16 @@
 # voiceover-video
 
-**An AI-agent skill that turns a voice recording into a fully edited, animated short video.**
+**An AI-agent skill that turns a recording into a fully edited, animated, on-brand video.**
 
-Drop in a voice note. Your agent transcribes it word by word, designs a shot list, finds licensed photos and video of the people and products you mention, builds
-every scene as kinetic typography and motion graphics timed to your words, adds sound design and a
-music bed that ducks under your voice, and renders a 1080×1920 Short.
+Drop in a voice note, a to-camera take or a green-screen talk. Your agent transcribes it word by word,
+designs a shot list, finds licensed photos and video of the people and products you mention, builds every
+scene as kinetic typography and motion graphics timed to your words in your brand's colours, fonts and
+logos, adds sound design and a music bed that ducks under your voice, and renders a 1080×1920 Short or a
+1920×1080 video.
 
-This repo ships one skill, `voiceover-video`: model-agnostic, it works in Claude Code, Kimi Code CLI, or
-any agent that can run shell commands.
+This repo ships one skill, `voiceover-video`. It is model-agnostic: it works in Claude Code, Kimi Code
+CLI, OpenCode, or any agent that can run shell commands. **New here? Start with the
+[step-by-step workflow](docs/workflow.md).**
 
 ![A 42-second Kafka vs RabbitMQ explainer made with this skill: word-synced captions, a message-queue diagram, stamps and kinetic type on the blueprint theme](docs/demo.gif)
 
@@ -29,8 +32,11 @@ your machine.
 - **Scene blocks**: terminals typing, stamps, VHS and CRT era looks, diagrams with flowing packets,
   charts, photo tape-ins, logo walls, montages
 - **Eight themes that move differently**: kinetic, documentary, newsroom, blueprint, brutalist, aurora,
-  minimal, retro. Each brings its own type, colour, captions *and* motion (default transition, shake,
-  flash); the agent picks one to fit the topic
+  minimal, retro. Each brings its own texture, captions *and* motion (default transition, shake, flash),
+  rendered in your brand's colours; the agent picks one to fit the topic
+- **Brand kits for any brand**: colours, the brand's own fonts and logos in one folder; a **brand board**
+  shows the kit in a theme, with a contrast check, before anything renders. Kits for different clients
+  install side by side
 - **Real people, real footage**: mention a founder and the agent finds their photos and talks (Wikimedia
   Commons, Openverse, Internet Archive, web image search, YouTube, optional Pexels), shows them with a
   lower third, a picture-in-picture clip or a portrait quote, and hands you the credits for the description
@@ -59,11 +65,15 @@ your machine.
 ## How it works
 
 ```
+brand kit ── init_kit.py, setup.sh ──► brand board ── you approve it
+
 voice.mp4                                    ┌ or, with no recording (script mode):
   │                                          │ topic → the agent writes script.txt → you approve it
   │                                          │ speak.py  offline voices per character → voice.wav
   │                                          └ + speech.json (who speaks when) + aligned word times
   │  transcribe.py        faster-whisper, local, word timestamps
+  │  trim_take.py         dead air cut from both ends (or an excerpt), word times shifted to 0
+  │  key_greenscreen.py   presenter mode: the speaker keyed out of a green screen, frame by frame
   ▼
 transcript.txt ── you proofread ──► build_captions.py
   │
@@ -92,7 +102,7 @@ always produces the same video, however slow the machine.
 
 | | |
 |---|---|
-| [Claude Code](https://claude.com/claude-code) or [Kimi Code CLI](https://www.kimi.com/code) | the agent that runs the skill |
+| A coding agent: [Claude Code](https://claude.com/claude-code), [Kimi Code CLI](https://www.kimi.com/code), or any agent that runs shell commands | runs the skill |
 | Node 18+ | frame rendering |
 | Python 3.10+ with `faster-whisper` and `numpy` | transcription and sound synthesis |
 | FFmpeg | mixing and encoding |
@@ -106,6 +116,9 @@ Runs on macOS and Linux. On Windows, run your agent inside WSL: the scripts are 
 pip install faster-whisper 'av<19' numpy
 # macOS: brew install ffmpeg node   ·   Debian/Ubuntu: sudo apt install ffmpeg nodejs npm
 ```
+
+On macOS, Homebrew's Python refuses a system-wide `pip install`; the
+[workflow guide](docs/workflow.md#1-install-the-tools) has the per-platform steps with a virtual environment.
 
 ### Add the skill
 
@@ -171,6 +184,18 @@ Want to be on camera? Film yourself saying the script on your phone in one take 
 Your opening line and sign-off stay on camera, and everything between is animated over the same take.
 Record in SDR, not HDR, or the face shots come out washed out.
 
+Recorded against a green screen? Keep the speaker on screen the whole way through:
+
+> edit ~/Videos/talk.mp4 in presenter mode with my brand kit, landscape
+
+The speaker moves between full-frame, split and close-up layouts while the graphics build beside them.
+From a long talk, cut a Short:
+
+> make a 60-second vertical Short from 2:10 to 3:10 of ~/Videos/talk.mp4, presenter mode
+
+Before recording, send the speaker the [recording guide](docs/recording-guide.md). The full prompts,
+approval points and timings are in the [workflow guide](docs/workflow.md).
+
 Useful follow-ups:
 
 > make the intro punchier · use my music track ~/Music/bed.mp3 · render a landscape version
@@ -188,13 +213,14 @@ git clone https://github.com/Dancan254/voiceover-video-skill
 bash voiceover-video-skill/skills/voiceover-video/scripts/setup.sh
 ```
 
-Then point your agent at `SKILL.md` and give it the audio file. Claude Code users get the same thing
-through `/plugin install`, and Kimi Code CLI users through `/plugins install`, which only saves the cloning.
+Then point your agent at `SKILL.md` and give it the recording; the [workflow guide](docs/workflow.md)
+has copy-paste prompts written that way. Claude Code users get the same thing through `/plugin install`,
+and Kimi Code CLI users through `/plugins install`, which only saves the cloning.
 
 **What the agent needs:** a shell, file writing, and the ability to read text output. Vision is
-optional and improves Step 5 (judging sourced images) and Step 7 (reviewing the contact sheet): an
-agent that cannot see images lists each image source for you to confirm and runs `render.js check`,
-which measures every shot and reports problems as text. No step needs audio, so every agent has to ask
+optional and helps wherever there's an image to judge: the brand board, the key preview, sourced photos
+and the contact sheet. An agent that cannot see images hands those to you to confirm, and runs
+`brand_kit.py check` and `render.js check`, which report contrast and layout problems as text. No step needs audio, so every agent has to ask
 you to listen to the mix before posting.
 
 ## Make it yours
@@ -228,7 +254,7 @@ border shades, a readable text shade of the brand colour, caption contrast again
 (or dark) canvas for themes designed for the other one. Before the first render the agent shows a
 **brand board**, one image of the kit inside the chosen theme, so a wrong colour costs seconds, not a
 render. Fonts can be any Google Font or the brand's own files; logos come from the brand, never from a
-web search. `examples/kits/` has two fictional kits to copy.
+web search. [`examples/kits/`](skills/voiceover-video/examples/kits/) has two fictional kits to copy.
 
 Create one yourself:
 
@@ -263,6 +289,9 @@ Avoid:        competitor logos, red except for errors
 Deliver:      brand board first, then the shot list, then a draft, then the final
 ```
 
+For a green-screen talk, a talk without one, or a voice note, the [workflow guide](docs/workflow.md#6-edit-the-video)
+has a prompt for each.
+
 The default type is **Archivo** (expanded black for headlines, condensed for captions) with
 **Geist Mono** for code.
 
@@ -274,9 +303,12 @@ The default type is **Archivo** (expanded black for headlines, condensed for cap
   shoot, send the speaker the [recording guide](docs/recording-guide.md): 1080p at 20 Mbps or more
   (4K recommended), the phone's own camera app rather than a browser or Zoom, an external mic.
 - **The agent cannot hear the result.** Loudness is measured, taste is not. Listen before you post.
-- **Render time.** High-quality frames take 2–3x longer than the old 1x JPEG ones (roughly 6–9 minutes
-  for a 108-second Short on 10 CPU workers), plus transcription at 2–3x realtime. `VV_QUALITY=draft`
-  renders a fast preview first.
+- **Render time.** High-quality frames take roughly 6–9 minutes for a 108-second Short on 10 CPU
+  workers, plus transcription at 2–3x realtime. Presenter mode adds keying, about 4 frames a second on
+  6 cores (~45 minutes for a 6-minute talk). `VV_QUALITY=draft` renders a fast preview first.
+- **Long steps run in the background.** Transcribing, keying, rendering and encoding a long take can
+  outlast an agent's command time limit, so `SKILL.md` has the agent run them detached and poll the log;
+  keying resumes where it stopped.
 - **Disk.** Lossless frames are ~1.2 MB each, about 4 GB for a 108-second Short, deleted with `work/`.
 - **File size.** Film grain resists compression; the encoder caps the bitrate so a 108-second vertical
   lands around 200 MB. That headroom is what keeps it sharp after the platform re-compresses it.
