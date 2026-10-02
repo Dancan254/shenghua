@@ -16,6 +16,7 @@ import json
 import math
 import multiprocessing
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -256,7 +257,7 @@ def main() -> int:
         return 0
 
     out_dir = args.work / "presenter"
-    out_dir.mkdir(exist_ok=True)
+    out_dir.mkdir(parents=True, exist_ok=True)
     missing = [n for n in range(frames) if not complete(out_dir / f"f{n:05d}.webp")]
     if not missing:
         print(f"{frames}/{frames} presenter frames already keyed → {out_dir}")
@@ -276,6 +277,13 @@ def main() -> int:
             print(f"  {done}/{len(missing)} keyed · {rate:.1f} fps · ~{(len(missing) - done) / max(rate, 1e-6) / 60:.0f} min left",
                   flush=True)
     left = [n for n in range(frames) if not complete(out_dir / f"f{n:05d}.webp")]
+    # Audio often outlasts the video stream by a fraction of a frame, so the edit's last frame or two have no
+    # source frame; the speaker holds their last frame rather than vanishing for 1/30 s
+    if left and len(left) <= 2 and left == list(range(frames - len(left), frames)) and left[0] > 0:
+        for n in left:
+            shutil.copy2(out_dir / f"f{left[0] - 1:05d}.webp", out_dir / f"f{n:05d}.webp")
+        print(f"held the last video frame for {len(left)} frame(s) past the end of the video stream")
+        left = []
     if left:
         print(f"{len(left)} frames still missing (first: {left[0]})", file=sys.stderr)
         print("Next: re-run the same command; it keys only what is missing", file=sys.stderr)
