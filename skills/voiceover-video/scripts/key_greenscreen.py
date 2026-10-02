@@ -83,8 +83,32 @@ def measure(video, take, width, height):
     # The matte ramps from opaque at `low` to clear at `high`, kept below the screen's weakest green
     high = round(floor * 0.75)
     low = max(2, round(high * 0.2))
-    colour = np.median(np.concatenate(colours), axis=0).round().astype(int).tolist()
-    return {"screen": colour, "low": low, "high": high, "margin": round(floor, 1), "borderGreen": round(screen_share, 2)}
+    pixels = np.concatenate(colours).astype(np.float32)
+    colour = np.median(pixels, axis=0).round().astype(int).tolist()
+    # Green clothing, logos and spill-tinted fabric are green but not the screen's green: measure how tight
+    # the screen's own colour is, so only pixels near it can turn transparent
+    r, g = chromaticity(pixels)
+    centre = (float(np.median(r)), float(np.median(g)))
+    spread = float(np.percentile(np.hypot(r - centre[0], g - centre[1]), 99))
+    return {"screen": colour, "low": low, "high": high, "margin": round(floor, 1), "borderGreen": round(screen_share, 2),
+            "centre": centre, "near": spread * 1.2, "far": spread * 1.2 + max(0.02, spread)}
+
+
+def chromaticity(rgb):
+    """Colour with brightness divided out, so a screen in shadow and in light reads the same."""
+    total = rgb.sum(axis=-1, dtype=np.float32) + 1e-6
+    return rgb[..., 0] / total, rgb[..., 1] / total
+
+
+def box_mean(plane, radius):
+    """Mean over a (2r+1)² square at every pixel, from an integral image so the window size costs nothing."""
+    height, width = plane.shape
+    padded = np.pad(plane, ((radius + 1, radius), (radius + 1, radius)), mode="edge").astype(np.float64)
+    integral = padded.cumsum(0).cumsum(1)
+    size = 2 * radius + 1
+    total = integral[size:size + height, size:size + width] - integral[:height, size:size + width] \
+        - integral[size:size + height, :width] + integral[:height, :width]
+    return (total / (size * size)).astype(np.float32)
 
 
 def neighbourhood(plane, combine):
@@ -106,6 +130,15 @@ def key(frame, matte):
     rgb = frame.astype(np.int16)
     difference = rgb[..., 1] - np.maximum(rgb[..., 0], rgb[..., 2])
     alpha = np.clip((matte["high"] - difference) / (matte["high"] - matte["low"]), 0, 1).astype(np.float32)
+    r, g = chromaticity(rgb)
+    distance = np.hypot(r - matte["centre"][0], g - matte["centre"][1])
+    # A green logo or spill-tinted fabric is a hole inside the speaker, not the screen: fill pixels far from the
+    # screen's colour, but only where no real screen shows nearby, so the outline's blend of skin and screen
+    # still keys away instead of leaving a rim
+    unlike_screen = np.clip((distance - matte["near"]) / (matte["far"] - matte["near"]), 0, 1)
+    screen_nearby = box_mean((distance < matte["near"]).astype(np.float32), 25)
+    enclosed = np.clip((0.15 - screen_nearby) / 0.1, 0, 1)
+    alpha = np.maximum(alpha, unlike_screen * enclosed)
     alpha[alpha < 0.04] = 0
     for x, y, w, h in matte["masks"]:
         alpha[y:y + h, x:x + w] = 0
@@ -122,8 +155,10 @@ def key(frame, matte):
     for channel in range(3):
         extended = box5(rgb[..., channel] * core)
         rgb[..., channel][edge] = (extended[edge] / weight[edge]).astype(np.int16)
-    # Green light bounced onto skin reads as a cast once the screen is gone
-    rgb[..., 1] = np.minimum(rgb[..., 1], np.maximum(rgb[..., 0], rgb[..., 2]) + 4)
+    # Green light bounced onto skin reads as a cast once the screen is gone; only colours near the screen's
+    # are spill, so a green logo or garment keeps its own green
+    spill = distance < matte["far"]
+    rgb[..., 1][spill] = np.minimum(rgb[..., 1], np.maximum(rgb[..., 0], rgb[..., 2]) + 4)[spill]
     out = np.empty(frame.shape[:2] + (4,), np.uint8)
     out[..., :3] = np.clip(rgb, 0, 255)
     out[..., 3] = (alpha * 255).astype(np.uint8)
