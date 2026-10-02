@@ -26,6 +26,25 @@ H.264 *Baseline* at a few Mbps, which smears skin and fine detail before editing
 - [ ] **Android:** Camera → Video → **UHD 4K, 30 fps**; **HDR10+ off**; video stabilisation off on a tripod
 - [ ] Record in the **phone's own camera app**, not a browser, Zoom, Teams or a social app
 
+## Recording in StreamYard, Zoom, Teams or Riverside
+
+For **one person talking to camera, skip these tools**: a phone at 4K or a camera gives far better
+footage. They earn their place for live shows and interviews with guests. When you do use one:
+
+- [ ] **Use the tool's local or separate-track recording**, not the recording of the stream or meeting.
+      The stream recording is what was compressed for broadcast, with the layout and overlays baked in;
+      local recordings capture each person on their own device, at higher quality, without overlays.
+      Whether they're available, and at what resolution, depends on the tool and plan: check its settings
+- [ ] **Turn off name banners, logos, backgrounds and lower thirds** for the recording. The edit adds its
+      own, and burned-in ones have to be cut out or designed around
+- [ ] **Turn off background blur and virtual backgrounds**: they eat into hair and shoulders
+- [ ] **Set camera and recording resolution to the highest available**, at least 1080p
+- [ ] **Use a real camera or a good webcam and an external mic**: a browser can't make a weak webcam sharp
+- [ ] **Turn off the tool's noise suppression** if it lets you; it makes voices sound robotic
+- [ ] **Send the per-person file** (each speaker's own recording), and **check it** with the command in
+      [Check before sending](#check-before-sending): a stream recording usually fails it on bitrate or
+      shows `Constrained Baseline`
+
 ## Camera behaviour
 
 - [ ] On a **tripod**, not handheld
