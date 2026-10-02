@@ -154,6 +154,9 @@ bash ~/.kimi-code/skills/voiceover-video/scripts/setup.sh
 
 ## Use it
 
+**Step by step, from a fresh machine to a finished video, with copy-paste prompts for any agent:**
+[docs/workflow.md](docs/workflow.md).
+
 In Claude Code or Kimi Code CLI:
 
 > make a video out of ~/Downloads/voice-note.m4a
