@@ -1,25 +1,38 @@
 #!/usr/bin/env python3
-"""Brand kits: load and validate a kit, derive the colour tokens every theme reads, check contrast,
-and install a kit's fonts and logos into its own asset folder.
+"""Brand kits: load and validate a kit, derive the colour tokens every theme reads, check contrast
+and glyph coverage, manage the user's named kits, and install a kit's fonts and logos into its own
+asset folder.
 
-  brand_kit.py check   [kit] [--scheme dark|light]  validate and print the contrast report
+  brand_kit.py check   [kit] [--scheme dark|light] [--text FILE]  validate, contrast report, glyph coverage
   brand_kit.py install [kit] [--assets DIR]          copy fonts and logos, fetch Google fonts → assets/kits/<id>/
+  brand_kit.py list                                  every kit in the kits folder, with the default marked
+  brand_kit.py default [name]                        show or set the default kit (config.json → defaultKit)
+  brand_kit.py resolve <name-or-path>                print the kit a name or path resolves to
 
 A kit is a folder holding brand.json (version 2) plus the files it names, or a brand.json path.
+Named kits live in ~/.config/voiceover-video/kits/<name>/ (init_kit.py --name writes there); the
+single-kit ~/.config/voiceover-video/brand.json keeps working as the user's own kit.
 """
 
 import argparse
+import bisect
 import hashlib
 import json
 import re
 import shutil
+import struct
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+import zlib
 from pathlib import Path
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
+CONFIG_DIR = Path.home() / ".config" / "voiceover-video"
+KITS_DIR = CONFIG_DIR / "kits"
+CONFIG_FILE = CONFIG_DIR / "config.json"
+LEGACY_KIT = CONFIG_DIR / "brand.json"
 HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
 FONT_EXTENSIONS = {".woff2": "woff2", ".woff": "woff", ".ttf": "truetype", ".otf": "opentype"}
 LOGO_EXTENSIONS = {".svg", ".png", ".webp"}
@@ -82,11 +95,65 @@ def readable_on(color):
     return "#0b0b0f" if contrast(color, "#0b0b0f") >= contrast(color, "#ffffff") else "#ffffff"
 
 
+def slug(name):
+    """The folder-safe form of a kit or brand name: 'Acme Health' → 'acme-health'."""
+    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "kit"
+
+
+def load_config():
+    try:
+        return json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def save_config(config):
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    CONFIG_FILE.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+
+
+def default_kit():
+    """The kits-folder name config.json points at, or None."""
+    return load_config().get("defaultKit")
+
+
+def find_kit(name):
+    """The kits-folder entry for a name: the folder, or a kit whose brand name matches."""
+    wanted = slug(name)
+    if KITS_DIR.is_dir():
+        for folder in sorted(KITS_DIR.iterdir()):
+            file = folder / "brand.json"
+            if not file.is_file():
+                continue
+            if slug(folder.name) == wanted:
+                return folder
+            try:
+                if slug(json.loads(file.read_text(encoding="utf-8")).get("name", "")) == wanted:
+                    return folder
+            except json.JSONDecodeError:
+                continue
+    raise KitError(f"No kit named {name!r} in {KITS_DIR}", "run init_kit.py --name …, or pick one from brand_kit.py list")
+
+
 def resolve(explicit=None):
-    """The kit to use: an explicit path, ./brand.json, the user's default kit, then the bundled example."""
-    candidates = [Path(explicit).expanduser()] if explicit else []
-    candidates += [Path("brand.json"), Path.home() / ".config" / "voiceover-video" / "brand.json",
-                   SKILL_DIR / "brand.example.json"]
+    """The kit to use: an explicit path or kit name, ./brand.json, the configured default,
+    the legacy single-kit file, then the bundled example."""
+    if explicit:
+        candidate = Path(explicit).expanduser()
+        if (candidate / "brand.json" if candidate.is_dir() else candidate).is_file():
+            return candidate
+        # Not a path to a kit: try it as a name in the kits folder, and fail loud either way —
+        # a mistyped --brand must never render in a silently different brand
+        return find_kit(str(explicit))
+    candidates = [Path("brand.json")]
+    named = default_kit()
+    if named:
+        try:
+            candidates.append(find_kit(named))
+        except KitError:
+            raise KitError(f"config.json names defaultKit {named!r} but there is no such kit",
+                           "set a new default: brand_kit.py default <name from brand_kit.py list>")
+    candidates += [LEGACY_KIT, SKILL_DIR / "brand.example.json"]
     for candidate in candidates:
         if (candidate / "brand.json" if candidate.is_dir() else candidate).is_file():
             return candidate
@@ -162,8 +229,7 @@ def flatten_logos(logos, prefix=""):
 
 
 def kit_id(kit, root):
-    slug = re.sub(r"[^a-z0-9]+", "-", kit.get("name", "kit").lower()).strip("-") or "kit"
-    return f"{slug}-{hashlib.sha1(str(root).encode()).hexdigest()[:8]}"
+    return f"{slug(kit.get('name', 'kit'))}-{hashlib.sha1(str(root).encode()).hexdigest()[:8]}"
 
 
 def palette(kit, scheme=None):
@@ -319,18 +385,297 @@ def download(url, destination):
         raise KitError(f"could not download {url} ({error})", "check the connection and re-run setup.sh")
 
 
+# --- glyph coverage: does the kit's fonts contain every character a text uses? -----------------
+
+def merge_ranges(ranges):
+    merged = []
+    for first, last in sorted(ranges):
+        if merged and first <= merged[-1][1] + 1:
+            merged[-1][1] = max(merged[-1][1], last)
+        else:
+            merged.append([first, last])
+    return [(first, last) for first, last in merged]
+
+
+def in_ranges(ranges, codepoint):
+    i = bisect.bisect_right(ranges, (codepoint, 0x10FFFF))
+    return i > 0 and ranges[i - 1][1] >= codepoint
+
+
+def cmap(path, _cache={}):
+    """Sorted (first, last) codepoint ranges a font covers, via fontTools when it is installed."""
+    if path not in _cache:
+        try:
+            _cache[path] = read_cmap(path)
+        except KitError:
+            raise
+        except OSError as error:
+            raise KitError(f"cannot read font {path} ({error})", "re-run setup.sh to reinstall the kit's fonts")
+    return _cache[path]
+
+
+def read_cmap(path):
+    try:
+        from fontTools.ttLib import TTFont
+    except ImportError:
+        return cmap_stdlib(path)
+    try:
+        with TTFont(str(path), lazy=True) as font:
+            return merge_ranges([(cp, cp) for cp in (font.getBestCmap() or {})])
+    except Exception:  # e.g. a woff2 with no brotli: try the stdlib reader before failing
+        return cmap_stdlib(path)
+
+
+def cmap_stdlib(path):
+    data = path.read_bytes()
+    if data[:4] == b"wOF2":
+        raise KitError(f"cannot check {path.name}: woff2 needs fontTools to unpack",
+                       "pip install fonttools brotli, or use .ttf/.otf/.woff fonts in the kit")
+    if data[:4] == b"wOFF":
+        tables = woff_tables(data)
+    else:
+        offset = struct.unpack_from(">L", data, 12)[0] if data[:4] == b"ttcf" else 0
+        tables = sfnt_tables(data, offset)
+    if "cmap" not in tables:
+        raise KitError(f"cannot check {path.name}: the font has no cmap table",
+                       "use a standard TrueType/OpenType font")
+    return parse_cmap(tables["cmap"], path)
+
+
+def sfnt_tables(data, offset):
+    count = struct.unpack_from(">H", data, offset + 4)[0]
+    tables = {}
+    for i in range(count):
+        tag, _, table_offset, length = struct.unpack_from(">4sLLL", data, offset + 12 + i * 16)
+        tables[tag.decode("latin-1")] = data[table_offset:table_offset + length]
+    return tables
+
+
+def woff_tables(data):
+    count = struct.unpack_from(">H", data, 12)[0]
+    tables = {}
+    for i in range(count):
+        tag, offset, packed, original, _ = struct.unpack_from(">4sLLLL", data, 44 + i * 20)
+        raw = data[offset:offset + packed]
+        tables[tag.decode("latin-1")] = zlib.decompress(raw) if packed != original else raw
+    return tables
+
+
+def parse_cmap(table, path):
+    subtables = []
+    for i in range(struct.unpack_from(">H", table, 2)[0]):
+        _, _, offset = struct.unpack_from(">HHL", table, 4 + i * 8)
+        subtables.append((struct.unpack_from(">H", table, offset)[0], offset))
+    for wanted in (12, 4):  # 12 reaches the supplementary planes; 4 is the BMP one every font has
+        for fmt, offset in subtables:
+            if fmt == wanted:
+                return cmap12(table, offset) if fmt == 12 else cmap4(table, offset)
+    raise KitError(f"cannot check {path.name}: the cmap table is not format 4 or 12",
+                   "use a standard TrueType/OpenType font")
+
+
+def cmap4(table, offset):
+    seg_count = struct.unpack_from(">H", table, offset + 6)[0] // 2
+    ends_at, starts_at = offset + 14, offset + 14 + 2 * seg_count + 2
+    deltas_at, offsets_at = starts_at + 2 * seg_count, starts_at + 4 * seg_count
+    ends = struct.unpack_from(f">{seg_count}H", table, ends_at)
+    starts = struct.unpack_from(f">{seg_count}H", table, starts_at)
+    deltas = struct.unpack_from(f">{seg_count}h", table, deltas_at)
+    covered = []
+    for i, (start, end) in enumerate(zip(starts, ends)):
+        if start == 0xFFFF:
+            continue
+        # A delta segment maps (code + delta) mod 65536; the one codepoint landing on glyph 0 is a hole
+        if struct.unpack_from(">H", table, offsets_at + 2 * i)[0] == 0:
+            gap = (-deltas[i]) % 65536
+            if start <= gap <= end:
+                if start < gap:
+                    covered.append((start, gap - 1))
+                if gap < end:
+                    covered.append((gap + 1, end))
+                continue
+        covered.append((start, end))
+    return merge_ranges(covered)
+
+
+def cmap12(table, offset):
+    count = struct.unpack_from(">L", table, offset + 12)[0]
+    return merge_ranges([struct.unpack_from(">LL", table, offset + 16 + i * 12)[:2] for i in range(count)])
+
+
+def parse_unicode_range(spec):
+    ranges = []
+    for part in spec.split(","):
+        part = part.strip().upper().removeprefix("U+")
+        if "?" in part:
+            ranges.append((int(part.replace("?", "0"), 16), int(part.replace("?", "F"), 16)))
+        elif "-" in part:
+            first, last = part.split("-", 1)
+            ranges.append((int(first, 16), int(last, 16)))
+        else:
+            ranges.append((int(part, 16),) * 2)
+    return merge_ranges(ranges)
+
+
+def font_faces(kit, root):
+    """(role, family, faces, skipped) per kit font; a face is (file, unicode ranges or None).
+
+    Google families are read from the installed assets (their css splits coverage into per-subset
+    faces with unicode-range); a kit that was never installed skips those roles with a note.
+    """
+    result = []
+    assets = None
+    assets_known = False
+    for role, spec in kit["fonts"].items():
+        if "file" in spec:
+            family = spec.get("family", Path(spec["file"]).stem)
+            result.append((role, family, [(root / spec["file"], None)], None))
+            continue
+        family = spec["google"]
+        if not assets_known:
+            assets = installed(kit, root)
+            assets_known = True
+        if assets is None:
+            result.append((role, family, [], "not installed"))
+            continue
+        faces = []
+        css_file = assets / "fonts.css"
+        css = css_file.read_text(encoding="utf-8") if css_file.is_file() else ""
+        for block in css.split("@font-face"):
+            name = re.search(r"font-family:\s*'([^']+)'", block)
+            source = re.search(r"url\('?([^')]+)'?\)", block)
+            if not name or not source or name.group(1) != family:
+                continue
+            spread = re.search(r"unicode-range:\s*([^;]+)", block)
+            faces.append((assets / source.group(1), parse_unicode_range(spread.group(1)) if spread else None))
+        result.append((role, family, faces, None if faces else "not found in the installed fonts.css"))
+    return result
+
+
+def show_chars(chars, limit=16):
+    shown = [f"{ch} (U+{ord(ch):04X})" for ch in chars[:limit]]
+    return ", ".join(shown) + (f" … and {len(chars) - limit} more" if len(chars) > limit else "")
+
+
+def glyph_report(kit, root, text_file):
+    """Coverage lines for the characters a text uses, plus (uncovered, skipped) for the exit code."""
+    try:
+        text = Path(text_file).expanduser().read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as error:
+        raise KitError(f"cannot read --text {text_file} ({error})",
+                       "pass a readable UTF-8 file, e.g. the script or captions")
+    chars = sorted({ch for ch in text if ch.isprintable() and not ch.isspace()})
+    lines = [f"glyph coverage: {text_file} ({len(chars)} distinct characters)"]
+    missing_by_role = {}
+    skipped = []
+    for role, family, faces, note in font_faces(kit, root):
+        if note:
+            skipped.append(role)
+            lines.append(f"  fonts.{role} ({family}): skipped — {note}; run setup.sh, then re-check")
+            continue
+        missing = [ch for ch in chars
+                   if not any((spread is None or in_ranges(spread, ord(ch))) and in_ranges(cmap(file), ord(ch))
+                              for file, spread in faces)]
+        missing_by_role[role] = missing
+        state = "all covered" if not missing else f"lacks {len(missing)}: {show_chars(missing)}"
+        lines.append(f"  fonts.{role} ({family}): {state}")
+    # A character is only a problem when no checked font in the kit covers it
+    uncovered = [ch for ch in chars
+                 if missing_by_role and all(ch in missing for missing in missing_by_role.values())]
+    if "fallback" in missing_by_role:
+        rescued = [ch for ch in chars
+                   if ch not in missing_by_role["fallback"]
+                   and any(ch in missing for role, missing in missing_by_role.items() if role != "fallback")]
+        if rescued:
+            lines.append(f"  covered by fonts.fallback, deliberately: {show_chars(rescued)}")
+    return lines, uncovered, skipped
+
+
+def font_summary(kit):
+    def family(spec):
+        return spec.get("google") or spec.get("family") or Path(spec.get("file", "?")).stem
+    return ", ".join(f"{role}={family(spec)}" for role, spec in kit.get("fonts", {}).items())
+
+
+def logo_summary(kit):
+    names = [name for name, _ in flatten_logos(kit.get("logos", {}))]
+    return ", ".join(names) if names else "none"
+
+
+def command_list() -> int:
+    entries = []
+    if KITS_DIR.is_dir():
+        entries += [folder for folder in sorted(KITS_DIR.iterdir()) if (folder / "brand.json").is_file()]
+    if LEGACY_KIT.is_file():
+        entries.append(LEGACY_KIT)
+    if not entries:
+        print(f"No kits in {KITS_DIR}")
+        print("Next: create one with init_kit.py --name <YourBrand>")
+        return 0
+    named = default_kit()
+    for folder in entries:
+        label = folder.name if folder.parent == KITS_DIR else "brand.json (legacy single kit)"
+        is_default = (folder.name == named) if named else (folder == LEGACY_KIT)
+        try:
+            kit, _ = load(folder)
+        except KitError as error:
+            print(f"{label} · broken: {error.problem} ({error.fix})")
+            continue
+        colors = palette(kit)
+        line = (f"{label} · {kit.get('name', 'kit')} · {colors['scheme']} · {colors['primary']} on {colors['bg']}"
+                f" · fonts: {font_summary(kit)} · logos: {logo_summary(kit)} · {folder}")
+        print(line + ("  [default]" if is_default else ""))
+    if named and not any(folder.parent == KITS_DIR and folder.name == named for folder in entries):
+        print(f"warning: config.json names defaultKit {named!r} but there is no such kit", file=sys.stderr)
+    print("Next: pick one with --brand <name>; change the default with brand_kit.py default <name>")
+    return 0
+
+
+def command_default(name) -> int:
+    if name is None:
+        named = default_kit()
+        if named:
+            print(f"default kit: {named} → {find_kit(named)}")
+        else:
+            print("no default kit set" + (f"; until one is, {LEGACY_KIT} is used" if LEGACY_KIT.is_file() else ""))
+        print("Next: brand_kit.py default <name from brand_kit.py list>")
+        return 0
+    folder = find_kit(name)
+    config = load_config()
+    config["defaultKit"] = folder.name
+    save_config(config)
+    kit, _ = load(folder)
+    print(f"default kit: {folder.name} ({kit.get('name', 'kit')}) · written to {CONFIG_FILE}")
+    print("Next: brand_kit.py list shows it marked [default]")
+    return 0
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Validate and install voiceover-video brand kits.")
+    parser = argparse.ArgumentParser(description="Validate, install and manage voiceover-video brand kits.")
     sub = parser.add_subparsers(dest="command", required=True)
     check_parser = sub.add_parser("check", help="validate a kit and print its tokens and contrast report")
-    check_parser.add_argument("kit", type=Path, nargs="?", help="kit folder or brand.json (default: resolved like setup.sh)")
+    check_parser.add_argument("kit", nargs="?", help="kit name, kit folder or brand.json (default: resolved like setup.sh)")
     check_parser.add_argument("--scheme", choices=["dark", "light"], help="the canvas a theme asks for")
+    check_parser.add_argument("--text", type=Path, help="report the characters in this file the kit's fonts lack")
     install_parser = sub.add_parser("install", help="install a kit's fonts and logos into the skill's assets")
-    install_parser.add_argument("kit", type=Path, nargs="?", help="kit folder or brand.json (default: resolved like setup.sh)")
+    install_parser.add_argument("kit", nargs="?", help="kit name, kit folder or brand.json (default: resolved like setup.sh)")
     install_parser.add_argument("--assets", type=Path, default=SKILL_DIR / "assets")
+    sub.add_parser("list", help="list the kits in the kits folder, with the default marked")
+    default_parser = sub.add_parser("default", help="show or set the default kit")
+    default_parser.add_argument("name", nargs="?", help="kit to make the default (a name from brand_kit.py list)")
+    resolve_parser = sub.add_parser("resolve", help="print the kit a name or path resolves to")
+    resolve_parser.add_argument("kit", help="kit name, kit folder or brand.json")
     args = parser.parse_args()
 
     try:
+        if args.command == "list":
+            return command_list()
+        if args.command == "default":
+            return command_default(args.name)
+        if args.command == "resolve":
+            print(Path(resolve(args.kit)).resolve())
+            print("Next: pass this as --brand to setup.sh, fill_template.py, or brand_kit.py check/install")
+            return 0
         kit, root = load(resolve(args.kit))
         if args.command == "install":
             target = install(kit, root, args.assets)
@@ -346,9 +691,23 @@ def main() -> int:
             verdict = "ok" if ratio >= minimum else f"BELOW {minimum}:1"
             failing += ratio < minimum
             print(f"  {ratio:5.2f}:1  {label}  {verdict}")
+        uncovered = []
+        skipped = []
+        if args.text:
+            lines, uncovered, skipped = glyph_report(kit, root, args.text)
+            for line in lines:
+                print(line)
         if failing:
             print(f"{failing} contrast pair(s) below WCAG AA", file=sys.stderr)
             print("Next: darken or lighten colors.primary or colors.text, or set them explicitly in brand.json", file=sys.stderr)
+        if uncovered:
+            # With a skipped (uninstalled) font this is a warning: that font may cover them
+            stream = sys.stderr if not skipped else sys.stdout
+            print(f"warning: no checked font covers {show_chars(uncovered)}" if skipped else
+                  f"{len(uncovered)} character(s) covered by no font in the kit: {show_chars(uncovered)}", file=stream)
+            if not skipped:
+                print("Next: add fonts.fallback naming a family that covers them, or change the text", file=sys.stderr)
+        if failing or (uncovered and not skipped):
             return 1
         print("Next: render the brand board, then show it for approval")
         return 0

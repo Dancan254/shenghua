@@ -21,6 +21,8 @@ machine, and each stays under its own licence.
 | [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx) *(script mode, `setup.sh --voices`)* | offline text-to-speech for character voices | MIT |
 | [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) model and voices, via kokoro-onnx's release files | the voices themselves | Apache 2.0 — commercial use allowed |
 | [ONNX Runtime](https://github.com/microsoft/onnxruntime) *(installed with kokoro-onnx)* | running the voice model on CPU | MIT |
+| [opencv-python-headless](https://github.com/opencv/opencv-python) *(optional, pip, `setup.sh --vision`)* | face detection for presenter framing and photo cropping | Apache 2.0 |
+| [YuNet face detector](https://github.com/opencv/opencv_zoo/tree/master/models/face_detection_yunet) `face_detection_yunet_2023mar.onnx` *(optional, downloaded by `setup.sh --vision`)* | the face detection model | Apache 2.0 |
 | [yt-dlp](https://github.com/yt-dlp/yt-dlp) *(optional, not installed by setup.sh)* | YouTube search and downloads; fetches its own [EJS](https://github.com/yt-dlp/yt-dlp/wiki/EJS) challenge solver on first use | Unlicense |
 
 ## Photos, clips and logos in your videos

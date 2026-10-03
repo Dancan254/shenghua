@@ -1,0 +1,183 @@
+#!/usr/bin/env bash
+# render-chunks.sh [--blur N] [--resolution 1080|4k] [--force] [--workers N] [--chunk SECONDS] [--music FILE]
+#                  <index.html> <work-dir> <duration-seconds> <voice-audio> <out.mp4>
+#
+# Renders and encodes in chunks (default 30 s) so peak scratch is one chunk of frames (~1.6 GB)
+# instead of the whole video (~21 GB of PNGs for a 7-minute final): render a chunk's frames, encode
+# them with mix-encode.sh's settings, delete them, move on. Chunks are concatenated without
+# re-encoding and the audio is mixed and muxed once. A killed run re-encodes only chunks whose mp4 is
+# missing or has the wrong frame count; a chunk killed mid-render resumes frame-by-frame.
+set -euo pipefail
+
+RF_OPTS=()
+FORCE=0
+WORKERS=10
+CHUNK=30
+MUSIC=""
+while [[ "${1:-}" == --* ]]; do
+  case "$1" in
+    --blur) RF_OPTS+=(--blur "${2:?--blur needs a value}"); shift 2 ;;
+    --resolution) RF_OPTS+=(--resolution "${2:?--resolution needs a value}"); shift 2 ;;
+    --force) FORCE=1; shift ;;
+    --workers) WORKERS="${2:?--workers needs a value}"; shift 2 ;;
+    --chunk) CHUNK="${2:?--chunk needs a value}"; shift 2 ;;
+    --music) MUSIC="${2:?--music needs a value}"; shift 2 ;;
+    *) echo "Unknown option: $1"
+       echo "Next: options are --blur N, --resolution 1080|4k, --force, --workers N, --chunk SECONDS and --music FILE"
+       exit 1 ;;
+  esac
+done
+
+if (( $# != 5 )); then
+  echo "Usage: render-chunks.sh [options] <index.html> <work-dir> <duration-seconds> <voice-audio> <out.mp4>"
+  echo "Next: pass the five positional arguments; options come first"
+  exit 1
+fi
+HTML="$1"
+WORK="$2"
+DURATION="$3"
+VOICE="$4"
+OUT="$5"
+MUSIC="${MUSIC:-$WORK/music.wav}"
+FPS=30
+SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+[[ -f "$HTML" ]] || { echo "No such composition: $HTML"; echo "Next: run fill_template.py first"; exit 1; }
+[[ -f "$VOICE" ]] || { echo "No such voice audio: $VOICE"; echo "Next: pass the voice.wav from trim_take.py (or the original recording)"; exit 1; }
+[[ -f "$WORK/sfx.wav" ]] || { echo "No sfx.wav in $WORK"; echo "Next: run synth_audio.py"; exit 1; }
+if ! [[ "$WORKERS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "workers must be a positive integer, got: $WORKERS"
+  echo "Next: pass a positive integer like 8 or 10"
+  exit 1
+fi
+if ! [[ "$CHUNK" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+  echo "--chunk must be a positive number of seconds, got: $CHUNK"
+  echo "Next: e.g. --chunk 30"
+  exit 1
+fi
+read -r TOTAL CHUNK_FRAMES <<< "$(python3 -c "
+import math
+print(math.ceil($DURATION * $FPS), max(1, round($CHUNK * $FPS)))")"
+
+EXT=png
+[[ "${VV_QUALITY:-}" == "draft" ]] && EXT=jpg
+
+CHUNKS_DIR="$WORK/chunks"
+mkdir -p "$CHUNKS_DIR" "$WORK/frames"
+trap 'rm -f "$WORK/premix.wav"' EXIT
+
+# A finished chunk has exactly its frames in the container; a killed encode leaves fewer and is redone
+chunk_ok() {
+  [[ -f "$1" ]] || return 1
+  local n
+  n=$(ffprobe -v error -select_streams v:0 -show_entries stream=nb_frames -of csv=p=0 "$1" 2>/dev/null)
+  [[ "$n" =~ ^[0-9]+$ && "$n" == "$2" ]]
+}
+
+CHUNK_COUNT=$(( (TOTAL + CHUNK_FRAMES - 1) / CHUNK_FRAMES ))
+(( FORCE )) && RF_OPTS+=(--force)
+
+for (( c = 0; c < CHUNK_COUNT; c++ )); do
+  FIRST=$(( c * CHUNK_FRAMES ))
+  LAST=$(( FIRST + CHUNK_FRAMES < TOTAL ? FIRST + CHUNK_FRAMES : TOTAL ))
+  WANT=$(( LAST - FIRST ))
+  CHUNK_MP4="$CHUNKS_DIR/$(printf 'chunk-%03d.mp4' "$c")"
+  if (( ! FORCE )) && chunk_ok "$CHUNK_MP4" "$WANT"; then
+    echo "chunk $(( c + 1 ))/$CHUNK_COUNT already encoded ($WANT frames) — skipped"
+    continue
+  fi
+  bash "$SCRIPTS_DIR/render-frames.sh" ${RF_OPTS[@]+"${RF_OPTS[@]}"} \
+    "$HTML" "$WORK/frames" "$DURATION" "$WORKERS" "$FIRST" "$LAST"
+  # Same video settings as mix-encode.sh, minus the audio; the tmp file keeps a killed encode
+  # from looking complete, and chunk_ok's frame count is the second line of defence
+  ffmpeg -v error -y -framerate "$FPS" -start_number "$FIRST" -i "$WORK/frames/f%05d.$EXT" \
+    -frames:v "$WANT" -an \
+    -vf "scale=out_color_matrix=bt709:out_range=tv:flags=lanczos+accurate_rnd+full_chroma_int,format=yuv420p" \
+    -c:v libx264 -preset slow -crf 16 -maxrate 16M -bufsize 32M -x264-params aq-mode=3 \
+    -colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv \
+    "$CHUNK_MP4.tmp.mp4"
+  mv "$CHUNK_MP4.tmp.mp4" "$CHUNK_MP4"
+  for (( f = FIRST; f < LAST; f++ )); do rm -f "$WORK/frames/$(printf 'f%05d' "$f").$EXT"; done
+  echo "chunk $(( c + 1 ))/$CHUNK_COUNT encoded ($WANT frames)"
+done
+
+# Identical codec and settings in every chunk, so the concat demuxer can copy without re-encoding
+CONCAT="$CHUNKS_DIR/concat.txt"
+: > "$CONCAT"
+for (( c = 0; c < CHUNK_COUNT; c++ )); do
+  printf "file '%s'\n" "$(printf 'chunk-%03d.mp4' "$c")" >> "$CONCAT"
+done
+ffmpeg -v error -y -f concat -safe 0 -i "$CONCAT" -c copy "$CHUNKS_DIR/video.mp4"
+
+# The audio half of mix-encode.sh, unchanged: keep the two in sync when one changes
+shopt -s nullglob
+CLIP_WAVS=("$WORK"/clips/*.wav)
+shopt -u nullglob
+
+INPUTS=(-i "$VOICE")
+FILTER="[0:a]aresample=48000,apad=whole_dur=${DURATION},highpass=f=80,afftdn=nr=12:nf=-40:tn=1,deesser=i=0.4,equalizer=f=3500:t=q:w=1.2:g=2,acompressor=threshold=-18dB:ratio=3:attack=5:release=120,loudnorm=I=-16:TP=-2,aresample=48000,asplit=3[voice][vkey][ckey];"
+LAYERS="[voice]"
+COUNT=1
+NEXT=1
+
+if (( ${#CLIP_WAVS[@]} > 0 )); then
+  CLIP_LABELS=""
+  for wav in "${CLIP_WAVS[@]}"; do
+    INPUTS+=(-i "$wav")
+    FILTER+="[${NEXT}:a]aresample=48000[c${NEXT}];"
+    CLIP_LABELS+="[c${NEXT}]"
+    NEXT=$(( NEXT + 1 ))
+  done
+  FILTER+="${CLIP_LABELS}amix=inputs=${#CLIP_WAVS[@]}:normalize=0:duration=longest,apad=whole_dur=${DURATION},asplit=2[craw][cclip];"
+  FILTER+="[craw][ckey]sidechaincompress=threshold=0.03:ratio=6:attack=15:release=250[clips];"
+  FILTER+="[vkey][cclip]amix=inputs=2:normalize=0:duration=first[key];"
+  LAYERS+="[clips]"
+  COUNT=$(( COUNT + 1 ))
+else
+  FILTER+="[ckey]anullsink;[vkey]anull[key];"
+fi
+
+if [[ -f "$MUSIC" ]]; then
+  INPUTS+=(-i "$MUSIC")
+  FILTER+="[${NEXT}:a]aresample=48000,volume=0.22[mus];[mus][key]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=400[duck];"
+  LAYERS+="[duck]"
+  COUNT=$(( COUNT + 1 ))
+  NEXT=$(( NEXT + 1 ))
+else
+  FILTER+="[key]anullsink;"
+fi
+
+INPUTS+=(-i "$WORK/sfx.wav")
+FILTER+="[${NEXT}:a]aresample=48000,volume=0.5[fx];"
+LAYERS+="[fx]"
+COUNT=$(( COUNT + 1 ))
+
+ffmpeg -v error -y "${INPUTS[@]}" -filter_complex "\
+${FILTER}\
+${LAYERS}amix=inputs=${COUNT}:normalize=0:duration=longest,alimiter=limit=0.95,aresample=48000,atrim=0:${DURATION}[out]" \
+  -map "[out]" -c:a pcm_f32le "$WORK/premix.wav"
+
+# Measuring first lets pass 2 apply one static gain; loudnorm linear=true falls back to dynamic when the limited premix can't take the gain within TP
+MEASURED=$(ffmpeg -hide_banner -nostats -i "$WORK/premix.wav" -af loudnorm=I=-14:TP=-1.5:LRA=11:print_format=json -f null - 2>&1) || {
+  printf '%s\n' "$MEASURED" | tail -n 15 >&2
+  echo "loudnorm measurement failed on $WORK/premix.wav"; echo "Next: fix the ffmpeg error above and check that the voice file is valid audio"; exit 1; }
+GAIN_DB=$(printf '%s\n' "$MEASURED" | python3 -c '
+import json, re, sys
+match = re.search(r"\{[^{}]*\"input_i\"[^{}]*\}", sys.stdin.read(), re.S)
+if not match:
+    sys.exit(1)
+print("{:.2f}".format(-14 - float(json.loads(match.group(0))["input_i"])))
+') || { echo "Could not parse loudnorm measurement JSON for $WORK/premix.wav"; echo "Next: run ffmpeg -i premix.wav -af loudnorm=print_format=json -f null - and check its output"; exit 1; }
+
+# 0.8414 = -1.5 dBFS ceiling; the limiter catches peaks the gain pushes over it
+ffmpeg -v error -y -i "$WORK/premix.wav" \
+  -af "volume=${GAIN_DB}dB,alimiter=limit=0.8414:level=disabled,aresample=48000,apad=whole_dur=${DURATION},atrim=0:${DURATION}" "$WORK/mix.wav"
+
+ffmpeg -v error -y -i "$CHUNKS_DIR/video.mp4" -i "$WORK/mix.wav" \
+  -map 0:v -map 1:a -c:v copy \
+  -c:a aac -b:a 256k -t "$DURATION" -movflags +faststart "$OUT"
+
+LOUDNESS=$(ffmpeg -hide_banner -i "$WORK/mix.wav" -af ebur128 -f null - 2>&1 | awk '/I:/{v=$2} END{print v}')
+INFO=$(ffprobe -v error -show_entries stream=width,height:format=duration,size -of default=nw=1 "$OUT" | tr '\n' ' ')
+echo "$(basename "$OUT") · ${LOUDNESS} LUFS · ${INFO}"
+echo "Next: extract a frame from $(basename "$OUT") at a shot you changed and verify it"

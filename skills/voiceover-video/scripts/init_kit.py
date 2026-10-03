@@ -20,8 +20,6 @@ from pathlib import Path
 
 import brand_kit
 
-DEFAULT_DIR = Path.home() / ".config" / "voiceover-video"
-
 PRESETS = {
     "midnight-pink": {"bg": "#12121f", "primary": "#f0196a", "text": "#e6e6e6"},
     "carbon-cyan": {"bg": "#0d1117", "primary": "#21d4c2", "text": "#e4eaf2"},
@@ -137,7 +135,7 @@ def main() -> int:
     parser.add_argument("--background", choices=sorted(brand_kit.BACKGROUND_STYLES - {"image"}), default="theme")
     parser.add_argument("--background-image", help="background image file; sets the background style to image")
     parser.add_argument("--output-dir", help="where finished videos go")
-    parser.add_argument("--out", type=Path, help=f"kit folder to write (default: {DEFAULT_DIR}, or the --from file's folder)")
+    parser.add_argument("--out", type=Path, help="kit folder to write (default: ~/.config/voiceover-video/kits/<name>, or the --from file's folder)")
     parser.add_argument("--force", action="store_true", help="replace an existing kit's brand.json")
     parser.add_argument("--skip-font-check", action="store_true", help="don't verify Google font names")
     args = parser.parse_args()
@@ -146,7 +144,8 @@ def main() -> int:
         print("Pass --name for a new kit, or --from to convert a version-1 brand.json", file=sys.stderr)
         print("Next: e.g. init_kit.py --name Acme --primary '#e50914' --bg '#0a0a0a'", file=sys.stderr)
         return 1
-    kit_dir = (args.out or (args.source.expanduser().parent if args.source else DEFAULT_DIR)).expanduser()
+    kit_dir = (args.out or (args.source.expanduser().parent if args.source
+                            else brand_kit.KITS_DIR / brand_kit.slug(args.name))).expanduser()
     target = kit_dir / "brand.json"
     converting_in_place = bool(args.source) and target.resolve() == args.source.expanduser().resolve()
     if target.exists() and not args.force and not converting_in_place:
@@ -170,6 +169,8 @@ def main() -> int:
     target.write_text(json.dumps(kit, indent=2) + "\n", encoding="utf-8")
     colors = brand_kit.palette(kit)
     print(f"{target} · {kit['name']} · {colors['primary']} on {colors['bg']} · {colors['scheme']}")
+    if not args.source and not brand_kit.default_kit():
+        print(f"tip: brand_kit.py default {kit_dir.name} makes this the default kit")
     print(f"Next: bash setup.sh {kit_dir}, then render the brand board for approval")
     return 0
 

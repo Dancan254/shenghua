@@ -3,6 +3,8 @@
 #
 # Writes the camera frames for each face shot to <work-dir>/face/fNNNNN.jpg, numbered by edit frame,
 # so frame N of the edit shows frame N of the recording and voice and lips stay in sync.
+# When <work-dir>/take.json exists (trim_take.py ran), the from/to times are edit times and the
+# source seek is shifted by its firstFrame; without it the video is read untrimmed, as before.
 set -euo pipefail
 
 VIDEO="$1"
@@ -35,25 +37,32 @@ ranges=()
 # Validate every pair before extracting any, so a bad sign-off range doesn't leave a half-written face/
 while (( $# >= 2 )); do
   FROM="$1"; TO="$2"; shift 2
-  RANGE=$(python3 - "$FROM" "$TO" "$LENGTH" "$FPS" <<'PY'
-import math, sys
-start, end, length, fps = (float(v) for v in sys.argv[1:])
+  RANGE=$(python3 - "$FROM" "$TO" "$LENGTH" "$FPS" "$WORK/take.json" <<'PY'
+import json, math, os, sys
+start, end, length, fps = (float(v) for v in sys.argv[1:5])
+# trim_take.py cut the take so edit t=0 is source frame firstFrame; face frames stay edit-numbered
+offset = 0
+take_path = sys.argv[5]
+if os.path.isfile(take_path):
+    with open(take_path, encoding="utf-8") as handle:
+        take = json.load(handle)
+    offset = int(take["firstFrame"])
+    length = float(take["duration"])
 if not 0 <= start < end:
     sys.exit(f"Face range {start}-{end} is empty or negative")
 if end > length:
-    sys.exit(f"Face range ends at {end}s but the recording is only {length:.2f}s")
+    sys.exit(f"Face range ends at {end}s but the take is only {length:.2f}s")
 first = math.floor(start * fps)
 # renderAt rounds t*30, so the frame just before the shot's out point can be ceil(end*30)
 last = min(math.ceil(end * fps), math.ceil(length * fps) - 1)
-print(first, last - first + 1, f"{first / fps:.6f}")
+print(first, last - first + 1, f"{(offset + first) / fps:.6f}")
 PY
-  ) || { echo "Next: end the face shot at or before the recording's length"; exit 1; }
+  ) || { echo "Next: end the face shot at or before the take's length (after trimming, the take.json duration)"; exit 1; }
   labels+=("${FROM}-${TO}s")
   ranges+=("$RANGE")
 done
 
 mkdir -p "$WORK/face"
-started=$(date +%s)
 expected=0
 
 for i in "${!ranges[@]}"; do
@@ -65,7 +74,18 @@ for i in "${!ranges[@]}"; do
   expected=$(( expected + COUNT ))
 done
 
-written=$(find "$WORK/face" -name 'f*.jpg' -newermt "@$started" | wc -l)
+# Every expected filename is known, so count those; portable where find -newermt "@…" is GNU-only
+written=$(python3 - "$WORK/face" "${ranges[@]}" <<'PY'
+import os, sys
+d = sys.argv[1]
+n = 0
+for spec in sys.argv[2:]:
+    first, count = spec.split()[:2]
+    n += sum(os.path.isfile(os.path.join(d, f"f{f:05d}.jpg"))
+             for f in range(int(first), int(first) + int(count)))
+print(n)
+PY
+)
 echo "$written/$expected face frames → $WORK/face"
 if (( written < expected )); then
   echo "Next: the recording ran out early; end the face shot sooner and re-run with the same pairs"

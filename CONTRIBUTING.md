@@ -43,11 +43,16 @@ ln -sfn "$PWD/skills/voiceover-video" ~/.claude/skills/voiceover-video
 
 1. **Branch from `main`:** `feat/count-up-block`, `fix/mix-duration`, `docs/branding-guide`.
 2. **Keep it to one concern.** A new block and a refactor of the mixer are two pull requests.
-3. **Respect the invariants** in [AGENTS.md](AGENTS.md) — determinism, cue coverage, full-duration mix,
+3. **Bump the version in the same PR.** Releases publish only when the manifests' version changes, so a
+   fix that ships without a bump never reaches installed plugins. Bump the **patch** version for fixes
+   (2.3.0 → 2.3.1) and the **minor** version for features (2.3.0 → 2.4.0), in both
+   `.claude-plugin/marketplace.json` and `.kimi-plugin/plugin.json`. CI flags a PR that changes
+   `skills/**` without a version bump.
+4. **Respect the invariants** in [AGENTS.md](AGENTS.md) — determinism, cue coverage, full-duration mix,
    bitrate cap, nothing third-party committed.
-4. **Verify on a clean copy** using the procedure in [AGENTS.md](AGENTS.md#how-to-verify-a-change). A
+5. **Verify on a clean copy** using the procedure in [AGENTS.md](AGENTS.md#how-to-verify-a-change). A
    cached `assets/` or `node_modules/` hides broken setup.
-5. **Look at the output.** Attach the contact sheet (and a GIF or frame for visual changes) to the PR.
+6. **Look at the output.** Attach the contact sheet (and a GIF or frame for visual changes) to the PR.
 
 ### Adding a scene block
 

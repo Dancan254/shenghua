@@ -21,11 +21,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      # fetch-depth 0: the version-bump check diffs against the base branch and reads the release tags
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
+          cache: pip
+          cache-dependency-path: .github/workflows/smoke.yml
 
       - uses: actions/setup-node@v7
         with:
@@ -51,6 +56,32 @@ jobs:
             exit 1
           fi
 
+      # A release only ships when a manifest version moves, so a skills/ fix without a bump never reaches an install
+      - name: skills/ changes move the manifest version past the latest release
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          if ! git diff --name-only "origin/${{ github.base_ref }}...HEAD" | grep -q '^skills/'; then
+            echo "no skills/ changes; the manifest version may stay"
+            exit 0
+          fi
+          latest=$(git tag -l 'v*' --sort=-version:refname | head -1)
+          if [[ -z "$latest" ]]; then
+            echo "no release tags yet; nothing to compare"
+            exit 0
+          fi
+          python3 - "$latest" <<'PY'
+          import json, re, sys
+          latest = tuple(int(p) for p in re.findall(r"\d+", sys.argv[1])[:3])
+          version = json.load(open(".claude-plugin/plugin.json"))["version"]
+          current = tuple(int(p) for p in re.findall(r"\d+", version)[:3])
+          if current <= latest:
+              sys.exit(f"::error::skills/ changed but the manifest version {version} has not moved past the latest "
+                       f"release {sys.argv[1]}; bump the patch version (fix) or minor version (feature) in "
+                       f".claude-plugin/plugin.json, .claude-plugin/marketplace.json and .kimi-plugin/plugin.json")
+          print(f"manifest version {version} is past {sys.argv[1]}")
+          PY
+
       - name: Syntax-check shell scripts
         run: |
           set -euo pipefail
@@ -69,6 +100,37 @@ jobs:
           git ls-files '*.py' | while read -r file; do
             python3 -m py_compile "$file" || { echo "::error file=$file::python syntax error"; exit 1; }
           done
+
+      # The macOS job runs these scripts; BSD find has no -newermt, so a GNU-only flag must fail here, not on a Mac
+      - name: Scripts use no GNU-only flags
+        run: |
+          python3 - "$SKILL/scripts" <<'PY'
+          import pathlib, sys
+          bad = 0
+          for path in sorted(pathlib.Path(sys.argv[1]).glob("*.sh")):
+              for number, line in enumerate(path.read_text().splitlines(), 1):
+                  if "-newermt" in line.split("#", 1)[0]:
+                      print(f"::error file={path},line={number}::find -newermt is GNU-only; count frames by filename like extract_face.sh does")
+                      bad += 1
+          sys.exit(1 if bad else 0)
+          PY
+
+      # AGENTS.md invariant 1: a CSS animation runs on the wall clock, not the GSAP timeline renderAt(t) seeks,
+      # so two renders of one frame can differ; drive every time-based effect from t like renderText() does
+      - name: Themes use no CSS animations
+        run: |
+          python3 - "$SKILL/templates/themes" <<'PY'
+          import pathlib, re, sys
+          bad = 0
+          for path in sorted(pathlib.Path(sys.argv[1]).glob("*.css")):
+              # Keep the newlines of a stripped comment, so reported line numbers still match the file
+              text = re.sub(r"/\*.*?\*/", lambda m: "\n" * m.group(0).count("\n"), path.read_text(), flags=re.S)
+              for number, line in enumerate(text.splitlines(), 1):
+                  if re.search(r"@keyframes|(?<![-\w])animation\s*:", line):
+                      print(f"::error file={path},line={number}::CSS animation breaks deterministic renders; drive it from t like renderText() does")
+                      bad += 1
+          sys.exit(1 if bad else 0)
+          PY
 
       # AGENTS.md invariant 10: themes take every colour from the kit, so any brand renders in any theme
       - name: Themes use only brand colours
@@ -100,6 +162,12 @@ jobs:
           for kit in "$SKILL/brand.example.json" "$SKILL"/examples/kits/*/; do
             python3 "$SKILL/scripts/brand_kit.py" check "$kit"
           done
+
+      - name: Install the test dependencies
+        run: pip install numpy
+
+      - name: Run the unit tests
+        run: python3 -m unittest discover -s "$SKILL/tests" -t "$SKILL"
 
   smoke:
     needs: lint
@@ -169,8 +237,14 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/smoke"
-          espeak-ng -s 150 -w "$RUNNER_TEMP/smoke/clip.wav" "Cache your queries, then measure. Slow code hides in plain sight."
+          # ~10 s: the stock demo shots are hard-timed to 6.1 s+, so a shorter clip leaves s03 without a window
+          espeak-ng -s 150 -w "$RUNNER_TEMP/smoke/clip.wav" "Cache your queries, then measure. Slow code hides in plain sight. A profile shows exactly where the time goes, so you fix the real bottleneck first."
           duration=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$RUNNER_TEMP/smoke/clip.wav")
+          python3 - "$duration" <<'PY'
+          import sys
+          d = float(sys.argv[1])
+          sys.exit(f"::error::the smoke clip is {d:.2f}s; the demo shots need at least 9s — lengthen the text" if d < 9 else 0)
+          PY
           echo "DURATION=$duration" >> "$GITHUB_ENV"
           echo "clip is ${duration}s"
 
@@ -185,10 +259,72 @@ jobs:
           set -euo pipefail
           S="$SKILL/scripts"; W="$RUNNER_TEMP/smoke/work"
           python3 "$S/fill_template.py" "$W" "$DURATION" --brand "$SKILL/examples/kits/northwind"
-          node "$S/render.js" stills "$W/index.html" "$W/stills" 0.5,1.5,2.5
+          node "$S/render.js" stills "$W/index.html" "$W/stills" 0.5,2.0,3.5,5.5,8.0
           bash "$S/contact-sheet.sh" "$W/stills" "$W/contact.jpg"
           node "$S/render.js" cues "$W/index.html" "$W/cues.json"
-          # render.js check is omitted: the stock demo shots are hard-timed to 6.1 s+, so a shorter clip leaves s03 empty
+
+      - name: Check the default composition
+        run: node "$SKILL/scripts/render.js" check "$RUNNER_TEMP/smoke/work/index.html"
+
+      # A check that never fails is no check: a headline blown past the frame edge must exit 1
+      - name: Prove check catches a clipped headline
+        run: |
+          set -euo pipefail
+          S="$SKILL/scripts"; W="$RUNNER_TEMP/smoke/work"
+          cp "$W/index.html" "$W/clipped.html"
+          python3 - "$W/clipped.html" <<'PY'
+          import re, sys
+          path = sys.argv[1]
+          html = open(path).read()
+          html, n = re.subn(r'(id="s01a" style="top:540px;)font-size:250px', r"\1font-size:900px", html)
+          assert n == 1, "the s01a demo headline moved; update the anchor"
+          open(path, "w").write(html)
+          PY
+          if node "$S/render.js" check "$W/clipped.html"; then
+            echo "::error::render.js check passed a headline clipped past the frame edge; the check is broken"
+            exit 1
+          fi
+          echo "check failed on the clipped headline, as it must"
+
+      # Feeds favour 1:1 and 4:5; canvas-relative shots (% and vmin) stay inside the safe zone on either
+      - name: Check square and portrait fills
+        run: |
+          set -euo pipefail
+          S="$SKILL/scripts"; M="$RUNNER_TEMP/smoke/matrix"; mkdir -p "$M"
+          cat > "$M/inject.py" <<'PY'
+          # Canvas-relative demo shots for the non-vertical formats, as an agent would author them for a feed cut
+          import re, sys
+          path = sys.argv[1]
+          shots = """<!-- BEGIN SHOTS -->
+          <section class="shot" id="f1">
+            <div class="cx kick" id="f1k" style="top:14%">the feed cut</div>
+            <div class="cx xl" id="f1a" style="top:26%;font-size:20vmin">SQUARE</div>
+            <div class="cx h2" id="f1b" style="top:48%">same edit, new canvas</div>
+          </section>
+          <section class="shot" id="f2">
+            <div class="panel" id="f2p" style="left:6%;right:6%;top:16%"><div class="kk">Panel</div><div class="li">Caption-safe body text</div></div>
+          </section>
+          <!-- END SHOTS -->"""
+          timeline = """// BEGIN TIMELINE
+          shot("f1", 0, D / 2);
+          rise("#f1k", .02, .35); slam("#f1a", .44, 1.2); rise("#f1b", 1.46, .35);
+          shot("f2", D / 2, D, "cut"); fromRight("#f2p", D / 2 + .05);
+          // END TIMELINE"""
+          html = open(path).read()
+          html = re.sub(r"<!-- BEGIN SHOTS -->.*<!-- END SHOTS -->", lambda _: shots, html, flags=re.S)
+          html = re.sub(r"// BEGIN TIMELINE.*// END TIMELINE", lambda _: timeline, html, flags=re.S)
+          html = re.sub(r"const NOCAP = \[.*?\];", "const NOCAP = [];", html, count=1)
+          open(path, "w").write(html)
+          PY
+          for theme in aurora minimal retro; do
+            for format in square portrait; do
+              W="$M/$theme-$format"; mkdir -p "$W"
+              python3 "$S/fill_template.py" "$W" "$DURATION" --format "$format" --brand "$SKILL/examples/kits/northwind" --template "$theme"
+              cp "$RUNNER_TEMP/smoke/work/words.js" "$W/words.js"
+              python3 "$M/inject.py" "$W/index.html"
+              node "$S/render.js" check "$W/index.html"
+            done
+          done
 
       - name: Render and mix
         run: |
@@ -226,9 +362,10 @@ jobs:
         run: |
           set -euo pipefail
           S="$SKILL/scripts"; G="$RUNNER_TEMP/presenter"; mkdir -p "$G"
-          ffmpeg -v error -y -f lavfi -i "color=c=0x77983c:s=1920x1080:r=30:d=$DURATION" -i "$RUNNER_TEMP/smoke/clip.wav" \
-            -filter_complex "[0]drawbox=x='760+120*sin(t*2)':y=180:w=400:h=900:color=0x7d6a62:t=fill[v]" \
-            -map "[v]" -map 1:a -c:v libx264 -crf 16 -pix_fmt yuv420p -c:a aac -shortest "$G/take.mp4"
+          # overlay re-evaluates its x/y every frame; a drawbox t-expression evaluates once on ffmpeg 6.1 and the subject never moves
+          ffmpeg -v error -y -f lavfi -i "color=c=0x77983c:s=1920x1080:r=30:d=$DURATION" -f lavfi -i "color=c=0x7d6a62:s=400x900:r=30:d=$DURATION" -i "$RUNNER_TEMP/smoke/clip.wav" \
+            -filter_complex "[0][1]overlay=x='760+120*sin(t*2)':y=180[v]" \
+            -map "[v]" -map 2:a -c:v libx264 -crf 16 -pix_fmt yuv420p -c:a aac -shortest "$G/take.mp4"
           python3 "$S/transcribe.py" "$G/take.mp4" --outdir "$G/w" --model tiny
           python3 "$S/trim_take.py" "$G/take.mp4" "$G/w"
           python3 "$S/build_captions.py" "$G/w"
@@ -247,34 +384,72 @@ jobs:
           print(f"{want} presenter frames keyed; screen transparent, subject opaque")
           PY
           cat > "$G/inject.py" <<'PY'
-          # Replaces the demo shots with one of each presenter layout, as an agent following scene-blocks.md would
+          # Replaces the demo shots with one shot per presenter layout, as an agent following scene-blocks.md would;
+          # text enters at +0.8 s, after the 0.7 s layout transition, so no sample catches the speaker mid-move
           import re, sys
           path, duration = sys.argv[1], float(sys.argv[2])
+          SEGMENTS = [
+              ("full",        '<div class="cx h2" id="{sid}t" style="top:58%">Full</div>'),
+              ("split",       '<div class="panel" id="{sid}t" style="right:4%;top:8%;width:46%"><div class="kk">Split</div><div class="li">Left panel</div></div>'),
+              ("split-right", '<div class="panel" id="{sid}t" style="left:4%;top:8%;width:46%"><div class="kk">Split</div><div class="li">Right panel</div></div>'),
+              ("close",       '<div class="cx h1" id="{sid}t" style="top:58%">Close</div>'),
+              ("pip-br",      '<div class="h2" id="{sid}t" style="position:absolute;left:6%;top:12%;width:55%">Bottom right</div>'),
+              ("pip-bl",      '<div class="h2" id="{sid}t" style="position:absolute;right:6%;top:12%;width:55%">Bottom left</div>'),
+              ("pip-tr",      '<div class="h2" id="{sid}t" style="position:absolute;left:6%;top:52%;width:50%">Top right</div>'),
+              ("pip-tl",      '<div class="h2" id="{sid}t" style="position:absolute;right:6%;top:52%;width:50%">Top left</div>'),
+          ]
+          seg = duration / len(SEGMENTS)
+          shots, timeline = ["<!-- BEGIN SHOTS -->"], ["// BEGIN TIMELINE", "presenterStyle({halo:true});"]
+          for i, (layout, markup) in enumerate(SEGMENTS):
+              sid = f"p{i + 1}"
+              s = i * seg
+              e = duration if i == len(SEGMENTS) - 1 else (i + 1) * seg
+              shots.append(f'<section class="shot" id="{sid}">{markup.format(sid=sid)}</section>')
+              timeline.append(f'presenter("{layout}", {s:.2f}, {e:.2f}); shot("{sid}", {s:.2f}, {e:.2f}, "cut"); rise("#{sid}t", {s + .8:.2f}, .3);')
+          shots.append("<!-- END SHOTS -->")
+          timeline.append("// END TIMELINE")
           html = open(path).read()
-          third = duration / 3
-          shots = """<!-- BEGIN SHOTS -->
-          <section class="shot" id="p1"><div class="h2" style="position:absolute;right:8%;top:30%;width:30%">Full</div></section>
-          <section class="shot" id="p2"><div class="panel" id="p2p" style="right:4%;top:8%;width:46%"><div class="kk">Split</div><div class="li"><span class="ic ok">✓</span>Panel</div></div></section>
-          <section class="shot" id="p3"><div class="h1" style="position:absolute;right:6%;top:30%">Close</div></section>
-          <!-- END SHOTS -->"""
-          timeline = f"""// BEGIN TIMELINE
-          presenterStyle({{halo:true}});
-          presenter("full", 0, {third:.2f}); shot("p1", 0, {third:.2f}, "cut");
-          presenter("split", {third:.2f}, {2*third:.2f}); shot("p2", {third:.2f}, {2*third:.2f}); fromRight("#p2p", {third + .05:.2f});
-          presenter("close", {2*third:.2f}, D); shot("p3", {2*third:.2f}, D, "cut");
-          // END TIMELINE"""
-          html = re.sub(r"<!-- BEGIN SHOTS -->.*<!-- END SHOTS -->", lambda _: shots, html, flags=re.S)
-          html = re.sub(r"// BEGIN TIMELINE.*// END TIMELINE", lambda _: timeline, html, flags=re.S)
+          html = re.sub(r"<!-- BEGIN SHOTS -->.*<!-- END SHOTS -->", lambda _: "\n".join(shots), html, flags=re.S)
+          html = re.sub(r"// BEGIN TIMELINE.*// END TIMELINE", lambda _: "\n".join(timeline), html, flags=re.S)
           html = re.sub(r"const NOCAP = \[.*?\];", "const NOCAP = [];", html, count=1)
           open(path, "w").write(html)
           PY
           D=$(python3 -c "import json; print(json.load(open('$G/w/take.json'))['duration'])")
+          times=$(python3 -c "import sys; d = float(sys.argv[1]); print(','.join(f'{d * (i + .9) / 8:.2f}' for i in range(8)))" "$D")
           for format in landscape vertical; do
             cp -r "$G/w" "$G/$format"
             python3 "$S/fill_template.py" "$G/$format" "$D" --format "$format" --brand "$SKILL/examples/kits/northwind" --template aurora
             python3 "$G/inject.py" "$G/$format/index.html" "$D"
             node "$S/render.js" check "$G/$format/index.html"
-            node "$S/render.js" stills "$G/$format/index.html" "$RUNNER_TEMP/smoke/boards/presenter-$format" 0.5,1.5,2.5
+            node "$S/render.js" stills "$G/$format/index.html" "$RUNNER_TEMP/smoke/boards/presenter-$format" "$times"
+          done
+
+      # A 25 or 60 fps take must still produce ceil(duration × 30) edit frames, or the speaker drifts out of sync
+      - name: Keyer frame-rate cases
+        run: |
+          set -euo pipefail
+          S="$SKILL/scripts"; K="$RUNNER_TEMP/fps"; mkdir -p "$K"
+          for fps in 25 60; do
+            ffmpeg -v error -y -f lavfi -i "color=c=0x77983c:s=640x360:r=$fps:d=2" \
+              -vf "drawbox=x=220:y=40:w=200:h=320:color=0x7d6a62:t=fill" \
+              -c:v libx264 -crf 18 -pix_fmt yuv420p "$K/take$fps.mp4"
+            mkdir -p "$K/w$fps"
+            python3 "$S/key_greenscreen.py" "$K/w$fps" --video "$K/take$fps.mp4" --workers 2
+            python3 - "$K/w$fps" "$K/take$fps.mp4" <<'PY'
+          import math, subprocess, sys
+          from pathlib import Path
+          w, video = Path(sys.argv[1]), sys.argv[2]
+          duration = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", video],
+                                          capture_output=True, check=True, text=True).stdout)
+          frames = sorted(w.glob("presenter/f*.webp")); want = math.ceil(duration * 30)
+          assert len(frames) == want, f"{len(frames)} presenter frames, want {want} (ceil({duration:.3f} × 30))"
+          raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(frames[len(frames) // 2]), "-f", "rawvideo", "-pix_fmt", "rgba", "-"],
+                               capture_output=True, check=True).stdout
+          alpha = lambda x, y: raw[(y * 640 + x) * 4 + 3]
+          assert alpha(10, 10) == 0 and alpha(630, 350) == 0, "screen corners are not transparent"
+          assert alpha(320, 200) == 255, "the subject is not opaque"
+          print(f"{video}: {want} presenter frames keyed; screen transparent, subject opaque")
+          PY
           done
 
       - name: Keep the contact sheet
@@ -286,5 +461,188 @@ jobs:
             ${{ runner.temp }}/smoke/work/contact.jpg
             ${{ runner.temp }}/smoke/boards/*.png
             ${{ runner.temp }}/smoke/boards/presenter-*/*.jpg
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # The skill documents macOS as a first-class platform; this job is the Linux smoke run through Homebrew's
+  # documented venv path, minus the coverage the Linux job already owns (boards, the format matrix, negative checks)
+  smoke-macos:
+    needs: lint
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      # docs/workflow.md: Homebrew Python refuses a bare pip install (externally-managed-environment), so the
+      # documented install is python@3.12 + a venv; the venv goes on PATH like the user's ~/.zshrc line does
+      - name: Install ffmpeg, espeak-ng and the Python dependencies
+        run: |
+          set -euo pipefail
+          for formula in ffmpeg espeak-ng python@3.12; do
+            brew list --versions "$formula" > /dev/null 2>&1 || brew install "$formula"
+          done
+          "$(brew --prefix python@3.12)/bin/python3.12" -m venv "$HOME/.venvs/voiceover-video"
+          "$HOME/.venvs/voiceover-video/bin/pip" install faster-whisper 'av<19' numpy
+          echo "$HOME/.venvs/voiceover-video/bin" >> "$GITHUB_PATH"
+
+      - name: Cache setup.sh downloads
+        uses: actions/cache@v6
+        with:
+          path: |
+            ${{ env.SKILL }}/scripts/node_modules
+            ${{ env.SKILL }}/assets
+            ~/Library/Caches/ms-playwright
+          key: vendor-${{ runner.os }}-${{ hashFiles('skills/voiceover-video/scripts/package-lock.json', 'skills/voiceover-video/scripts/setup.sh', 'skills/voiceover-video/templates/templates.json', 'skills/voiceover-video/brand.example.json', 'skills/voiceover-video/scripts/brand_kit.py', 'skills/voiceover-video/examples/kits/**') }}
+
+      - name: Cache the whisper model
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/huggingface
+          key: whisper-tiny-${{ runner.os }}
+
+      - name: Set up the skill
+        run: |
+          set -euo pipefail
+          out=$(bash "$SKILL/scripts/setup.sh" "$SKILL/examples/kits/northwind")
+          echo "$out"
+          grep -q '^ready' <<< "$out" || { echo "::error::setup.sh did not print ready"; exit 1; }
+
+      - name: Synthesize a speech clip
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/smoke"
+          # ~10 s: the stock demo shots are hard-timed to 6.1 s+, so a shorter clip leaves s03 without a window
+          espeak-ng -s 150 -w "$RUNNER_TEMP/smoke/clip.wav" "Cache your queries, then measure. Slow code hides in plain sight. A profile shows exactly where the time goes, so you fix the real bottleneck first."
+          duration=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$RUNNER_TEMP/smoke/clip.wav")
+          python3 - "$duration" <<'PY'
+          import sys
+          d = float(sys.argv[1])
+          sys.exit(f"::error::the smoke clip is {d:.2f}s; the demo shots need at least 9s — lengthen the text" if d < 9 else 0)
+          PY
+          echo "DURATION=$duration" >> "$GITHUB_ENV"
+          echo "clip is ${duration}s"
+
+      - name: Transcribe
+        run: |
+          set -euo pipefail
+          python3 "$SKILL/scripts/transcribe.py" "$RUNNER_TEMP/smoke/clip.wav" --outdir "$RUNNER_TEMP/smoke/work" --model tiny
+          python3 "$SKILL/scripts/build_captions.py" "$RUNNER_TEMP/smoke/work"
+
+      - name: Build and check the composition
+        run: |
+          set -euo pipefail
+          S="$SKILL/scripts"; W="$RUNNER_TEMP/smoke/work"
+          python3 "$S/fill_template.py" "$W" "$DURATION" --brand "$SKILL/examples/kits/northwind"
+          node "$S/render.js" check "$W/index.html"
+          node "$S/render.js" stills "$W/index.html" "$W/stills" 0.5,2.0,3.5,5.5,8.0
+          bash "$S/contact-sheet.sh" "$W/stills" "$W/contact.jpg"
+          node "$S/render.js" cues "$W/index.html" "$W/cues.json"
+
+      - name: Render and mix
+        run: |
+          set -euo pipefail
+          S="$SKILL/scripts"; W="$RUNNER_TEMP/smoke/work"
+          python3 "$S/synth_audio.py" "$W/cues.json" "$DURATION" "$W"
+          bash "$S/render-frames.sh" "$W/index.html" "$W/frames" "$DURATION" 2
+          bash "$S/mix-encode.sh" "$W" "$RUNNER_TEMP/smoke/clip.wav" "$DURATION" "$W/out.mp4"
+
+      - name: Assert duration, size and loudness
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/smoke/work/out.mp4"
+          actual=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$out")
+          size=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$out")
+          ffmpeg -hide_banner -nostats -i "$out" -af ebur128=framelog=quiet -f null - 2> "$RUNNER_TEMP/smoke/ebur128.txt"
+          lufs=$(awk '/^ *I:/ {v=$2} END {print v}' "$RUNNER_TEMP/smoke/ebur128.txt")
+          echo "duration $actual (want $DURATION) · size $size · ${lufs} LUFS"
+          python3 - "$actual" "$DURATION" "$size" "$lufs" <<'PY'
+          import sys
+          actual, want, size, lufs = float(sys.argv[1]), float(sys.argv[2]), sys.argv[3], float(sys.argv[4])
+          errors = []
+          if abs(actual - want) > 0.05:
+              errors.append(f"duration {actual}s is not {want}s ±0.05")
+          if size != "1080x1920":
+              errors.append(f"size {size} is not 1080x1920")
+          if abs(lufs + 14) > 1.5:
+              errors.append(f"loudness {lufs} LUFS is not -14 ±1.5")
+          if errors:
+              sys.exit("::error::" + "; ".join(errors))
+          PY
+
+      # A synthetic green screen with a moving subject exercises trim, keying and every presenter layout
+      - name: Presenter mode
+        run: |
+          set -euo pipefail
+          S="$SKILL/scripts"; G="$RUNNER_TEMP/presenter"; mkdir -p "$G"
+          # overlay re-evaluates its x/y every frame; a drawbox t-expression evaluates once on ffmpeg 6.1 and the subject never moves
+          ffmpeg -v error -y -f lavfi -i "color=c=0x77983c:s=1920x1080:r=30:d=$DURATION" -f lavfi -i "color=c=0x7d6a62:s=400x900:r=30:d=$DURATION" -i "$RUNNER_TEMP/smoke/clip.wav" \
+            -filter_complex "[0][1]overlay=x='760+120*sin(t*2)':y=180[v]" \
+            -map "[v]" -map 2:a -c:v libx264 -crf 16 -pix_fmt yuv420p -c:a aac -shortest "$G/take.mp4"
+          python3 "$S/transcribe.py" "$G/take.mp4" --outdir "$G/w" --model tiny
+          python3 "$S/trim_take.py" "$G/take.mp4" "$G/w"
+          python3 "$S/build_captions.py" "$G/w"
+          python3 "$S/key_greenscreen.py" "$G/w" --workers 2
+          python3 - "$G/w" <<'PY'
+          import json, math, subprocess, sys
+          from pathlib import Path
+          w = Path(sys.argv[1]); take = json.loads((w / "take.json").read_text())
+          frames = sorted((w / "presenter").glob("f*.webp")); want = math.ceil(take["duration"] * 30)
+          assert len(frames) == want, f"{len(frames)} presenter frames, want {want}"
+          raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(frames[len(frames) // 2]), "-f", "rawvideo", "-pix_fmt", "rgba", "-"],
+                               capture_output=True, check=True).stdout
+          alpha = lambda x, y: raw[(y * 1920 + x) * 4 + 3]
+          assert alpha(40, 40) == 0 and alpha(1880, 1000) == 0, "screen corners are not transparent"
+          assert max(alpha(x, 600) for x in range(700, 1300, 50)) == 255, "the subject is not opaque"
+          print(f"{want} presenter frames keyed; screen transparent, subject opaque")
+          PY
+          cat > "$G/inject.py" <<'PY'
+          # Replaces the demo shots with one shot per presenter layout, as an agent following scene-blocks.md would;
+          # text enters at +0.8 s, after the 0.7 s layout transition, so no sample catches the speaker mid-move
+          import re, sys
+          path, duration = sys.argv[1], float(sys.argv[2])
+          SEGMENTS = [
+              ("full",        '<div class="cx h2" id="{sid}t" style="top:58%">Full</div>'),
+              ("split",       '<div class="panel" id="{sid}t" style="right:4%;top:8%;width:46%"><div class="kk">Split</div><div class="li">Left panel</div></div>'),
+              ("split-right", '<div class="panel" id="{sid}t" style="left:4%;top:8%;width:46%"><div class="kk">Split</div><div class="li">Right panel</div></div>'),
+              ("close",       '<div class="cx h1" id="{sid}t" style="top:58%">Close</div>'),
+              ("pip-br",      '<div class="h2" id="{sid}t" style="position:absolute;left:6%;top:12%;width:55%">Bottom right</div>'),
+              ("pip-bl",      '<div class="h2" id="{sid}t" style="position:absolute;right:6%;top:12%;width:55%">Bottom left</div>'),
+              ("pip-tr",      '<div class="h2" id="{sid}t" style="position:absolute;left:6%;top:52%;width:50%">Top right</div>'),
+              ("pip-tl",      '<div class="h2" id="{sid}t" style="position:absolute;right:6%;top:52%;width:50%">Top left</div>'),
+          ]
+          seg = duration / len(SEGMENTS)
+          shots, timeline = ["<!-- BEGIN SHOTS -->"], ["// BEGIN TIMELINE", "presenterStyle({halo:true});"]
+          for i, (layout, markup) in enumerate(SEGMENTS):
+              sid = f"p{i + 1}"
+              s = i * seg
+              e = duration if i == len(SEGMENTS) - 1 else (i + 1) * seg
+              shots.append(f'<section class="shot" id="{sid}">{markup.format(sid=sid)}</section>')
+              timeline.append(f'presenter("{layout}", {s:.2f}, {e:.2f}); shot("{sid}", {s:.2f}, {e:.2f}, "cut"); rise("#{sid}t", {s + .8:.2f}, .3);')
+          shots.append("<!-- END SHOTS -->")
+          timeline.append("// END TIMELINE")
+          html = open(path).read()
+          html = re.sub(r"<!-- BEGIN SHOTS -->.*<!-- END SHOTS -->", lambda _: "\n".join(shots), html, flags=re.S)
+          html = re.sub(r"// BEGIN TIMELINE.*// END TIMELINE", lambda _: "\n".join(timeline), html, flags=re.S)
+          html = re.sub(r"const NOCAP = \[.*?\];", "const NOCAP = [];", html, count=1)
+          open(path, "w").write(html)
+          PY
+          D=$(python3 -c "import json; print(json.load(open('$G/w/take.json'))['duration'])")
+          for format in landscape vertical; do
+            cp -r "$G/w" "$G/$format"
+            python3 "$S/fill_template.py" "$G/$format" "$D" --format "$format" --brand "$SKILL/examples/kits/northwind" --template aurora
+            python3 "$G/inject.py" "$G/$format/index.html" "$D"
+            node "$S/render.js" check "$G/$format/index.html"
+          done
+
+      - name: Keep the contact sheet
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: smoke-macos-output
+          path: ${{ runner.temp }}/smoke/work/contact.jpg
           if-no-files-found: ignore
           retention-days: 7

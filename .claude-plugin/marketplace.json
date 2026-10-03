@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Turn a voice recording into a fully animated, captioned, sound-designed short video.",
-    "version": "2.2.0",
+    "version": "2.3.0",
     "repository": "https://github.com/Dancan254/voiceover-video-skill"
   },
   "plugins": [

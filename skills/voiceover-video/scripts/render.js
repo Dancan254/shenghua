@@ -13,6 +13,8 @@
  *
  * Frames render at 2x device pixels and are saved at 1x as lossless PNG (supersampled: crisp
  * edges, no JPEG chroma bleed on red text). VV_QUALITY=draft saves 1x JPEG instead, ~4x faster.
+ * VV_SCALE=2 (render-frames.sh --resolution 4k, or a 4k fill's render.json) keeps the composition
+ * at 1080p but saves the 2x device pixels at full size — a 2160x3840 master with no downscale.
  */
 const path = require('path');
 const fs = require('fs');
@@ -20,6 +22,8 @@ const { chromium } = require(path.join(__dirname, 'node_modules', 'playwright-co
 
 const FPS = 30;
 const DRAFT = process.env.VV_QUALITY === 'draft';
+// VV_SCALE=2 saves the 2x device pixels at full size (4K master); the default supersamples to 1x
+const SCALE = process.env.VV_SCALE === '2' ? 2 : 1;
 const [,, mode, htmlFile, target, a, b, subframeArg] = process.argv;
 
 function usage(message) {
@@ -37,6 +41,25 @@ if (mode === 'frames' && (Number.isNaN(Number(a)) || Number.isNaN(Number(b)) || 
 const subframes = Number(subframeArg ?? 1);
 if (mode === 'frames' && !(/^\d+$/.test(String(subframeArg ?? 1)) && subframes >= 1 && subframes <= 16)) {
   usage(`frames [subframes] must be an integer from 1 to 16, got: ${subframeArg}`);
+}
+
+// vendor/ and kit/ link into the skill's install dir; an update moves that dir and the links
+// dangle, so fail before Chromium starts with the relink command instead of a missing-font cascade
+const workDir = path.dirname(path.resolve(htmlFile));
+const dangling = [];
+for (const name of ['vendor', 'kit']) {
+  const linkPath = path.join(workDir, name);
+  try {
+    if (fs.lstatSync(linkPath).isSymbolicLink() && !fs.existsSync(linkPath)) {
+      dangling.push(`${name}/ → ${fs.readlinkSync(linkPath)}`);
+    }
+  } catch { /* absent entirely is reported as a missing file once the page loads */ }
+}
+if (dangling.length) {
+  dangling.forEach(link => console.error(`${link} is a dangling symlink: the skill's install path moved (update or copy), so its assets are gone`));
+  const duration = (fs.readFileSync(htmlFile, 'utf8').match(/const D = ([\d.]+)/) || [])[1] || '<duration>';
+  console.error(`Next: python3 ${path.join(__dirname, 'fill_template.py')} ${workDir} ${duration} --relink`);
+  process.exit(1);
 }
 
 (async () => {
@@ -122,7 +145,47 @@ if (mode === 'frames' && !(/^\d+$/.test(String(subframeArg ?? 1)) && subframes >
           const capRect = capbox && capbox.style.visibility !== 'hidden' && capbox.children.length
             ? capbox.getBoundingClientRect()
             : null;
-          const out = { missing: false, overflow: [], collide: [], visible: 0 };
+          const out = { missing: false, overflow: [], collide: [], face: [], visible: 0, head: null };
+          // Presenter mode: read the keyed frame's alpha (it is already decoded) to find the speaker,
+          // so text over the head is flagged but panels beside the speaker in a split layout are not
+          const headBox = (() => {
+            if (!document.body.classList.contains('has-presenter')) return null;
+            const layer = document.getElementById('presenter');
+            const img = document.getElementById('prImg');
+            if (!layer || !img || !img.complete || !img.naturalWidth) return null;
+            if (parseFloat(getComputedStyle(layer).opacity) < 0.5) return null;
+            const sw = 96, sh = Math.max(1, Math.round(sw * img.naturalHeight / img.naturalWidth));
+            const canvas = document.createElement('canvas');
+            canvas.width = sw; canvas.height = sh;
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            let pixels;
+            try {
+              ctx.drawImage(img, 0, 0, sw, sh);
+              pixels = ctx.getImageData(0, 0, sw, sh).data;
+            } catch { out.head = 'unreadable'; return null; }
+            let minX = sw, minY = sh, maxX = -1, maxY = -1;
+            for (let y = 0; y < sh; y++) for (let x = 0; x < sw; x++) {
+              if (pixels[(y * sw + x) * 4 + 3] > 40) {
+                if (x < minX) minX = x; if (x > maxX) maxX = x;
+                if (y < minY) minY = y; if (y > maxY) maxY = y;
+              }
+            }
+            if (maxX < 0) return null;   // a fully transparent frame: no speaker on screen
+            out.head = 'ok';
+            const rect = img.getBoundingClientRect();
+            const pos = getComputedStyle(img).objectPosition.split(' ').map(parseFloat);
+            const scale = Math.max(rect.width / img.naturalWidth, rect.height / img.naturalHeight);
+            const offX = (rect.width - img.naturalWidth * scale) * (Number.isNaN(pos[0]) ? 0.5 : pos[0] / 100);
+            const offY = (rect.height - img.naturalHeight * scale) * (Number.isNaN(pos[1]) ? 0.5 : pos[1] / 100);
+            const mx = fx => rect.left + offX + (fx / sw) * img.naturalWidth * scale;
+            const my = fy => rect.top + offY + (fy / sh) * img.naturalHeight * scale;
+            // The head is roughly the top 35% of the silhouette, middle 60% across: shoulders and
+            // outstretched arms stay fair game for type
+            return {
+              left: mx(minX + 0.2 * (maxX - minX)), right: mx(maxX - 0.2 * (maxX - minX)),
+              top: my(minY), bottom: my(minY + 0.35 * (maxY - minY)),
+            };
+          })();
           const seenNames = new Map();
           for (const el of section.querySelectorAll('*')) {
             // Counted before any filter so an element keeps its index whether or not it offends at this sample
@@ -157,6 +220,9 @@ if (mode === 'frames' && !(/^\d+$/.test(String(subframeArg ?? 1)) && subframes >
             if (capRect && isText && box.left < capRect.right && box.right > capRect.left && box.top < capRect.bottom && box.bottom > capRect.top) {
               out.collide.push({ nth, item: label });
             }
+            if (headBox && box.left < headBox.right && box.right > headBox.left && box.top < headBox.bottom && box.bottom > headBox.top) {
+              out.face.push({ nth, item: label });
+            }
           }
           return out;
         }, { id: shotWindow.id, W: size.width, H: size.height });
@@ -180,24 +246,89 @@ if (mode === 'frames' && !(/^\d+$/.test(String(subframeArg ?? 1)) && subframes >
         visible: Math.max(...measured.map(found => found.visible)),
         overflow: merge('overflow'),
         collide: merge('collide'),
+        face: merge('face'),
+        head: measured.some(found => found.head === 'ok') ? 'ok' : measured.some(found => found.head === 'unreadable') ? 'unreadable' : null,
       });
     }
 
-    const flagged = report.filter(r => r.missing || !r.visible || r.overflow.length || r.collide.length);
+    // Glyph coverage: a character the family lacks renders silently in a fallback face, which the
+    // family check above can't see; a kit fonts.fallback makes covered characters deliberate
+    let fallbackFamily = null;
+    try {
+      const kitManifest = JSON.parse(fs.readFileSync(path.join(workDir, 'kit', 'kit.json'), 'utf8'));
+      fallbackFamily = (kitManifest.families || {}).fallback || null;
+    } catch { /* no kit manifest: nothing declares a fallback */ }
+    const glyphs = await page.evaluate(async fallback => {
+      await document.fonts.ready;
+      const byFamily = new Map();
+      const add = (family, s) => {
+        if (!family) return;
+        let set = byFamily.get(family);
+        if (!set) byFamily.set(family, set = new Set());
+        for (const ch of String(s)) if (ch.trim() && ch.codePointAt(0) >= 32) set.add(ch);
+      };
+      const firstFamily = el => (getComputedStyle(el).fontFamily.split(',')[0] || '').trim().replace(/^["']+|["']+$/g, '');
+      document.querySelectorAll('body *').forEach(el => {
+        if (!el.children.length && el.textContent.trim()) add(firstFamily(el), el.textContent);
+      });
+      const capbox = document.getElementById('capbox');
+      const captionFamily = capbox ? firstFamily(capbox) : null;
+      (window.PHRASES || []).forEach(phrase => phrase.forEach(word => add(captionFamily, word.t)));
+      (window.SPEECH || []).forEach(l => add(captionFamily, l.text));
+      const missing = {}, deliberate = {};
+      const faces = new Set([...document.fonts].map(face => face.family));
+      for (const [family, chars] of byFamily) {
+        if (!faces.has(family)) continue;   // a generic or system family has no faces to test; an unloaded kit family is the loader's error, already reported
+        const spec = `16px ${JSON.stringify(family)}`;
+        const lacks = [];
+        for (const ch of chars) {
+          // load() matches subset faces (unicode-range) for the character; an empty result means no
+          // face covers it, so it renders in a fallback face — check(font, text) alone can't see that
+          try { if (!(await document.fonts.load(spec, ch)).length) lacks.push(ch); } catch { /* keep */ }
+        }
+        if (!lacks.length) continue;
+        lacks.sort();
+        if (!fallback) { missing[family] = lacks; continue; }
+        const fbSpec = `16px ${JSON.stringify(fallback)}`;
+        const covered = [];
+        for (const ch of lacks) {
+          try { if ((await document.fonts.load(fbSpec, ch)).length) covered.push(ch); } catch { /* keep */ }
+        }
+        const rest = lacks.filter(ch => !covered.includes(ch));
+        if (covered.length) deliberate[family] = covered;
+        if (rest.length) missing[family] = rest;
+      }
+      return { missing, deliberate };
+    }, fallbackFamily);
+    const glyphFailures = Object.keys(glyphs.missing).length;
+
+    const flagged = report.filter(r => r.missing || !r.visible || r.overflow.length || r.collide.length || r.face.length);
     const total = key => report.reduce((sum, r) => sum + r[key].length, 0);
     if (target) fs.writeFileSync(target, JSON.stringify(report, null, 2));
-    console.log(`${report.length} shots checked · ${total('overflow')} past the frame edge · ${total('collide')} caption collisions · ${report.filter(r => !r.missing && !r.visible).length} empty`);
+    const presenterChecked = report.some(r => r.head);
+    console.log(`${report.length} shots checked · ${total('overflow')} past the frame edge · ${total('collide')} caption collisions${presenterChecked ? ` · ${total('face')} on the speaker's face` : ''} · ${report.filter(r => !r.missing && !r.visible).length} empty`);
     for (const r of flagged) {
       const seen = times => `(${times.map(t => t.toFixed(2) + 's').join('·')})`;
       if (r.missing) console.log(`  ${r.id} missing — no element with that id`);
       else if (!r.visible) console.log(`  ${r.id} empty ${seen(r.samples)} — nothing visible`);
       r.overflow.forEach(({ item, times }) => console.log(`  ${r.id} past the edge: ${item} ${seen(times)}`));
       r.collide.forEach(({ item, times }) => console.log(`  ${r.id} under the captions: ${item} ${seen(times)}`));
+      r.face.forEach(({ item, times }) => console.log(`  ${r.id} over the speaker's face: ${item} ${seen(times)}`));
+    }
+    if (presenterChecked && !report.some(r => r.head === 'ok')) {
+      console.error('note: the presenter frame’s alpha was unreadable, so the face-overlap check was skipped');
+    }
+    for (const [family, chars] of Object.entries(glyphs.deliberate)) {
+      console.log(`  font ${family} has no ${chars.join(' ')}: those render in ${fallbackFamily}, the kit's fonts.fallback (deliberate)`);
+    }
+    for (const [family, chars] of Object.entries(glyphs.missing)) {
+      console.log(`  font ${family} lacks glyphs for: ${chars.join(' ')} — those characters render in a fallback face`);
     }
     errors.forEach(message => console.error(`PAGE ERROR ${message}`));
     await browser.close();
-    if (flagged.length || errors.length) {
-      console.log('Next: fix those shots (resize the type, move it inside the safe zone, or hide captions with NOCAP), then re-run check');
+    if (flagged.length || errors.length || glyphFailures) {
+      if (flagged.length || errors.length) console.log('Next: fix those shots (resize the type, move it inside the safe zone, or hide captions with NOCAP), then re-run check');
+      if (glyphFailures) console.log(`Next: swap those characters for ones the kit covers, or give the kit a fonts.fallback family that covers them (brand.json), then re-run check`);
       process.exit(1);
     }
     console.log('Next: render stills if you can view images, then render frames');
@@ -226,7 +357,9 @@ if (mode === 'frames' && !(/^\d+$/.test(String(subframeArg ?? 1)) && subframes >
     for (let f = Number(a); f < Number(b); f++) {
       await page.evaluate(x => window.renderAt(x), f / FPS);
       const name = path.join(target, `f${String(f).padStart(5, '0')}`);
-      await page.screenshot({ path: `${name}.${ext}`, scale: 'css', ...(DRAFT ? { type: 'jpeg', quality: 92 } : { type: 'png' }) });
+      // 'device' keeps the 2x pixels (4K); 'css' supersamples them to 1x. dsf is 1 under DRAFT,
+      // so 'device' still yields a 1x draft frame
+      await page.screenshot({ path: `${name}.${ext}`, scale: SCALE === 2 ? 'device' : 'css', ...(DRAFT ? { type: 'jpeg', quality: 92 } : { type: 'png' }) });
       // A frame from an earlier render in the other quality would be encoded alongside this one
       fs.rmSync(`${name}.${other}`, { force: true });
     }
@@ -235,18 +368,20 @@ if (mode === 'frames' && !(/^\d+$/.test(String(subframeArg ?? 1)) && subframes >
   if (mode === 'frames' && subframes > 1) {
     fs.mkdirSync(target, { recursive: true });
     const [ext, other] = DRAFT ? ['jpg', 'png'] : ['png', 'jpg'];
-    // A scale-1 clip captures at CSS size, so the 2x page is supersampled to 1x; the pixels match
-    // page.screenshot({ scale: 'css' }) exactly and the speed-optimised PNG encodes ~4x faster
-    const clip = { x: 0, y: 0, width: size.width, height: size.height, scale: 1 };
+    // A scale-1 clip captures at CSS size, so the 2x page is supersampled to 1x; VV_SCALE=2
+    // captures at device pixels (4K). The pixels match page.screenshot exactly and the
+    // speed-optimised PNG encodes ~4x faster
+    const clip = { x: 0, y: 0, width: size.width, height: size.height, scale: DRAFT ? 1 : SCALE };
     const cdp = await page.context().newCDPSession(page);
     const blend = await browser.newPage();
+    // The blend canvas is the captured sub-frame's size, so 4K blends at 2x too
     await blend.evaluate(({ width, height }) => {
       const canvas = document.createElement('canvas');
       canvas.width = width;
       canvas.height = height;
       window.blendContext = canvas.getContext('2d', { willReadFrequently: true });
       window.blendSum = new Uint32Array(width * height * 4);
-    }, size);
+    }, { width: size.width * clip.scale, height: size.height * clip.scale });
     for (let f = Number(a); f < Number(b); f++) {
       await blend.evaluate(() => window.blendSum.fill(0));
       for (let k = 0; k < subframes; k++) {

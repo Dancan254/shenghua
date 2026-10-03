@@ -365,7 +365,31 @@ times must exactly match the `extract_face.sh` range for this shot.
 ## Presenter blocks *(green-screen video, presenter mode)*
 
 The keyed speaker (`key_greenscreen.py`) is a layer under every shot; each shot says where it stands.
-Positions below are landscape 1920x1080; in vertical, `split` moves the speaker down and the panel goes on top.
+Layouts are fractions of the frame, so the same shot list works on every canvas (landscape 1920x1080,
+vertical 1080x1920, square 1080x1080, portrait 1080x1350). On wide canvases the splits put the speaker
+left or right; on tall and square canvases both splits stack the speaker at the bottom with the panel
+on top. Pip layouts float the speaker in a framed corner bubble, in the kit's colours, above the
+full-screen shot — keep that corner clear of panels and headlines.
+
+Layouts: `full`, `split-left` (`split` is an alias), `split-right`, `close`, and the corner bubbles
+`pip-br`, `pip-bl`, `pip-tr`, `pip-tl`.
+
+### Speaker position
+
+A position from the presenter brief sets the layout `presenter("auto", …)` resolves to for every
+shot, so the speaker stays put and close-ups and cutaways read as accents:
+
+```js
+presenterPosition("bottom-right");   // auto · bottom-right · bottom-left · left · right · full
+presenter("auto", 10.3, 15.4);       // resolves to pip-br on every presenter shot
+presenter("close", 21.0, 23.5);      // an explicit layout still wins — the accent
+```
+
+With `auto` (the default, no `presenterPosition` call) the engine cycles sides and corners — split-left,
+pip-br, split-right, pip-bl, pip-tr, pip-tl — so two presenter shots never share a layout back to back.
+Pacing rules for `auto`: never the same layout twice in a row (the cycle guarantees it), vary hold
+lengths (1–4s as usual), and prefer a pip bubble over stepping the speaker out during most cutaways so
+they stay on screen. Call `presenterPosition()` once, before the first `presenter()` call.
 
 ### Presenter full
 The speaker centred, one short thing beside their head: a tag, a quote, a two-line headline at x ≥ 1300.
@@ -385,11 +409,38 @@ Speaker on the left, a panel on the right building the point line by line. The w
   <div class="li" id="s06b"><span class="ic ok">✓</span>Upgrade with tooling</div></div></section>
 ```
 ```js
-presenter("split", 22.3, 29.2); shot("s06", 22.3, 29.2);
+presenter("split", 22.3, 29.2); shot("s06", 22.3, 29.2);   // split = split-left
 fromRight("#s06p", 22.35); cross("#s06a", 22.64); check("#s06b", 26.4);
 ```
 Keep the panel above the captions (bottom ≤ 840 in landscape). `.ic.ok` / `.ic.no` / `.ic.mu` are tick,
-cross and neutral; `check()` and `cross()` pop them with a ding or a buzz.
+cross and neutral; `check()` and `cross()` pop them with a ding or a buzz. On tall and square canvases
+the speaker stacks at the bottom instead: the panel goes on top (top ≥ 150, bottom ≤ 26% of the height).
+
+### Presenter split-right
+The mirror of split: speaker on the right, panel on the left (landscape: `left:70px`, width ≤ 950 so its
+right edge stays clear of the speaker at x ≥ 1050). Alternate it with split-left so long edits don't
+lean to one side. On tall and square canvases it matches split-left (speaker stacked at the bottom).
+```js
+presenter("split-right", 30.0, 36.4); shot("s07", 30.0, 36.4);
+fromRight("#s07p", 30.1);
+```
+
+### Presenter pip *(corner bubble)*
+The speaker in a framed corner bubble — kit panel fill, `--frame` border, the theme's radius — floating
+over a full-screen graphic: a diagram, a chart, a clip, a quote. Use it during cutaways so the speaker
+never disappears. The bubble is above every shot but under the captions.
+```js
+presenter("pip-br", 40.3, 46.9); shot("s09", 40.3, 46.9, "zoom");   // bottom-right bubble over the diagram
+presenter("pip-tl", 47.0, 52.0);                                     // top-left over the next beat
+```
+Keep the bubble's corner clear. The bubble spans roughly the corner's 45% width / 35% height:
+
+| layout | keep clear (any canvas) | put panels and headlines |
+|---|---|---|
+| `pip-br` | x ≥ 55% of W, y ≥ 30% of H | left half, or the top band above 25% of H |
+| `pip-bl` | x ≤ 45% of W, y ≥ 30% of H | right half, or the top band above 25% of H |
+| `pip-tr` | x ≥ 55% of W, y ≤ 60% of H | left half, or the bottom band above the captions |
+| `pip-tl` | x ≤ 45% of W, y ≤ 60% of H | right half, or the bottom band above the captions |
 
 ### Presenter close-up with slam
 Punch in on the line that lands the point, with the slam beside the speaker.
@@ -398,7 +449,8 @@ presenter("close", 53.6, 58.0); shot("s11", 53.6, 58.0, "cut"); slam("#s11a", 54
 ```
 
 ### Full-screen cutaway
-Diagrams, stats and comparisons need the whole frame: step the speaker out, step them back in after.
+Diagrams, stats and comparisons need the whole frame: step the speaker out, step them back in after —
+or keep them on screen in a `pip-*` corner bubble instead (preferred for most cutaways).
 ```js
 presenterOff(40.3); shot("s09", 40.3, 46.9, "zoom");
 presenter("split", 46.9, 53.6);   // fades back in
@@ -476,3 +528,24 @@ y=1910   └── progress ───┘
 ```
 
 Full-bleed photos and backgrounds may fill the whole frame; readable elements may not.
+
+## Layout safe zones (square 1080x1080, portrait 1080x1350)
+
+Square and portrait follow the same proportions as vertical: signature at the top (y ≈ 92, as on every
+canvas), shot area below it, captions at ~78% of the height (square: top 850; portrait: top 1050),
+progress bar at the bottom.
+
+```
+square 1080x1080          portrait 1080x1350
+y=0   ┌───────────┐       y=0    ┌───────────┐
+y=92  │ signature │       y=92   │ signature │
+y=150 ├───────────┤       y=150  ├───────────┤
+      │ shot area │              │ shot area │
+y=800 ├───────────┤       y=1000 ├───────────┤
+y=850 │ captions  │       y=1050 │ captions  │
+y=1070├───────────┤       y=1330 ├───────────┤
+      └─ progress ┘              └─ progress ┘
+```
+
+Presenter layouts scale themselves to the canvas; panels and headlines follow the same rules as
+vertical — stacked above the speaker in splits, clear of the bubble's corner in pips.

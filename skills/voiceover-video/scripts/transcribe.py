@@ -18,6 +18,59 @@ os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
 
 
 PHRASE_MAX_WORDS = 5
+CONFIG_PATH = Path(os.environ.get(
+    "VV_CONFIG",
+    Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "voiceover-video" / "config.json",
+))
+
+
+def load_config() -> dict:
+    """User defaults; CLI flags override them. A corrupt file fails loud rather than being ignored."""
+    try:
+        return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}
+    except (OSError, json.JSONDecodeError) as error:
+        print(f"Cannot read {CONFIG_PATH}: {error}", file=sys.stderr)
+        print('Next: fix the JSON, e.g. {"whisper": {"model": "large-v3", "device": "cuda"}}', file=sys.stderr)
+        raise SystemExit(1)
+
+
+def cuda_available() -> bool:
+    try:
+        import ctranslate2
+        return ctranslate2.get_cuda_device_count() > 0
+    except Exception:
+        return False
+
+
+def resolve_model(value: str) -> str:
+    """A local CTranslate2 folder is used as-is (no download); anything else is a faster-whisper name."""
+    path = Path(value).expanduser()
+    if path.is_dir():
+        return str(path)
+    if path.exists() or value.startswith(("/", "./", "../", "~")):
+        print(f"Not a CTranslate2 model folder: {value}", file=sys.stderr)
+        print("Next: pass a faster-whisper model name (e.g. large-v3) or a converted CTranslate2 folder", file=sys.stderr)
+        raise SystemExit(1)
+    return value
+
+
+def whisper_settings(cli_model, cli_device, cli_compute, default_model):
+    """CLI flag > config.json > built-in default, with auto device/compute resolved."""
+    cfg = load_config().get("whisper", {})
+    model = cli_model or cfg.get("model") or default_model
+    device = cli_device or cfg.get("device") or "auto"
+    compute = cli_compute or cfg.get("compute_type") or "auto"
+    if device == "auto":
+        device = "cuda" if cuda_available() else "cpu"
+    elif device == "cuda" and not cuda_available():
+        print("device 'cuda' requested but no CUDA GPU is available", file=sys.stderr)
+        print("Next: pass --device cpu (or auto), or install a CUDA build of ctranslate2", file=sys.stderr)
+        raise SystemExit(1)
+    if compute == "auto":
+        compute = "float16" if device == "cuda" else "int8"
+    return resolve_model(model), device, compute
 
 
 def probe_duration(audio: Path) -> float:
@@ -41,10 +94,16 @@ def split_phrases(words):
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Word-level transcription with faster-whisper (CPU).")
+    parser = argparse.ArgumentParser(description="Word-level transcription with faster-whisper.")
     parser.add_argument("audio", type=Path)
     parser.add_argument("--outdir", type=Path, required=True)
-    parser.add_argument("--model", default="small", choices=["tiny", "base", "small", "medium"])
+    parser.add_argument("--model", default=None,
+                        help="faster-whisper model name (tiny, base, small, medium, large-v3, large-v3-turbo, "
+                             "distil-large-v3, …) or a local CTranslate2 model folder; default: config.json, else small")
+    parser.add_argument("--device", default=None, choices=["auto", "cpu", "cuda"],
+                        help="default: config.json, else auto (cuda when a GPU is present)")
+    parser.add_argument("--compute-type", default=None,
+                        help="e.g. int8, float16, float32; default: config.json, else auto (float16 on cuda, int8 on cpu)")
     parser.add_argument("--threads", type=int, default=8)
     parser.add_argument("--vocab", default="", help="comma-separated names and terms the speaker uses, to bias recognition")
     args = parser.parse_args()
@@ -56,6 +115,7 @@ def main() -> int:
 
     args.outdir.mkdir(parents=True, exist_ok=True)
     duration = probe_duration(args.audio)
+    model_name, device, compute_type = whisper_settings(args.model, args.device, args.compute_type, "small")
 
     from faster_whisper import WhisperModel
 
@@ -66,7 +126,12 @@ def main() -> int:
             ["ffmpeg", "-y", "-v", "error", "-i", str(args.audio), "-vn", "-ac", "1", "-ar", "16000", str(wav)],
             check=True,
         )
-        model = WhisperModel(args.model, device="cpu", compute_type="int8", cpu_threads=args.threads)
+        try:
+            model = WhisperModel(model_name, device=device, compute_type=compute_type, cpu_threads=args.threads)
+        except Exception as error:
+            print(f"Cannot load the '{model_name}' model: {error}", file=sys.stderr)
+            print("Next: check the model name or folder, or run setup.sh to fetch a model", file=sys.stderr)
+            return 1
         segments, info = model.transcribe(
             str(wav), beam_size=5, word_timestamps=True, vad_filter=False,
             initial_prompt=args.vocab or None,
@@ -92,7 +157,8 @@ def main() -> int:
 
     print(
         f"Transcribed {duration:.1f}s → {len(words)} words · {len(phrases)} phrases · "
-        f"lang={info.language} · {elapsed:.0f}s elapsed ({duration / elapsed:.1f}x realtime)"
+        f"lang={info.language} · {elapsed:.0f}s elapsed ({duration / elapsed:.1f}x realtime) · "
+        f"{model_name} on {device}/{compute_type}"
     )
     print(f"  {words_path}")
     print(f"  {transcript_path}")
