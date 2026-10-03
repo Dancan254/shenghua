@@ -387,6 +387,11 @@ def encoder_args(quality):
     return ["-c:v", "libwebp", "-quality", "94", "-compression_level", "4", "-pix_fmt", "yuva420p"]
 
 
+def has_webp_encoder():
+    out = subprocess.run(["ffmpeg", "-hide_banner", "-encoders"], capture_output=True, text=True)
+    return "libwebp" in out.stdout
+
+
 def alive(pid):
     try:
         os.kill(pid, 0)
@@ -469,6 +474,11 @@ def main() -> int:
     if video is None or not video.is_file():
         print(f"No take to key: {video or 'pass --video, or run trim_take.py first'}", file=sys.stderr)
         print("Next: pass --video <the to-camera recording>", file=sys.stderr)
+        return 1
+    # A minimal ffmpeg (some Homebrew builds) lacks libwebp; the writer would die mid-run with a broken pipe
+    if not has_webp_encoder():
+        print("This ffmpeg has no libwebp encoder, so presenter frames can't be written", file=sys.stderr)
+        print("Next: install a full ffmpeg (macOS: brew reinstall ffmpeg · Debian/Ubuntu: apt install ffmpeg)", file=sys.stderr)
         return 1
     # The composition always loads faces.js (window.FACES); without the file a render fails on the missing request
     args.work.mkdir(parents=True, exist_ok=True)
