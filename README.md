@@ -122,7 +122,7 @@ Runs on macOS and Linux. On Windows, run your agent inside WSL: the scripts are 
 pip install faster-whisper 'av<19' numpy
 # macOS: brew install ffmpeg node   ·   Debian/Ubuntu: sudo apt install ffmpeg nodejs npm
 # macOS presenter mode needs libwebp, dropped from Homebrew's core ffmpeg:
-# brew install homebrew-ffmpeg/ffmpeg/ffmpeg --with-webp
+# brew install ffmpeg-full
 ```
 
 On macOS, Homebrew's Python refuses a system-wide `pip install`; the
