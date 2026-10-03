@@ -2,7 +2,7 @@
 """Voice a script with one synthetic voice per character, on this machine.
 
   speak.py <script.txt> <work-dir> [--cast cast.json] [--narrator NAME] [--gap S] [--scene-gap S]
-           [--align-model base | --no-align]
+           [--align-model NAME | --no-align] [--device auto|cpu|cuda] [--compute-type T]
 
 Script format, one spoken line per line:
 
@@ -18,7 +18,9 @@ Writes <work>/voice.wav (the recording the rest of the workflow uses), <work>/sp
 transcript.txt (word times in transcribe.py's format), and <work>/script.txt. The voiced track is
 aligned with faster-whisper, so the script's own words get the times they are spoken at.
 
-The voice and alignment models download once with setup.sh --voices; after that it runs offline.
+The voice model downloads once with setup.sh --voices; after that it runs offline. The alignment
+model is any faster-whisper name or a local CTranslate2 folder; --device/--compute-type and the
+"whisper" section of ~/.config/voiceover-video/config.json apply to it as in transcribe.py.
 """
 
 import argparse
@@ -34,6 +36,60 @@ import wave
 from pathlib import Path
 
 import numpy as np
+
+CONFIG_PATH = Path(os.environ.get(
+    "VV_CONFIG",
+    Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "voiceover-video" / "config.json",
+))
+
+
+def load_config() -> dict:
+    """User defaults; CLI flags override them. A corrupt file fails loud rather than being ignored."""
+    try:
+        return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}
+    except (OSError, json.JSONDecodeError) as error:
+        print(f"Cannot read {CONFIG_PATH}: {error}", file=sys.stderr)
+        print('Next: fix the JSON, e.g. {"whisper": {"model": "large-v3", "device": "cuda"}}', file=sys.stderr)
+        raise SystemExit(1)
+
+
+def cuda_available() -> bool:
+    try:
+        import ctranslate2
+        return ctranslate2.get_cuda_device_count() > 0
+    except Exception:
+        return False
+
+
+def resolve_model(value: str) -> str:
+    """A local CTranslate2 folder is used as-is (no download); anything else is a faster-whisper name."""
+    path = Path(value).expanduser()
+    if path.is_dir():
+        return str(path)
+    if path.exists() or value.startswith(("/", "./", "../", "~")):
+        print(f"Not a CTranslate2 model folder: {value}", file=sys.stderr)
+        print("Next: pass a faster-whisper model name (e.g. large-v3) or a converted CTranslate2 folder", file=sys.stderr)
+        raise SystemExit(1)
+    return value
+
+
+def whisper_settings(cli_model, cli_device, cli_compute, default_model):
+    """CLI flag > config.json > built-in default, with auto device/compute resolved."""
+    cfg = load_config().get("whisper", {})
+    model = cli_model or cfg.get("model") or default_model
+    device = cli_device or cfg.get("device") or "auto"
+    compute = cli_compute or cfg.get("compute_type") or "auto"
+    if device == "auto":
+        device = "cuda" if cuda_available() else "cpu"
+    elif device == "cuda" and not cuda_available():
+        print("device 'cuda' requested but no CUDA GPU is available", file=sys.stderr)
+        print("Next: pass --device cpu (or auto), or install a CUDA build of ctranslate2", file=sys.stderr)
+        raise SystemExit(1)
+    if compute == "auto":
+        compute = "float16" if device == "cuda" else "int8"
+    return resolve_model(model), device, compute
 
 MODEL_DIR = Path(os.environ.get("VV_KOKORO_DIR", Path.home() / ".cache" / "voiceover-video" / "kokoro"))
 MODEL, VOICES = "kokoro-v1.0.onnx", "voices-v1.0.bin"
@@ -209,7 +265,13 @@ def main() -> int:
     parser.add_argument("--gap", type=float, default=0.25, help="silence between lines")
     parser.add_argument("--scene-gap", type=float, default=0.7, help="silence at a --- scene break")
     parser.add_argument("--lead", type=float, default=0.4, help="silence before the first line")
-    parser.add_argument("--align-model", default="base", choices=["tiny", "base", "small"], help="whisper model that times each line's words")
+    parser.add_argument("--align-model", default=None,
+                        help="faster-whisper model name or local CTranslate2 folder that times each line's words; "
+                             "default: config.json, else base")
+    parser.add_argument("--device", default=None, choices=["auto", "cpu", "cuda"],
+                        help="alignment device; default: config.json, else auto (cuda when a GPU is present)")
+    parser.add_argument("--compute-type", default=None,
+                        help="alignment compute type, e.g. int8, float16; default: config.json, else auto")
     parser.add_argument("--no-align", action="store_true", help="estimate word times from word length instead (fast draft)")
     args = parser.parse_args()
 
@@ -270,11 +332,12 @@ def main() -> int:
             print("Next: run setup.sh, or pass --no-align for estimated word times", file=sys.stderr)
             return 1
         started = time.time()
+        model_name, device, compute_type = whisper_settings(args.align_model, args.device, args.compute_type, "base")
         # A missing download or a broken cache surfaces as several library error types
         try:
-            aligner = WhisperModel(args.align_model, device="cpu", compute_type="int8", cpu_threads=1)
+            aligner = WhisperModel(model_name, device=device, compute_type=compute_type, cpu_threads=1)
         except Exception as error:
-            print(f"Cannot load the '{args.align_model}' alignment model: {error}", file=sys.stderr)
+            print(f"Cannot load the '{model_name}' alignment model: {error}", file=sys.stderr)
             print("Next: run setup.sh --voices, or pass --no-align", file=sys.stderr)
             return 1
         align_seconds = time.time() - started

@@ -15,6 +15,8 @@ Search results are numbered m1, m2, … across the whole edit and kept in <work>
 Images land in <work>/assets/; video sections and gifs (converted to mp4) in <work>/clips/src/ with a
 preview sheet beside them.
 Every download is appended to <work>/credits.json, which the final report and the video description use.
+With the optional vision setup (setup.sh --vision), a fetched photo's face position is recorded in
+<work>/faces.js and credits.json, so the composition's .photo/.pip boxes keep the face in frame.
 """
 
 import argparse
@@ -29,6 +31,11 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
+
+import numpy as np
+
+# The detector and the faces.js format live with the keyer, the skill's other vision consumer
+from key_greenscreen import face_in_image, load_detector, record_face
 
 USER_AGENT = "voiceover-video-skill/1.0 (https://github.com/Dancan254/voiceover-video-skill)"
 BROWSER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36"
@@ -337,6 +344,21 @@ def archive_file_url(identifier):
     return f"https://archive.org/download/{urllib.parse.quote(identifier)}/{urllib.parse.quote(best['name'])}"
 
 
+def photo_face(path):
+    """A fetched photo's largest face as [centre-x, centre-y, w, h] fractions; None without the vision setup or a face."""
+    detector = load_detector()
+    if detector is None:
+        return None
+    import cv2  # load_detector returned one, so setup.sh --vision installed opencv
+    try:
+        image = cv2.imdecode(np.frombuffer(path.read_bytes(), np.uint8), cv2.IMREAD_COLOR)
+    except (OSError, cv2.error):
+        return None
+    if image is None:  # a format this opencv build can't read
+        return None
+    return face_in_image(detector, image[..., ::-1])  # imdecode returns BGR
+
+
 def download_image(url, stem, referer):
     # Web hosts refuse hotlinks from non-browser clients; Commons asks for an identifying agent instead
     agent = USER_AGENT if "wikimedia.org" in url else BROWSER_AGENT
@@ -421,6 +443,11 @@ def fetch(args):
         print("Next: e.g. --name torvalds-keynote", file=sys.stderr)
         return 1
 
+    # The composition always loads faces.js (window.FACES); without the file a render fails on the missing request
+    args.work.mkdir(parents=True, exist_ok=True)
+    if not (args.work / "faces.js").exists():
+        (args.work / "faces.js").write_text("window.FACES={};\n", encoding="utf-8")
+
     if args.result:
         record = load_index(args.work)["results"].get(args.result)
         if record is None:
@@ -443,11 +470,16 @@ def fetch(args):
         print("Next: find_media.py fetch <work> m3 --name <stem>", file=sys.stderr)
         return 1
 
+    face = None
     try:
         if record["kind"] == "image":
             (args.work / "assets").mkdir(parents=True, exist_ok=True)
             target = download_image(record["file_url"], args.work / "assets" / args.name, record.get("page_url"))
             detail = f"{target.stat().st_size // 1024} KB"
+            face = photo_face(target)
+            if face:
+                record_face(args.work, str(target.relative_to(args.work)), face[:2])
+                detail += f" · face at {face[0]:.0%}×{face[1]:.0%} → faces.js"
         elif record["kind"] == "gif":
             target = args.work / "clips" / "src" / f"{args.name}.mp4"
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -485,7 +517,7 @@ def fetch(args):
     append_credit(args.work, {
         "file": str(target.relative_to(args.work)), "title": record["title"], "author": record["author"],
         "license": record["license"], "source": record["page_url"], "section": record.get("section"),
-        "unlicensed": unlicensed,
+        "unlicensed": unlicensed, **({"face": face[:2]} if face else {}),
     })
     print(f"{target} · {detail} · {record['license']}")
     if unlicensed:

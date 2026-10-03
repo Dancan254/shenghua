@@ -9,7 +9,8 @@
   },
   "fonts": {
     "display": { "google": "Archivo", "axes": "wdth,wght@62..125,100..900" },
-    "mono": { "google": "Geist Mono" }
+    "mono": { "google": "Geist Mono" },
+    "fallback": { "google": "Noto Sans" }
   },
   "background": { "style": "theme" },
   "output": { "dir": "~/voiceover-videos" }

@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# setup.sh [--voices] [kit] — one-time setup for voiceover-video. Safe to re-run.
-# --voices also fetches script mode's voice model (~350 MB) and word-alignment model (~145 MB), once.
+# setup.sh [--voices] [--vision] [kit] — one-time setup for voiceover-video. Safe to re-run.
+# --voices also fetches script mode's voice model (~350 MB) and the configured whisper
+# word-alignment model (base by default, ~145 MB), once.
+# --vision sets up the optional face detector: opencv-python-headless (pip) plus the YuNet model
+# (~300 KB), recorded in config.json; without it every step works exactly as before.
 set -euo pipefail
 
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -9,8 +12,20 @@ ASSETS_DIR="$SKILL_DIR/assets"
 GSAP_VERSION="3.12.5"
 KOKORO_DIR="${VV_KOKORO_DIR:-$HOME/.cache/voiceover-video/kokoro}"
 KOKORO_URL="https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0"
+YUNET_DIR="${VV_YUNET_DIR:-$HOME/.cache/voiceover-video/yunet}"
+YUNET_MODEL="face_detection_yunet_2023mar.onnx"
+YUNET_URL="https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/$YUNET_MODEL"
+CONFIG_FILE="${VV_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/voiceover-video/config.json}"
 VOICES=0
-if [[ "${1:-}" == "--voices" ]]; then VOICES=1; shift; fi
+VISION=0
+while [[ "${1:-}" == --* ]]; do
+  case "$1" in
+    --voices) VOICES=1 ;;
+    --vision) VISION=1 ;;
+    *) echo "unknown option $1 (usage: setup.sh [--voices] [--vision] [kit])" >&2; exit 1 ;;
+  esac
+  shift
+done
 missing=()
 
 command -v ffmpeg >/dev/null || missing+=("ffmpeg (apt install ffmpeg · brew install ffmpeg)")
@@ -26,6 +41,9 @@ python3 -c "import numpy" 2>/dev/null || missing+=("numpy (pip install numpy)")
 if (( VOICES )); then
   python3 -c "import kokoro_onnx" 2>/dev/null || missing+=("kokoro-onnx, for script-mode voices (pip install kokoro-onnx)")
 fi
+if (( VISION )); then
+  python3 -c "import cv2" 2>/dev/null || missing+=("opencv-python-headless, for face detection (pip install opencv-python-headless)")
+fi
 
 node_major=$(node -v 2>/dev/null | sed 's/v\([0-9]*\).*/\1/') || node_major=0
 (( node_major >= 18 )) || missing+=("node >= 18 (got $(node -v 2>/dev/null || echo none))")
@@ -33,15 +51,38 @@ node_major=$(node -v 2>/dev/null | sed 's/v\([0-9]*\).*/\1/') || node_major=0
 python_minor=$(python3 --version 2>/dev/null | sed 's/.* 3\.\([0-9]*\).*/\1/') || python_minor=0
 (( python_minor >= 10 )) || missing+=("python3 >= 3.10 (got $(python3 --version 2>/dev/null || echo none))")
 
-# speak.py aligns word times with this model; fetch it now so script mode never downloads mid-run
+# speak.py aligns word times with the configured whisper model; fetch it now so script mode never downloads mid-run
 if (( VOICES )) && python3 -c "import faster_whisper" 2>/dev/null; then
-  echo "checking the alignment model (faster-whisper base, ~145 MB on first run)"
-  if ! fetch_error=$(python3 -c 'from faster_whisper import download_model; download_model("base")' 2>&1 >/dev/null); then
-    echo "could not fetch the faster-whisper base model (speak.py word alignment): ${fetch_error##*$'\n'}"
-    echo "Next: check the connection, then re-run setup.sh --voices"
-    exit 1
+  # config.json supplies the defaults transcribe.py and speak.py resolve the same way; flags there override it
+  WHISPER_CFG=$(python3 - "$CONFIG_FILE" <<'PY'
+import json, sys
+try:
+    cfg = json.load(open(sys.argv[1], encoding="utf-8")).get("whisper", {})
+except FileNotFoundError:
+    cfg = {}
+except (json.JSONDecodeError, OSError) as e:
+    print(f"cannot read {sys.argv[1]}: {e}", file=sys.stderr)
+    print('Next: fix the JSON, e.g. {"whisper": {"model": "large-v3", "device": "cuda"}}', file=sys.stderr)
+    sys.exit(1)
+print(cfg.get("model") or "base", cfg.get("device") or "auto", cfg.get("compute_type") or "auto")
+PY
+  ) || exit 1
+  read -r WHISPER_MODEL WHISPER_DEVICE WHISPER_COMPUTE <<< "$WHISPER_CFG"
+  WHISPER_MODEL_PATH="${WHISPER_MODEL/#\~/$HOME}"
+  echo "whisper settings · model=$WHISPER_MODEL device=$WHISPER_DEVICE compute=$WHISPER_COMPUTE (${CONFIG_FILE})"
+  if [[ -d "$WHISPER_MODEL_PATH" ]]; then
+    echo "whisper model ready · local folder $WHISPER_MODEL (used as-is, no download)"
+  elif python3 -c 'from faster_whisper import download_model; import sys; download_model(sys.argv[1], local_files_only=True)' "$WHISPER_MODEL" 2>/dev/null; then
+    echo "whisper model already cached · $WHISPER_MODEL (no download)"
+  else
+    echo "downloading the whisper model ($WHISPER_MODEL — large models are several GB)"
+    if ! fetch_error=$(python3 -c 'from faster_whisper import download_model; import sys; download_model(sys.argv[1])' "$WHISPER_MODEL" 2>&1 >/dev/null); then
+      echo "could not fetch the faster-whisper $WHISPER_MODEL model (speak.py word alignment): ${fetch_error##*$'\n'}"
+      echo "Next: check the connection and the model name, then re-run setup.sh --voices"
+      exit 1
+    fi
+    echo "whisper model ready · $WHISPER_MODEL"
   fi
-  echo "alignment model ready · faster-whisper base"
 fi
 
 if [[ ${#missing[@]} -gt 0 ]]; then
@@ -116,9 +157,54 @@ if (( VOICES )); then
   echo "voices ready · $KOKORO_DIR"
 fi
 
+if (( VISION )); then
+  mkdir -p "$YUNET_DIR"
+  # Download to a temp name so an interrupted fetch never leaves a truncated model behind
+  if [[ ! -s "$YUNET_DIR/$YUNET_MODEL" ]]; then
+    echo "downloading $YUNET_MODEL → $YUNET_DIR"
+    if ! curl -sfL -o "$YUNET_DIR/$YUNET_MODEL.part" "$YUNET_URL"; then
+      echo "could not download $YUNET_URL"
+      echo "Next: check the connection, or download it by hand into $YUNET_DIR"
+      exit 1
+    fi
+    mv "$YUNET_DIR/$YUNET_MODEL.part" "$YUNET_DIR/$YUNET_MODEL"
+  fi
+  # Smoke-test the detector, then record it in config.json for key_greenscreen.py and find_media.py
+  if ! vision_error=$(python3 - "$CONFIG_FILE" "$YUNET_DIR/$YUNET_MODEL" <<'PY'
+import json, os, sys
+import cv2
+cv2.FaceDetectorYN.create(sys.argv[2], "", (320, 320))
+try:
+    cfg = json.load(open(sys.argv[1], encoding="utf-8"))
+except FileNotFoundError:
+    cfg = {}
+except (json.JSONDecodeError, OSError) as e:
+    print(f"cannot read {sys.argv[1]}: {e}", file=sys.stderr)
+    print('Next: fix the JSON, e.g. {"whisper": {"model": "base"}}', file=sys.stderr)
+    sys.exit(1)
+cfg["vision"] = {"available": True, "model": sys.argv[2]}
+directory = os.path.dirname(sys.argv[1])
+if directory:
+    os.makedirs(directory, exist_ok=True)
+with open(sys.argv[1], "w", encoding="utf-8") as handle:
+    json.dump(cfg, handle, indent=2)
+    handle.write("\n")
+PY
+  ); then
+    echo "the YuNet face model failed to load: ${vision_error##*$'\n'}"
+    echo "Next: delete $YUNET_DIR/$YUNET_MODEL and re-run setup.sh --vision"
+    exit 1
+  fi
+  echo "vision ready · $YUNET_DIR/$YUNET_MODEL (recorded in $CONFIG_FILE)"
+fi
+
 # YouTube clips are optional; everything else works without them
 if ! command -v yt-dlp >/dev/null; then
   echo "optional: yt-dlp not found — YouTube clips disabled (pipx install yt-dlp)"
+fi
+# Face detection is optional too; without it framing and crops behave as they always have
+if ! python3 -c "import cv2" 2>/dev/null; then
+  echo "optional: opencv not found — face detection disabled (pip install opencv-python-headless, then setup.sh --vision)"
 fi
 
 echo "ready · kit $KIT_NAME"

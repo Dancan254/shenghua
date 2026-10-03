@@ -1,9 +1,23 @@
 #!/usr/bin/env bash
-# mix-encode.sh <work-dir> <voice-audio> <duration> <out.mp4> [music-file]
+# mix-encode.sh [--10bit] [--embed] <work-dir> <voice-audio> <duration> <out.mp4> [music-file]
 #
 # Voice is denoised, de-essed, compressed and normalised; clip audio and music duck under it via sidechain,
 # SFX sit on top, and the mix is padded/trimmed to the exact duration, then measured, then given one linear gain to −14 LUFS with a −1.5 dBFS peak limiter.
+# Draft JPEG frames encode veryfast/CRF 20 (VV_PRESET overrides the preset); --10bit encodes yuv420p10le
+# High 10 against banding in dark gradients; --embed muxes captions.srt as a soft subtitle track, and any
+# captions.srt/captions.vtt are copied next to the mp4.
 set -euo pipefail
+
+TEN_BIT=0
+EMBED=0
+while [[ "${1:-}" == --* ]]; do
+  case "$1" in
+    --10bit) TEN_BIT=1 ;;
+    --embed) EMBED=1 ;;
+    *) echo "unknown flag: $1"; echo "Next: pass --10bit or --embed first, then the work dir, voice audio, duration and output mp4"; exit 1 ;;
+  esac
+  shift
+done
 
 WORK="$1"
 trap 'rm -f "$WORK/premix.wav"' EXIT
@@ -26,6 +40,30 @@ fi
 FRAME_EXT=png
 (( ${#PNGS[@]} == 0 )) && FRAME_EXT=jpg
 [[ -f "$WORK/sfx.wav" ]] || { echo "No sfx.wav in $WORK"; echo "Next: run synth_audio.py"; exit 1; }
+
+# Draft JPEGs are a throwaway preview cut, so encode speed beats the last bit of quality;
+# final PNGs keep the slow preset. VV_PRESET overrides either, e.g. medium on a slow machine.
+PRESET=slow
+CRF=16
+if [[ "$FRAME_EXT" == jpg ]]; then
+  PRESET=veryfast
+  CRF=20
+fi
+PRESET="${VV_PRESET:-$PRESET}"
+
+PIX_FMT=yuv420p
+X264_PROFILE=()
+if (( TEN_BIT )); then
+  PIX_FMT=yuv420p10le
+  X264_PROFILE=(-profile:v high10)
+fi
+
+if (( EMBED )); then
+  [[ -f "$WORK/captions.srt" ]] || { echo "--embed needs captions.srt in $WORK"; echo "Next: run build_captions.py so it writes captions.srt, then re-run with --embed"; exit 1; }
+  EMBED_ARGS=(-i "$WORK/captions.srt" -map 2 -c:s mov_text -metadata:s:s:0 language=eng)
+else
+  EMBED_ARGS=()
+fi
 
 # Clip audio from extract_clip.sh --audio: a speaking founder, a crowd, a product sound
 shopt -s nullglob
@@ -92,17 +130,57 @@ print("{:.2f}".format(-14 - float(json.loads(match.group(0))["input_i"])))
 ffmpeg -v error -y -i "$WORK/premix.wav" \
   -af "volume=${GAIN_DB}dB,alimiter=limit=0.8414:level=disabled,aresample=48000,apad=whole_dur=${DURATION},atrim=0:${DURATION}" "$WORK/mix.wav"
 
+TOTAL_FRAMES=$(python3 -c "import math; print(math.ceil($DURATION * $FPS))")
+
 # Frames are RGB; convert with the BT.709 matrix and tag it, or phones shift the brand colours.
 # CRF 16 on a slow preset keeps edges clean through the platform's re-encode; grain defeats CRF on
 # its own, so the maxrate cap keeps a 108s vertical near 200 MB instead of 800+.
-ffmpeg -v error -y -framerate "$FPS" -i "$WORK/frames/f%05d.$FRAME_EXT" -i "$WORK/mix.wav" \
+# -progress emits machine-readable blocks; the filter throttles them to a status line every few seconds.
+ffmpeg -v error -nostats -progress pipe:1 -y \
+  -framerate "$FPS" -i "$WORK/frames/f%05d.$FRAME_EXT" -i "$WORK/mix.wav" \
+  ${EMBED_ARGS[@]+"${EMBED_ARGS[@]}"} \
   -map 0:v -map 1:a \
-  -vf "scale=out_color_matrix=bt709:out_range=tv:flags=lanczos+accurate_rnd+full_chroma_int,format=yuv420p" \
-  -c:v libx264 -preset slow -crf 16 -maxrate 16M -bufsize 32M -x264-params aq-mode=3 \
+  -vf "scale=out_color_matrix=bt709:out_range=tv:flags=lanczos+accurate_rnd+full_chroma_int,format=$PIX_FMT" \
+  -c:v libx264 -preset "$PRESET" -crf "$CRF" ${X264_PROFILE[@]+"${X264_PROFILE[@]}"} -maxrate 16M -bufsize 32M -x264-params aq-mode=3 \
   -colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv \
-  -c:a aac -b:a 256k -t "$DURATION" -movflags +faststart "$OUT"
+  -c:a aac -b:a 256k -t "$DURATION" -movflags +faststart "$OUT" \
+  | python3 -c '
+import sys, time
+total = int(sys.argv[1])
+fields = {}
+last = 0.0
+for line in sys.stdin:
+    key, _, value = line.partition("=")
+    fields[key.strip()] = value.strip()
+    if key.strip() != "progress":
+        continue
+    now = time.monotonic()
+    if now - last < 3 and fields.get("progress") != "end":
+        continue
+    last = now
+    frame = int(fields.get("frame") or 0)
+    try:
+        fps = float(fields.get("fps") or 0)
+    except ValueError:
+        fps = 0.0
+    left = int((total - frame) / fps) if fps > 0 else 0
+    print("encode: {}/{} frames · {:.0f} fps · ~{}s left".format(frame, total, fps, left), flush=True)
+' "$TOTAL_FRAMES"
+
+# Platforms index uploaded caption files; burned-in captions can't be searched, translated or switched off
+BASE_OUT="${OUT%.*}"
+CAPTIONS=""
+for ext in srt vtt; do
+  if [[ -f "$WORK/captions.$ext" ]]; then
+    cp "$WORK/captions.$ext" "$BASE_OUT.$ext"
+    CAPTIONS+="$ext "
+  fi
+done
 
 LOUDNESS=$(ffmpeg -hide_banner -i "$WORK/mix.wav" -af ebur128 -f null - 2>&1 | awk '/I:/{v=$2} END{print v}')
-INFO=$(ffprobe -v error -show_entries stream=width,height:format=duration,size -of default=nw=1 "$OUT" | tr '\n' ' ')
-echo "$(basename "$OUT") · ${LOUDNESS} LUFS · ${INFO}"
+INFO=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of default=nw=1 "$OUT" | tr '\n' ' ')$(ffprobe -v error -show_entries format=duration,size -of default=nw=1 "$OUT" | tr '\n' ' ')
+NOTE=" · preset $PRESET"
+(( TEN_BIT )) && NOTE+=" · 10-bit"
+[[ -n "$CAPTIONS" ]] && NOTE+=" · captions: ${CAPTIONS% }"
+echo "$(basename "$OUT") · ${LOUDNESS} LUFS · ${INFO}${NOTE}"
 echo "Next: extract a frame from $(basename "$OUT") at a shot you changed and verify it"

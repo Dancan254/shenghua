@@ -44,6 +44,8 @@ or more. Below that it still works, it just looks softer. How to record well:
 
 ```bash
 brew install ffmpeg node python@3.12
+# presenter mode (green-screen keying) needs libwebp, which Homebrew's core ffmpeg dropped:
+# brew install ffmpeg-full   # replaces ffmpeg
 python3.12 -m venv ~/.venvs/voiceover-video
 ~/.venvs/voiceover-video/bin/pip install faster-whisper 'av<19' numpy
 echo 'export PATH="$HOME/.venvs/voiceover-video/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
@@ -121,6 +123,12 @@ A brand with a light background also gives a dark one for dark themes: add
 **You check:** setup prints `ready`, and the contrast report has no `BELOW` lines. A warning about a
 logo means it may be invisible on the background; supply the other wordmark.
 
+Kits live in `~/.config/voiceover-video/kits/<name>/` (a kit made with `--out` lives wherever you put
+it). Working with several brands, `brand_kit.py list` shows every kit with the default marked, and
+`brand_kit.py default <name>` sets the one used when a prompt names none. Name a kit in the prompt —
+`Brand kit: acme` — to use it for that video; with several kits and none named, the agent asks before
+anything renders.
+
 ## 5. Choose a theme
 
 ```text
@@ -157,17 +165,18 @@ including references/scene-blocks.md. Edit this video in presenter mode.
 
 Video:     ./source/<recording>
 Brand kit: ./brand-kit
-Format:    <landscape 1920x1080 | vertical 1080x1920>, theme <theme>
+Format:    <landscape 1920x1080 | vertical 1080x1920 | square 1080x1080 | portrait 1080x1350>, theme <theme>
 Trim:      auto
+Position:  <auto | bottom-right | bottom-left | left | right | full>
 
-First check the video with ffprobe and show me the result. If it's 4K at under 20 Mbps, scale it to
-1080p and use that file for every step:
-  ffmpeg -i <video> -vf scale=1920:-2:flags=lanczos -c:v libx264 -crf 12 -preset slow -c:a copy ./source/take-1080.mp4
+First check the video with ffprobe and show me the result. Keying scales a 4K take itself
+(--max-height) and converts any frame rate to 30 fps edit frames — no manual downscale.
 
 Spelling reference: ./source/<script or article>.
 
 Pacing: make the speaker's appearance dynamic, not a fixed cycle:
-- Never use the same presenter layout twice in a row; mix full, split and close unpredictably.
+- Never use the same presenter layout twice in a row; mix full, splits, close-ups and corner bubbles
+  unpredictably.
 - Vary how long each layout holds: some 2 s, some 4 s, a few up to 8 s, matched to the sentence,
   not a fixed rhythm.
 - Use close-ups for punchlines and strong claims, with a hit() camera punch on the key word.
@@ -179,9 +188,9 @@ Content: a chapter card for each heading in the script; a lower third "<Speaker 
 <role>" at the start. Must show: <facts, numbers, product names>. Avoid: <anything to leave out,
 e.g. competitor logos>.
 
-Run every long step (scaling, transcribe, key_greenscreen.py, render-frames.sh, mix-encode.sh)
-detached with nohup and a log file, and poll the log; never block on one command. If keying stops,
-re-run the same command; it resumes.
+Run every long step (transcribe, key_greenscreen.py, render-frames.sh, mix-encode.sh)
+detached with nohup and a log file, and poll the log; never block on one command. If keying or frame
+rendering stops, re-run the same command; both resume.
 
 Stop and wait for my approval at: the key preview, the shot list (include a layout column so I can
 see the variety), and the draft. Then render the final, verify a frame from the encoded file, and
@@ -195,7 +204,7 @@ Read ~/skills/voiceover-video-skill/skills/voiceover-video/SKILL.md and follow i
 including references/scene-blocks.md.
 
 Edit ./source/<recording>: the opening line and the sign-off stay on camera, everything between is
-animated. Brand kit ./brand-kit, <landscape | vertical>, theme <theme>.
+animated. Brand kit ./brand-kit, <landscape | vertical | square | portrait>, theme <theme>.
 Spelling reference: ./source/<script or article>.
 Must show: <facts, numbers, product names>. Avoid: <anything to leave out>.
 
@@ -209,7 +218,7 @@ list and the draft. Then render the final, verify a frame from the encoded file,
 Read ~/skills/voiceover-video-skill/skills/voiceover-video/SKILL.md and follow it exactly,
 including references/scene-blocks.md.
 
-Make a <60-second vertical Short | landscape video> from ./source/<audio file>.
+Make a <60-second vertical Short | landscape | square | portrait video> from ./source/<audio file>.
 Brand kit ./brand-kit, theme <theme>. Spelling reference: ./source/<script, if any>.
 Find licensed photos and clips of the people and products it names, and credit every one.
 
@@ -222,6 +231,29 @@ from the encoded file, and report with the credits ready to paste.
 Add this line to prompt A or B: *"Make it a 60-second vertical Short from <m:ss> to <m:ss> of the
 recording."* The trim cuts the excerpt and keeps captions in sync.
 
+### Choosing a transcription model
+
+The default `small` is right for most recordings. Pass another in the prompt ("use the base model") or
+set it once in `~/.config/voiceover-video/config.json`:
+
+```json
+{ "whisper": { "model": "large-v3-turbo", "device": "cuda", "compute_type": "float16" } }
+```
+
+A CLI flag beats `config.json`, which beats the built-in default; `VV_CONFIG` points at another config
+file. `--device` is `auto` (CUDA when a GPU is present), `cpu` or `cuda` — a GPU runs several times
+faster than CPU. `--model` also accepts a local CTranslate2 model folder, used as-is with no download.
+Script mode's line alignment reads the same settings.
+
+| Model | Accuracy | Speed on CPU (rough) | Download |
+|---|---|---|---|
+| `tiny` | draft only — names and terms suffer | ~10× realtime | ~80 MB |
+| `base` | decent on clean audio | ~7× realtime | ~150 MB |
+| `small` *(default)* | good | ~2–3× realtime | ~500 MB |
+| `medium` | better with accents and noise | ~1× realtime | ~1.5 GB |
+| `large-v3` | best | ~0.5× realtime — use a GPU | ~3 GB |
+| `large-v3-turbo` | near-large, much faster | ~1–2× realtime | ~1.6 GB |
+
 ---
 
 ## 7. Your approval points
@@ -232,7 +264,7 @@ recording."* The trim cuts the excerpt and keeps captions in sync.
 | Key preview *(presenter mode)* | one keyed frame: clean hair, glasses and shoulders, no green edges | "go", or what's wrong |
 | Shot list | layouts vary (no repeating pattern); spelling of names | "more variety" or corrections, then "go" |
 | Draft | watch **and listen**, ideally on a phone: timing, sound levels, wrong words | timestamps, e.g. "1:42 SFX too loud" |
-| Final | plays correctly; duration and loudness reported | done |
+| Final | plays correctly; duration and loudness reported; the `delivery/` folder when you asked for it | done |
 
 The shot list is the cheapest place to change anything; after the final render, every change means
 re-rendering.
@@ -243,7 +275,6 @@ For a ~6-minute talk in presenter mode. Machine time only; add your review time.
 
 | Step | 4-core laptop | Fast 12–16-core machine |
 |---|---|---|
-| Scale 4K to 1080p | ~5 min | ~2 min |
 | Transcribe | 15–20 min | ~5 min |
 | Key the speaker | ~45 min | ~10–15 min |
 | Draft render | ~30 min | ~8–10 min |
@@ -259,9 +290,11 @@ A 60-second Short takes roughly a sixth of that. Fast-machine times are estimate
 | "screen too dim or uneven to key" | light the green screen evenly and re-record, or use prompt B |
 | "no screen to key" | the recording has no green screen: use prompt B |
 | Keying stopped part-way | ask the agent to re-run the same key command; it continues |
+| Frame rendering stopped part-way | re-run the same render command; completed frames are skipped |
+| `vendor/ or kit/ is a dangling symlink` | an old project after a skill update: `fill_template.py <work> <duration> --relink` |
 | "font … did not load" | ask the agent to re-run `setup.sh` with the kit |
 | "version-1 brand file" | ask the agent to convert it: `init_kit.py --from <that file>` |
-| A name banner burned into the recording | tell the agent where it is; it adds a `--mask` |
+| A name banner burned into the recording | tell the agent where it is; it adds a `--mask` (the vision setup's key preview suggests one) |
 | The edit feels repetitive | reject the shot list and repeat the pacing rules from prompt A |
 | A step was killed by a time limit | ask the agent to run it detached with `nohup` and poll the log |
 

@@ -13,34 +13,42 @@ template act it out. Everything lives in `skills/voiceover-video/`.
 
 ```
 skills/voiceover-video/
-├── SKILL.md                     the workflow the agent follows at run time
+├── SKILL.md                     the core workflow the agent follows at run time (every mode)
 ├── brand.example.json           fallback brand kit (version 2) when the user has none
 ├── examples/kits/               two fictional kits (dark Northwind, light Lumen) for testing and copying
-├── references/scene-blocks.md   scene catalogue, pacing rules, sound cues, safe zones
-├── references/explainers.md     script mode: explainer shape, analogy, cast, script format, voices
+├── references/
+│   ├── scene-blocks.md          scene catalogue, pacing rules, sound cues, safe zones
+│   ├── presenter.md             presenter mode: keying, layouts, speaker position, pacing
+│   ├── face-bookends.md         bookends mode: face shots, [FACE]/[VOICE] sections, extract_face.sh
+│   ├── brand-kits.md            creating and managing kits, the kits folder, the brand board, glyphs
+│   └── explainers.md            script mode: explainer shape, analogy, cast, script format, voices
 ├── templates/                   visual theme engine + themes
 │   ├── kinetic.html             the shared HTML/JS engine + demo shots
 │   ├── board.html               the brand board: one kit shown in one theme, for approval
 │   ├── templates.json           theme catalogue: canvas (dark/light), mood, extra fonts, motion profile
 │   └── themes/                  shared.css (kit tokens, backgrounds, people/footage blocks) + one CSS per theme
+├── tests/                       unittest suite (numpy only), run from the repo root
 └── scripts/
-    ├── setup.sh                 dependency check, playwright-core + Chromium, GSAP, fonts
+    ├── setup.sh                 dependency check, playwright-core + Chromium, GSAP, fonts; --voices, --vision
     ├── speak.py                 script mode: script → voice.wav + speech.json/js + aligned words.json
-    ├── transcribe.py            faster-whisper, word-level timestamps
+    ├── transcribe.py            faster-whisper, word-level timestamps; config.json for model/device defaults
     ├── trim_take.py             cut dead air: lossless voice.wav, word times shifted to 0, take.json
-    ├── key_greenscreen.py       green-screen take → presenter/fNNNNN.webp with alpha, resumable
-    ├── build_captions.py        applies fixes.json → words.js
-    ├── brand_kit.py             kit validation, colour derivation, contrast report, per-kit font/logo install
-    ├── init_kit.py              answers or client files → a kit; --from converts a version-1 brand.json
-    ├── fill_template.py         kit + theme + geometry + duration → work/index.html (or board.html)
+    ├── key_greenscreen.py       green-screen take → presenter/fNNNNN.webp with alpha, resumable; 30 fps edit frames
+    ├── retime.py                re-time an edit onto a retake of the same script
+    ├── build_captions.py        applies fixes.json → words.js + captions.srt/vtt
+    ├── brand_kit.py             kit validation, colour derivation, contrast/glyph report, kits folder, per-kit install
+    ├── init_kit.py              answers or client files → a kit in the kits folder; --from converts a version-1 brand.json
+    ├── fill_template.py         kit + theme + geometry + duration → work/index.html (or board.html); keeps authored shots
     ├── extract_face.sh          to-camera video → face/fNNNNN.jpg, numbered by edit frame
     ├── find_media.py            photo/video search (Commons, Openverse, Archive, Pexels, web, YouTube) + credits.json
     ├── extract_clip.sh          fetched clip → clips/<name>/fNNNNN.jpg (+ clips/<name>.wav)
     ├── render.js                stills | frames | cues | check | board, driven by window.renderAt(t)
-    ├── render-frames.sh         parallel frame rendering
+    ├── render-frames.sh         parallel frame rendering, resumable; --resolution 4k, --blur, --force
+    ├── render-chunks.sh         low-disk alternative: render + encode in chunks, resumable
     ├── contact-sheet.sh         stills → one review image
     ├── synth_audio.py           cues.json → sfx.wav + music.wav
-    └── mix-encode.sh            voice + ducked clip audio + ducked music + SFX → mp4
+    ├── mix-encode.sh            voice + ducked clip audio + ducked music + SFX → mp4; --10bit, --embed
+    └── deliver.sh               master + web copy + captions + cover + credits.txt → delivery/
 ```
 
 `.claude-plugin/marketplace.json` registers the skill for Claude Code's `/plugin install`, and
@@ -94,8 +102,9 @@ names, breaks this.
    other. A theme declares its canvas (`scheme`: dark or light) in `templates.json`; the kit's display font
    always wins, and a theme's own typeface (`templates.json` → `fonts`) is only its fallback.
 11. **Hosts are pure functions of `t`.** `renderHosts(t)` derives every mouth, blink and bob from `t` and
-   `speech.js`; a host never keeps state between frames. `speech.js` always exists (`fill_template.py`
-   writes an empty one), so a recording without speakers renders hosts idle rather than failing.
+   `speech.js`; a host never keeps state between frames. `speech.js` and `faces.js` always exist
+   (`fill_template.py` writes an empty one of each), so a recording without speakers or face
+   measurements renders hosts idle and photos unshifted rather than failing.
 12. **Characters are original.** The shipped hosts are original designs. Never add a host that imitates an
    existing cartoon, film or game character.
 13. **Scripts fail loud.** Every script prints a one-line result and a `Next:` line, and on failure names
@@ -107,14 +116,16 @@ names, breaks this.
    this step for most of an hour, often past their shell's time limit.
 15. **No render on a fallback font.** `render.js` loads every kit family by name before `stills`,
    `frames`, `check` and `board`, and exits 1 if one has no face: a lost font otherwise renders silently in
-   a lookalike with different spacing, which no one notices until the captions shift.
+   a lookalike with different spacing, which no one notices until the captions shift. `check` also flags
+   single characters no kit face covers, unless the kit's `fonts.fallback` marks them deliberate.
 
 ## Conventions
 
 - **Bash:** `set -euo pipefail`, quote every variable, `SCRIPTS_DIR` resolved from `BASH_SOURCE`. Scripts
   are called from zsh too — never rely on word splitting.
 - **Python:** 3.10+, standard library plus `numpy` and `faster-whisper` only (`find_media.py` uses `urllib`;
-  `speak.py` alone also needs `kokoro-onnx`, installed by `setup.sh --voices`). `argparse`, a `main()`
+  `speak.py` alone also needs `kokoro-onnx`, installed by `setup.sh --voices`; `key_greenscreen.py` and
+  `find_media.py` use `opencv` only when `setup.sh --vision` installed it). `argparse`, a `main()`
   returning an exit code, errors to stderr.
 - **JavaScript:** `render.js` depends on `playwright-core` only; the template on GSAP only.
 - **Comments** explain *why*, never *what*. One line.
@@ -122,8 +133,14 @@ names, breaks this.
 
 ## How to verify a change
 
-There is no unit-test suite; the pipeline is verified end to end on a **clean copy**, because a
-cached setup hides broken installs.
+Run the unit-test suite first (numpy only, no setup needed):
+
+```bash
+python3 -m unittest discover -s skills/voiceover-video/tests -t skills/voiceover-video
+```
+
+The pipeline itself is verified end to end on a **clean copy**, because a cached setup hides broken
+installs:
 
 ```bash
 C=$(mktemp -d) && cp -r skills/voiceover-video "$C/skill" && S="$C/skill/scripts" && W="$C/work"
@@ -152,7 +169,8 @@ Do not pipe a step through `tail`/`head` when checking it — the pipe hides the
 
 ## Scope
 
-- Changes to the workflow belong in `SKILL.md`; changes to visual vocabulary belong in
+- Changes to the workflow belong in `SKILL.md`; mode detail lives in `references/` (`presenter.md`,
+  `face-bookends.md`, `brand-kits.md`, `explainers.md`); changes to visual vocabulary belong in
   `references/scene-blocks.md` *and* the template helpers.
 - Keep `SKILL.md` imperative and short enough for an agent to follow in one pass.
 - Do not add per-user or per-brand content to the repo; it lives in the user's own kit folder. The only

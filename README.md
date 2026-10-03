@@ -5,8 +5,8 @@
 Drop in a voice note, a to-camera take or a green-screen talk. Your agent transcribes it word by word,
 designs a shot list, finds licensed photos and video of the people and products you mention, builds every
 scene as kinetic typography and motion graphics timed to your words in your brand's colours, fonts and
-logos, adds sound design and a music bed that ducks under your voice, and renders a 1080×1920 Short or a
-1920×1080 video.
+logos, adds sound design and a music bed that ducks under your voice, and renders a 1080×1920 Short, a
+1920×1080 landscape, a 1080×1080 square or a 1080×1350 portrait video.
 
 This repo ships one skill, `voiceover-video`. It is model-agnostic: it works in Claude Code, Kimi Code
 CLI, OpenCode, or any agent that can run shell commands. **New here? Start with the
@@ -35,8 +35,9 @@ your machine.
   minimal, retro. Each brings its own texture, captions *and* motion (default transition, shake, flash),
   rendered in your brand's colours; the agent picks one to fit the topic
 - **Brand kits for any brand**: colours, the brand's own fonts and logos in one folder; a **brand board**
-  shows the kit in a theme, with a contrast check, before anything renders. Kits for different clients
-  install side by side
+  shows the kit in a theme, with a contrast check, before anything renders. Keep as many kits as you work
+  with — yours plus clients' — in the kits folder with a default; `brand_kit.py list` shows them and
+  naming one in the prompt picks it for that video
 - **Real people, real footage**: mention a founder and the agent finds their photos and talks (Wikimedia
   Commons, Openverse, Internet Archive, web image search, YouTube, optional Pexels), shows them with a
   lower third, a picture-in-picture clip or a portrait quote, and hands you the credits for the description
@@ -48,7 +49,10 @@ your machine.
 - **Film finish**: grain, vignette, loudness normalised to −14 LUFS
 - **High-quality output**: frames rendered at 2x and saved lossless, encoded at CRF 16 with correct
   BT.709 colour, so edges stay crisp and brand colours stay true after the platform re-encodes it.
-  `VV_QUALITY=draft` gives a fast preview cut
+  `VV_QUALITY=draft` gives a fast preview cut; `--resolution 4k` renders a 4K master
+- **Ready to post**: `captions.srt`/`.vtt` subtitle files with every video, and an optional delivery
+  step (`deliver.sh`) that assembles a `delivery/` folder — the master, a web-sized copy, the captions,
+  a cover frame and a `credits.txt`
 - **No recording? Script mode**: give it a topic ("explain Kafka with cartoon characters") and the agent
   writes an analogy-driven explainer, voices each character offline (a warm teacher, a squeaky
   sidekick), and animates original cartoon hosts who talk when their lines play, with speech bubbles,
@@ -56,9 +60,10 @@ your machine.
 - **Optional face-cam bookends**: film the script on your phone in one take; your opening line and
   sign-off stay on camera and everything between is animated
 - **Presenter mode for green-screen talks**: the speaker is keyed out and stays on screen in your brand's
-  background, moving between full-frame, split and close-up layouts while panels, checklists and diagrams
-  build beside them; dead air at both ends is trimmed automatically. Keying measures the screen itself
-  and resumes if interrupted
+  background, moving between full-frame, left or right splits, close-ups and picture-in-picture corner
+  bubbles — or parked in one position you choose — while panels, checklists and diagrams build beside
+  them. Dead air is trimmed, 4K takes are scaled and any frame rate converted automatically; keying
+  measures the screen itself and resumes if interrupted
 - **QA gates**: the agent reviews a contact sheet of every shot before the full render, and checks the
   encoded file, not just the preview
 
@@ -89,6 +94,7 @@ transcript.txt ── you proofread ──► build_captions.py
   └─► render-frames.sh                     headless Chromium, frame-exact
           │
           ▼  mix-encode.sh                  voice + ducked clip audio + ducked music + SFX → mp4
+          ▼  deliver.sh (optional)          delivery/: master + web copy + captions + cover + credits.txt
 ```
 
 Every frame is rendered by seeking a paused timeline to an exact timestamp, so the same composition
@@ -115,6 +121,8 @@ Runs on macOS and Linux. On Windows, run your agent inside WSL: the scripts are 
 ```bash
 pip install faster-whisper 'av<19' numpy
 # macOS: brew install ffmpeg node   ·   Debian/Ubuntu: sudo apt install ffmpeg nodejs npm
+# macOS presenter mode needs libwebp, dropped from Homebrew's core ffmpeg:
+# brew install ffmpeg-full
 ```
 
 On macOS, Homebrew's Python refuses a system-wide `pip install`; the
@@ -153,7 +161,10 @@ cp -r voiceover-video-skill/skills/voiceover-video ~/.kimi-code/skills/
 
 Nothing to run by hand: the agent runs `setup.sh` the first time you use the skill. It installs
 `playwright-core` and its Chromium build, and downloads GSAP and the fonts. It prints `ready` or names
-exactly what is missing.
+exactly what is missing. Two optional extras, once each: `setup.sh --voices` adds the offline character
+voices for script mode (~500 MB); `setup.sh --vision` adds face detection (opencv plus a small model),
+which keeps the speaker framed in presenter layouts and faces in frame in sourced photos — everything
+works without it.
 
 If you copied the skill instead of installing the plugin, you can run it yourself first:
 
@@ -169,6 +180,18 @@ bash ~/.kimi-code/skills/voiceover-video/scripts/setup.sh
 
 **Step by step, from a fresh machine to a finished video, with copy-paste prompts for any agent:**
 [docs/workflow.md](docs/workflow.md).
+
+1. **Install the plugin** (above) and start a fresh session.
+2. **Set up**: the agent runs `setup.sh` on first use (above); add `--voices` for script mode and
+   `--vision` for face framing. On macOS, put the Python packages in a venv first
+   ([per-platform steps](docs/workflow.md#1-install-the-tools)).
+3. **Create your brand kit** (once, below): the agent asks four questions and writes it to
+   `~/.config/voiceover-video/kits/`. Already have kits? `brand_kit.py list` shows them and
+   `brand_kit.py default <name>` sets the one used when a request names none.
+4. **Make a video**, in any mode — the prompts below.
+5. **Find the result** in `<output dir>/<slug>/` (default `~/voiceover-videos/<slug>/`): the master mp4
+   with `captions.srt`/`.vtt` beside it, plus a `delivery/` folder in the project when the agent runs the
+   optional delivery step — the master, a web copy, captions, a cover frame and `credits.txt`.
 
 In Claude Code or Kimi Code CLI:
 
@@ -188,17 +211,23 @@ Recorded against a green screen? Keep the speaker on screen the whole way throug
 
 > edit ~/Videos/talk.mp4 in presenter mode with my brand kit, landscape
 
-The speaker moves between full-frame, split and close-up layouts while the graphics build beside them.
-From a long talk, cut a Short:
+The speaker moves between full-frame, split, close-up and corner-bubble layouts while the graphics
+build beside them — add a position (`bottom-right`, `left`, …) to park them, or leave it `auto`. From a
+long talk, cut a Short:
 
 > make a 60-second vertical Short from 2:10 to 3:10 of ~/Videos/talk.mp4, presenter mode
+
+No recording at all? Describe the explainer and the agent writes the script, voices a character per
+role offline, and animates them:
+
+> explain Kafka consumer groups with cartoon characters, 90 seconds
 
 Before recording, send the speaker the [recording guide](docs/recording-guide.md). The full prompts,
 approval points and timings are in the [workflow guide](docs/workflow.md).
 
 Useful follow-ups:
 
-> make the intro punchier · use my music track ~/Music/bed.mp3 · render a landscape version
+> make the intro punchier · use my music track ~/Music/bed.mp3 · render a landscape version · a square version for the feed
 
 ---
 
@@ -227,8 +256,11 @@ you to listen to the mix before posting.
 
 Every video wears a **brand kit**: a folder with a `brand.json` and the fonts and logos it names. The
 first time you use the skill, the agent asks for your name and handle, your colours (a named look or your
-own), your fonts and where videos should go, then writes your kit to `~/.config/voiceover-video/`. Every
-question has a default, so "just use the defaults" is a valid answer.
+own), your fonts and where videos should go, then writes your kit to
+`~/.config/voiceover-video/kits/<name>/`. Every question has a default, so "just use the defaults" is a
+valid answer. Keep as many kits as you work with: `brand_kit.py list` shows them all with the default
+marked, `brand_kit.py default <name>` sets it, and naming one in the prompt ("in the Acme kit") picks it
+for that video — with several kits and none named, the agent asks before rendering.
 
 ```
 acme-kit/
@@ -279,7 +311,7 @@ prompt that gets the best result:
 Use the voiceover-video skill to edit this video.
 
 Video:        ~/Projects/acme/keynote-take3.mp4
-Brand kit:    ~/Projects/acme/brand-kit/   (or: colours #e50914 / #0a0a0a, fonts in ./fonts, logos in ./logos)
+Brand kit:    acme   (a kit name from brand_kit.py list, or a folder: ~/Projects/acme/brand-kit/)
 Script:       ~/Projects/acme/script.md    (spelling reference for names and terms)
 Company:      Acme. We are the client; these brand assets are approved for this video
 Audience:     developers on YouTube; landscape
@@ -308,8 +340,9 @@ The default type is **Archivo** (expanded black for headlines, condensed for cap
   6 cores (~45 minutes for a 6-minute talk). `VV_QUALITY=draft` renders a fast preview first.
 - **Long steps run in the background.** Transcribing, keying, rendering and encoding a long take can
   outlast an agent's command time limit, so `SKILL.md` has the agent run them detached and poll the log;
-  keying resumes where it stopped.
+  keying and frame rendering resume where they stopped — re-run the same command.
 - **Disk.** Lossless frames are ~1.2 MB each, about 4 GB for a 108-second Short, deleted with `work/`.
+  Short on disk? `render-chunks.sh` renders and encodes in chunks, so peak use is one chunk at a time.
 - **File size.** Film grain resists compression; the encoder caps the bitrate so a 108-second vertical
   lands around 200 MB. That headroom is what keeps it sharp after the platform re-compresses it.
 - **Images and logos** found during an edit keep their own licences. See [THIRD_PARTY.md](THIRD_PARTY.md).

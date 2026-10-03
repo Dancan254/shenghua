@@ -35,8 +35,8 @@ html,body{width:var(--W);height:var(--H);overflow:hidden;background:var(--crt);f
 .term .bar i{width:16px;height:16px;border-radius:50%;background:var(--crt-frame)}
 .term pre{font-family:"{{brand.fonts.mono}}","Courier New",monospace;font-size:36px;line-height:1.5;padding:32px 36px;color:var(--phosphor);white-space:pre-wrap;text-shadow:0 0 6px color-mix(in srgb,var(--phosphor) 40%,transparent)}
 .err{color:var(--red);text-shadow:0 0 6px color-mix(in srgb,var(--red) 50%,transparent)}
-.caret{display:inline-block;width:.55em;height:1em;background:var(--phosphor);vertical-align:-.12em;margin-left:4px;animation:blink 1s step-end infinite}
-@keyframes blink{50%{opacity:0}}
+/* The caret has no CSS animation: renderText() blinks it from t so renders stay deterministic */
+.caret{display:inline-block;width:.55em;height:1em;background:var(--phosphor);vertical-align:-.12em;margin-left:4px}
 .logo{width:260px;height:260px;display:flex;align-items:center;justify-content:center;background:var(--crt-panel);border:2px solid var(--crt-frame);border-radius:4px;box-shadow:0 0 20px color-mix(in srgb,var(--phosphor) 12%,transparent)}
 .logo img{width:90px;height:90px;filter:invert(1) drop-shadow(0 0 6px var(--phosphor))}
 .pkt{position:absolute;width:28px;height:28px;border-radius:50%;background:var(--phosphor);box-shadow:0 0 12px var(--phosphor)}

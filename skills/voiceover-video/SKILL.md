@@ -1,31 +1,20 @@
 ---
 name: voiceover-video
-description: "Turn a voice recording (voice note, narration, podcast snippet) into a fully animated, brand-styled video — local word-level transcription, a timed shot list, kinetic typography, camera moves, real photos and licensed video clips of the people and products it mentions, synthesized sound design and a voice-ducked music bed, rendered as a 1080x1920 Short (or 1920x1080). Also takes a to-camera phone recording: the opening line and sign-off stay on camera as face shots and everything between is animated. With no recording at all, writes an explainer script, voices each cartoon character offline, and animates talking hosts that teach the concept through an analogy. Use when asked to 'make an animated explainer about X', 'explain Kafka with cartoon characters', 'make a video with characters teaching this', or to 'make a video out of this audio', 'animate this voice note', 'turn this narration into a Short', 'edit this like a pro', 'create a video from my voiceover', or 'make a reel from this recording'."
+description: "Turn a voice recording (voice note, narration, podcast snippet) into a fully animated, brand-styled video — local word-level transcription, a timed shot list, kinetic typography, camera moves, real photos and licensed video clips of the people and products it mentions, synthesized sound design and a voice-ducked music bed, rendered as a 1080x1920 Short (or 1920x1080, 1080x1080, 1080x1350). Also takes a to-camera phone recording: the opening line and sign-off stay on camera as face shots and everything between is animated. With no recording at all, writes an explainer script, voices each cartoon character offline, and animates talking hosts that teach the concept through an analogy. Use when asked to 'make an animated explainer about X', 'explain Kafka with cartoon characters', 'make a video with characters teaching this', or to 'make a video out of this audio', 'animate this voice note', 'turn this narration into a Short', 'edit this like a pro', 'create a video from my voiceover', or 'make a reel from this recording'."
 ---
 
 # Voiceover Video Skill
 
-Takes an audio file and builds a complete edit around it: every shot is an HTML/GSAP scene timed to
-the exact spoken word, rendered frame by frame in headless Chromium, then muxed with a mixed
-soundtrack (voice + synthesized SFX + ducked music). The judgement — what each line should *look*
-like — is yours. The scripts handle transcription, rendering, audio, and encoding.
+Takes an audio file and builds a complete edit around it: every shot is an HTML/GSAP scene timed to the exact spoken word, rendered frame by frame in headless Chromium, then muxed with a mixed soundtrack (voice + synthesized SFX + ducked music). The judgement — what each line should *look* like — is yours. The scripts handle transcription, rendering, audio, and encoding.
 
-Given a to-camera video instead of audio, the opening line and the sign-off stay on camera as face
-shots; everything between them is animated over the voice from the same take.
+Four ways in, one workflow:
 
-Given a to-camera video shot against a **green screen** (**presenter mode**), the speaker is keyed out and
-stays on screen in the brand's background for the whole video, moving between full-frame, split and
-close-up layouts while graphics build beside them, with full-screen cutaways for diagrams and chapter
-cards. Steps 2a and 2b trim and key the take; the *Presenter* blocks in `scene-blocks.md` lay it out.
+- **Audio** (voice note, narration): the whole video is animated.
+- **A to-camera video** (`bookends`, the default for a video): the opening line and sign-off stay on camera as face shots; the rest is animated. Mode detail: `references/face-bookends.md`.
+- **A green-screen video** (`presenter`): the keyed speaker stays on screen throughout, moving between layouts while graphics build beside them. Mode detail: `references/presenter.md`.
+- **A topic or script** (script mode): you write the script, Step 1b voices it with one offline voice per character, and original cartoon hosts act it out. Mode detail: `references/explainers.md`. Everything after Step 1b runs on the generated `<work>/voice.wav` as if it were a recording.
 
-Given only a topic or a script (**script mode**), there is no recording: you write the script, Step 1b
-voices it with one synthetic voice per character, and original cartoon hosts act it out. Everything
-after Step 1b runs on the generated `<work>/voice.wav` as if it were a recording.
-
-`SKILL_DIR` = the directory containing this SKILL.md.
-
-**Always load `SKILL_DIR/references/scene-blocks.md` before writing the shot list.** It holds the
-block catalogue, the pacing rules, and the sound-cue vocabulary.
+`SKILL_DIR` = the directory containing this SKILL.md. **Always load `SKILL_DIR/references/scene-blocks.md` before writing the shot list** (block catalogue, pacing rules, safe zones, sound-cue vocabulary). Load each mode's reference at the step that needs it.
 
 ---
 
@@ -33,127 +22,54 @@ block catalogue, the pacing rules, and the sound-cue vocabulary.
 
 | Field | Required | Example |
 |-------|----------|---------|
-| `audio`, `video` or `topic` | Yes | `~/Downloads/voice-note.m4a` · a to-camera recording `~/Movies/take-1.mp4` · `"explain Kafka consumer groups"` (script mode) |
-| `script` | No | the script, plain or with `[FACE]` / `[VOICE]` sections; captions are checked against it. Sections start on their own line with exactly `[FACE]` or `[VOICE]`. In script mode, `Name: line` lines, and it *is* the input |
+| `audio`, `video` or `topic` | Yes | `~/Downloads/voice-note.m4a` · a to-camera `~/Movies/take-1.mp4` · `"explain Kafka consumer groups"` (script mode) |
+| `script` | No | the script, plain or with `[FACE]` / `[VOICE]` sections (each starts on its own line); the spelling reference for captions. In script mode, `Name: line` lines, and it *is* the input |
 | `cast` | No | script mode: who's in it and which voice, e.g. `teacher Mama Log, sidekick Pip (squeaky)` |
-| `format` | No | `vertical` 1080x1920 (default) · `landscape` 1920x1080 |
-| `style` | No | for a `video`: `bookends` (default: face shots open and close) · `presenter` (green screen: the speaker stays on screen throughout) |
-| `kit` | No | brand kit folder for this video, e.g. a client's `~/clients/acme-kit` (default: the user's own kit) |
+| `format` | No | `vertical` 1080x1920 (default) · `landscape` 1920x1080 · `square` 1080x1080 · `portrait` 1080x1350 |
+| `style` | No | for a `video`: `bookends` (default: face shots open and close) · `presenter` (green screen) |
+| `position` | No | presenter mode: where the speaker stands — `auto` (default: you vary layouts under the pacing rules) · `bottom-right` · `bottom-left` · `left` · `right` · `full` |
+| `kit` | No | brand kit folder **or kit name** for this video, e.g. `acme` or `~/clients/acme-kit` |
 | `template` | No | visual theme id from `templates/templates.json` (default `kinetic`) |
 | `music` | No | `synth` (default) · path to a royalty-free track · `none` |
-| `model` | No | `small` (default) · `base` for clean audio, ~2x faster |
+| `model` | No | transcription model: `small` (default) · `base` for clean audio, ~2x faster · any faster-whisper name or local folder |
 | `vocab` | No | names and terms the speaker uses: `"Kubernetes, Kafka, Jane Doe"` |
 | `slug` | No | inferred from the topic, e.g. `java-origin` |
 
-Brand kit: `kit` if given, then `./brand.json`, then `~/.config/voiceover-video/brand.json`, then the
-bundled `SKILL_DIR/brand.example.json`. A kit is a folder holding `brand.json` (version 2) and the fonts
-and logos it names; `SKILL_DIR/examples/kits/` has two to copy. Output goes to `<kit output.dir>/<slug>/`
-(default `~/voiceover-videos`); work files go to `<output dir>/<slug>/work/`. Create it now and set `<work>`
-to that path for the rest of the workflow:
+**Brand kit.** Resolved as: `kit` if given, then `./brand.json`, then the configured default, then `~/.config/voiceover-video/brand.json`, then the bundled `SKILL_DIR/brand.example.json`. **When the user has more than one kit (`brand_kit.py list` shows several) and the request names none, list them and ask which to use before anything renders.** Naming one — "in the Acme kit" — skips the question. To create, convert or manage kits, **load `references/brand-kits.md`**. A version-1 brand file converts once with `init_kit.py --from <file>`.
+
+Output goes to `<kit output.dir>/<slug>/` (default `~/voiceover-videos`); work files go to `<output dir>/<slug>/work/`. Create it now:
 
 ```bash
 mkdir -p <output dir>/<slug>/work
 work="<output dir>/<slug>/work"
 ```
 
-Pick the defaults and proceed. Don't interrogate.
-
-**A version-1 brand file** (no `"version": 2`; scripts say so): convert it once. The original is kept as
-`brand.v1.json`:
-
-```bash
-python3 SKILL_DIR/scripts/init_kit.py --from ~/.config/voiceover-video/brand.json
-```
-
-**First run only — no kit anywhere:** the example kit ships someone else's handle and colours, so ask
-before rendering. Four questions, each with its default, answered in one message:
-
-| Ask | Default |
-|---|---|
-| Name and handle shown on the video | required, no default |
-| Look: `midnight-pink`, `carbon-cyan`, `ink-amber`, `violet-signal`, or their own colours | `midnight-pink` |
-| Fonts: display and code — a Google font name, or a font file they have | `Archivo` / `Geist Mono` |
-| Where finished videos go | `~/voiceover-videos` |
-
-```bash
-python3 SKILL_DIR/scripts/init_kit.py --name "Their Name" --handle @theirhandle [--preset carbon-cyan] \
-  [--primary '#ff6600' --bg '#0d1117'] [--display Archivo --mono 'Geist Mono'] [--output-dir ~/voiceover-videos]
-```
-
-**A client's brand** (a company video): build a kit from what the client supplies — never fetch a
-company's logo or font from the web. Ask for the brand colours, the font files or Google names, and the
-logo files (a mark, and a wordmark for dark and for light backgrounds), then:
-
-```bash
-python3 SKILL_DIR/scripts/init_kit.py --name Acme --handle acme.com --primary '#e50914' --bg '#0a0a0a' \
-  --display ~/client/fonts/AcmeSans.woff2 --mono 'JetBrains Mono' --mark ~/client/logo-mark.svg \
-  --wordmark-on-dark ~/client/wordmark-white.svg --wordmark-on-light ~/client/wordmark.svg \
-  --background glow --out ~/clients/acme-kit
-```
-
-A light brand also passes `--bg-alt` and `--text-alt`: dark themes use them. `--background` is `theme`
-(the theme's own canvas), `solid`, `glow`, `gradient` or `grid`; `--background-image <file>` uses a picture.
-
-In script mode there is no file to check; go to Step 1b after setup. Otherwise, if the audio or video
-path is missing or not a file, say so and stop. With a `video`, pass the video
-file wherever a step below takes `<audio>`; ffmpeg reads the voice from its audio track.
-
----
+Pick the defaults and proceed. Don't interrogate — the kit question above is the one exception. In script mode there is no file to check; go to Step 1b after setup. If the audio or video path is missing or not a file, say so and stop. With a `video`, pass it wherever a step takes `<audio>`; ffmpeg reads the voice from its audio track.
 
 ## Step 1 — Setup (first run, and whenever the kit changes)
 
 ```bash
-bash SKILL_DIR/scripts/setup.sh [<kit>]
+bash SKILL_DIR/scripts/setup.sh [--voices] [--vision] [<kit>]
 ```
 
-Checks `ffmpeg`, `node`, `faster_whisper` and `numpy`; installs `playwright-core` and its matching
-Chromium build; downloads GSAP and the themes' fonts into `SKILL_DIR/assets/`, and installs the kit's fonts
-and logos into `SKILL_DIR/assets/kits/<id>/`, so several clients' kits live side by side. Prints `ready` or
-names the missing piece. Re-running is a no-op for an unchanged kit.
+Checks `ffmpeg`, `node`, `faster_whisper` and `numpy`; installs `playwright-core` and its Chromium build; downloads GSAP and the themes' fonts into `SKILL_DIR/assets/` and the kit's fonts and logos into `SKILL_DIR/assets/kits/<id>/` (the kit argument is a path or a kit name), so several clients' kits live side by side. Prints `ready` or names the missing piece; re-running is a no-op for an unchanged kit. `--voices` fetches the script-mode voice models (~500 MB, online once); `--vision` installs the optional face detector (keying frames an off-centre speaker, sourced photos keep the face in frame) — everything works without it.
 
 ## Step 1a — Approve the look (first run, and every new kit)
 
-```bash
-python3 SKILL_DIR/scripts/fill_template.py "$work" 6 --format landscape --brand <kit> --template <template-id> --board
-node SKILL_DIR/scripts/render.js board "$work"/board.html "$work"/board.png
-python3 SKILL_DIR/scripts/brand_kit.py check <kit>
-```
-
-The board shows the kit inside the theme: headline and highlight, a panel, a lower third, captions, a
-pill, a stamp, the end card with the logo, and the colour swatches. `render.js board` fails if a kit font
-fell back to a default face. `brand_kit.py check` prints the contrast report (exit 1 below WCAG AA) and
-warns when a logo has no variant for the canvas. Show the board and wait for a yes; if you cannot view
-images, give the user `board.png` and the contrast report. A wrong colour costs seconds here and a full
-render later. Pick the theme in Step 4 first if the user hasn't — the board renders one theme.
-
----
+Render the brand board, show it, and wait for a yes; `brand_kit.py check <kit>` prints the contrast report. Commands and what to look for: `references/brand-kits.md` → *The brand board*. Pick the theme in Step 4 first if the user hasn't — the board renders one theme.
 
 ## Step 1b — Script mode: write and voice the script
 
-Only when there is no recording. **Load `SKILL_DIR/references/explainers.md` first.** It has the
-explainer shape, how to pick the analogy, the cast roles and the script format.
+Only when there is no recording. **Load `SKILL_DIR/references/explainers.md` first** — the explainer shape, the analogy, the cast roles, the script format.
 
-1. Write the analogy mapping, then the script as `Name: line` lines, to `<work>/script.txt`. Show both
-   to the user and wait for a yes; the script is the cheapest thing to change.
-2. Voice it (first run: `bash SKILL_DIR/scripts/setup.sh --voices` fetches the voice and alignment models, ~500 MB):
+1. Write the analogy mapping, then the script as `Name: line` lines, to `<work>/script.txt`. Show both to the user and wait for a yes; the script is the cheapest thing to change.
+2. Voice it (first run: `setup.sh --voices`):
 
 ```bash
 python3 SKILL_DIR/scripts/speak.py "$work"/script.txt "$work" [--cast "$work"/cast.json]
 ```
 
-Writes `voice.wav`, `speech.json`/`speech.js` (who speaks when; the hosts read it), and `words.json` +
-`transcript.txt`. speak.py runs faster-whisper over the voice track and maps what it hears onto each
-line, so every script word carries the time it is spoken at. A line recognition can't read (a short line
-with a hard name, a very squeaky voice) keeps estimated times;
-the result line names each one (`… 14/15 lines aligned (1 estimated: pip line 7)`) — tell the user.
-`--no-align` estimates every line, for a fast draft only. Tell the user which voice each character got
-and ask them to listen to `voice.wav`; you cannot. Re-voicing a line costs seconds, re-timing thirty
-shots does not.
-
-From here, `<audio>` in every later step is `"$work"/voice.wav`. Skip Step 2: `words.json` is already
-timed and spelled as the script. In Step 3, `script.txt` is the reference and fixes are rarely needed.
-
----
+Writes `voice.wav`, `speech.json`/`speech.js` (who speaks when; the hosts read it), and `words.json` + `transcript.txt`, each line's words timed by recognition. A line recognition can't read keeps estimated times; the result line names it (`… 14/15 lines aligned (1 estimated: pip line 7)`) — tell the user. `--no-align` estimates every line, for a fast draft only. Model, device and compute type follow the same flags and `config.json` as `transcribe.py` (Step 2). Tell the user which voice each character got and ask them to listen to `voice.wav`; you cannot. From here, `<audio>` in every later step is `"$work"/voice.wav`. Skip Step 2: `words.json` is already timed and spelled as the script. In Step 3, `script.txt` is the reference and fixes are rarely needed.
 
 ## Step 2 — Transcribe
 
@@ -163,77 +79,46 @@ Tell the user the estimate first: roughly **2–3x realtime on CPU** for `small`
 python3 SKILL_DIR/scripts/transcribe.py <audio> --outdir "$work" --model small --vocab "<vocab>"
 ```
 
-Writes `words.json` (every word with start/end) and `transcript.txt` — one phrase per line as
-`[start] word@time word@time …`. Read `transcript.txt`; the per-word times are what you cut to.
+Writes `words.json` (every word with start/end) and `transcript.txt` — one phrase per line as `[start] word@time word@time …`. Read `transcript.txt`; the per-word times are what you cut to.
 
-Run it in the background for anything over two minutes. Never wait silently. The first run downloads
-the model, so it may sit at low CPU for a few minutes.
+`--model` takes any faster-whisper name (`tiny` … `large-v3-turbo`) or a local CTranslate2 folder; `--device auto|cpu|cuda` and `--compute-type int8|float16|float32` control where it runs (a GPU is several times faster than CPU; larger models trade speed and disk for accuracy). Defaults come from `~/.config/voiceover-video/config.json` (`{"whisper": {"model": …, "device": …, "compute_type": …}}`; `VV_CONFIG` points at another file), then the built-ins.
 
-**Long steps outlast shell time limits.** Transcribing, keying, rendering frames and encoding a take of
-several minutes can each run longer than an agent's command timeout, and a killed step loses its work.
-Start them detached and poll the log: `nohup <command> > "$work"/<step>.log 2>&1 &`, then read the log
-until it prints its `Next:` line. `key_greenscreen.py` resumes where it stopped. A killed `render-frames.sh`
-doesn't: re-run it with a frame range starting at the first frame missing from `frames/`.
+Run it in the background for anything over two minutes; never wait silently — the first run downloads the model and may sit at low CPU for a few minutes. **Long steps outlast shell time limits:** transcribing, keying, rendering and encoding can each outrun an agent's command timeout. Start them detached and poll the log: `nohup <command> > "$work"/<step>.log 2>&1 &`, then read the log until it prints its `Next:` line. `key_greenscreen.py` and `render-frames.sh` both resume where they stopped: re-run the same command.
 
-## Step 2a — Trim the take (audio, and presenter mode)
+## Step 2a — Trim the take (every mode with a recording)
 
 ```bash
 python3 SKILL_DIR/scripts/trim_take.py <audio-or-video> "$work" [--in auto] [--out auto]
 ```
 
-Cuts the dead air before the first word (keeps 0.5s) and after the last (keeps 2.5s for the outro), writes
-a lossless `voice.wav`, shifts `words.json` and `transcript.txt` so the first kept moment is 0, and records
-the cut in `take.json`. Pass `--in`/`--out` in seconds to cut by hand (a false start, a reach for the
-camera); cut points inside the speech make an excerpt, such as a Short from a long talk, and drop the words
-outside them. From here on, `<audio>` is `"$work"/voice.wav` and `<duration>` is the length it prints. Skip it for
-`bookends` video: face shots are cut from the untrimmed recording.
+Cuts the dead air before the first word (keeps 0.5s) and after the last (keeps 2.5s for the outro), writes a lossless `voice.wav`, shifts `words.json` and `transcript.txt` so the first kept moment is 0, and records the cut in `take.json` — `key_greenscreen.py` and `extract_face.sh` apply it, so after trimming every time you handle is an edit time. Pass `--in`/`--out` in seconds to cut by hand; cut points inside the speech make an excerpt, such as a Short from a long talk, and drop the words outside them. Re-running trims from the raw transcript again. From here on, `<audio>` is `"$work"/voice.wav` and `<duration>` is the length it prints.
 
 ## Step 2b — Key the speaker (presenter mode)
+
+**Load `references/presenter.md` first** — the keying detail and the layout rules. Then:
 
 ```bash
 python3 SKILL_DIR/scripts/key_greenscreen.py "$work" --preview 30 [--mask x,y,w,h …]
 python3 SKILL_DIR/scripts/key_greenscreen.py "$work" [--mask x,y,w,h …] [--quality master]   # detached for long takes
 ```
 
-It measures the screen from the take and prints its colour and margin; a take with no usable screen fails
-with the reason, so fall back to `bookends`. Look at `presenter-preview.png` first: hair, glasses and
-shoulders should have clean edges. A name banner or logo burned into the recording needs a `--mask` over it
-(source pixels); a mask that cuts a shoulder leaves a notch, which `presenterStyle({fade:"left"})` hides.
-The full run writes `presenter/fNNNNN.webp`, one per edit frame (~4 frames/s on 6 cores, so a 6-minute take
-is about 45 minutes): tell the user, run it detached, and re-run the same command if it stops; it keys only
-what is missing. `--quality master` keeps full colour for the sharpest edges at about ten times the disk.
-
----
+It measures the screen itself (a take with no usable screen fails with the reason — fall back to `bookends`), scales anything taller than `--max-height` (default 3840) before keying so a 4K take needs no manual downscale, and converts any frame rate to 30 fps edit frames. **Look at `presenter-preview.png` and wait for a yes** before the full run. The full run writes `presenter/fNNNNN.webp` (~4 frames/s on 6 cores, so a 6-minute take is about 45 minutes): tell the user, run it detached, and re-run the same command if it stops; it keys only what is missing.
 
 ## Step 3 — Proofread the captions
 
-Captions are burned in. Scan `transcript.txt` for misheard words — proper nouns and technical terms
-break first (observed: `San Micro Systems` → Sun Microsystems, `Ok` → Oak, `CNC++` → C/C++,
-`Right once` → Write once). Write `<work>/fixes.json` mapping the raw token to its fix; an empty string
-drops the token:
+Captions are burned in. Scan `transcript.txt` for misheard words — proper nouns and technical terms break first (observed: `San Micro Systems` → Sun Microsystems, `Ok` → Oak, `CNC++` → C/C++, `Right once` → Write once). Write `<work>/fixes.json` mapping the raw token to its fix; an empty string drops the token:
 
 ```json
 { "San": "Sun", "Ok.": "Oak.", "CNC++,": "C/C++,", "alias,": "", "that@50.22": "data" }
 ```
 
-A plain key fixes the token everywhere. For a common word that was misheard once, key it as
-`token@time`, with the start time printed in `transcript.txt`, and only that word changes.
-
-Optionally write `<work>/keywords.json`, an array of words that stay in the accent colour once
-spoken: `["Kafka", "Java@3.00"]`. A plain word flags every occurrence; `@time` flags one. Keep it to
-names and the few nouns the video is about, one per phrase at most.
+A plain key fixes the token everywhere. For a common word misheard once, key it as `token@time` (the start time printed in `transcript.txt`) and only that word changes. Optionally write `<work>/keywords.json`, words that stay in the accent colour once spoken: `["Kafka", "Java@3.00"]` — names and the few nouns the video is about, one per phrase at most.
 
 ```bash
 python3 SKILL_DIR/scripts/build_captions.py "$work"
 ```
 
-Writes `<work>/words.js`. Never change timestamps. Tell the user about any token you could not
-resolve instead of guessing.
-
-With a `script`, it is the reference for spelling: a token that differs from it goes in `fixes.json`.
-Captions follow what was said, so an ad-libbed line stays; tell the user where the take left the script.
-
----
+Writes `<work>/words.js`, plus `captions.srt` and `captions.vtt` from the same phrases — subtitle files for platforms that index uploaded captions, muxed or copied by the later steps. Never change timestamps. Tell the user about any token you could not resolve instead of guessing. With a `script`, it is the reference for spelling: a token that differs from it goes in `fixes.json`; an ad-libbed line stays — tell the user where the take left the script.
 
 ## Step 4 — Shot list (confirm before building)
 
@@ -246,52 +131,21 @@ Load `references/scene-blocks.md`. Write a shot table — one row per shot, cut 
 03  6.10-8.30     Back in the early 1990s            vhs + counter      tick, hit@7.20
 ```
 
-Rules: a new shot every 1–4 seconds; a hit only on a word that deserves it; captions hidden whenever
-the spoken word *is* the visual. Find photos and clips before the table is final (Step 5).
-See `SKILL_DIR/examples/kafka-vs-rabbitmq/` for a complete worked shot list.
+Rules: a new shot every 1–4 seconds; a hit only on a word that deserves it; captions hidden whenever the spoken word *is* the visual. Find photos and clips before the table is final (Step 5). See `SKILL_DIR/examples/kafka-vs-rabbitmq/` for a complete worked shot list.
 
-**Pick the template (theme) now.** Read `templates/templates.json` and choose the `id` whose mood
-matches the topic. Each theme changes type, colour, captions *and* motion (default shot entry, shake,
-flash), so it is a real choice, not a palette swap:
+**Pick the template (theme) now.** Read `templates/templates.json` and choose the `id` whose mood matches the topic — each theme changes type, colour, captions *and* motion (default shot entry, shake, flash), so it is a real choice, not a palette swap. `kinetic` fast dark explainers (default) · `documentary` founder stories · `newsroom` announcements · `blueprint` architecture · `brutalist` hot takes · `aurora` AI/SaaS launches · `minimal` editorial deep dives · `retro` history of tech. If the user asked for a specific look, use that.
 
-| id | Pick it for |
-|---|---|
-| `kinetic` | fast, dark, neon — tech explainers, launches, listicles (default) |
-| `documentary` | founder stories, company origins, biographies — serif, film grain, slow fades |
-| `newsroom` | announcements, funding, outages, "this week in tech" — condensed type, ticker, wipes |
-| `blueprint` | system design, architecture, "how X works under the hood" — grid paper, dashed outlines |
-| `brutalist` | hot takes, myth busting — light background, hard black borders, hard cuts, big shake |
-| `aurora` | AI and SaaS launches, dev tools — gradients, frosted glass, soft entries |
-| `minimal` | thought leadership, deep dives — light, editorial, calm |
-| `retro` | history of tech, CLI demos, hacking stories — CRT amber, glitch cuts |
+In script mode, the hosts carry the video: cut shots on `line(who, n)` times from `speech.json`, give the sidekick a bubble for their lines (`say()`), name each term with a `.pill` the first time it's spoken, and use lanes and tokens for anything that queues, flows or is numbered.
 
-If the user asked for a specific look, use that. Pass it to `fill_template.py` with `--template <id>`.
+**Presenter mode:** **load `references/presenter.md` now.** Every row names a layout — `full`, `split-left` (`split`), `split-right`, `close`, the corner bubbles `pip-br`/`pip-bl`/`pip-tr`/`pip-tl`, `cut`, plus chapter cards for long talks. A chosen `position` becomes the default layout for every shot; with `auto`, follow the pacing rules (never the same layout twice in a row, varied holds, a pip bubble over most cutaways).
 
-In script mode, the hosts carry the video: cut shots on `line(who, n)` times from `speech.json`, give the
-sidekick a bubble for their lines (`say()`), name each term with a `.pill` the first time it's spoken,
-and use lanes and tokens for anything that queues, flows or is numbered. The *Host*, *Speech bubble*,
-*Term pill*, *Lane and tokens* and *Failure and recovery* blocks in `scene-blocks.md` cover it.
+**Bookends:** **load `references/face-bookends.md` now.** The first and last rows are face shots (*Face hook*, *Face sign-off*), timed from the script's `[FACE]` sections; a series badge goes on shot 02.
 
-In presenter mode, every row names a layout: `full` (the speaker centred, a tag or headline beside them),
-`split` (speaker left, a panel building the point on the right), `close` (punch in for a slam), or `cut` (a
-full-screen graphic, the speaker stepped out), plus chapter cards for long talks. A layout may hold 3–8s
-in a talk of several minutes as long as something in it moves; a Short still cuts every 1–4s.
-
-With a `video` in `bookends` style, the first and last rows are face shots (*Face hook*, *Face sign-off*). The hook runs
-from 0 to the last word of the script's first `[FACE]` section (no script: the first sentence). The
-sign-off runs from the first word of the last `[FACE]` section to the end. A series badge goes on shot 02.
-
-Show the table and the media list (every photo and clip, with its source and licence) to the user.
-Wait for a yes — this is the expensive part to change later.
-
----
+Show the table and the media list (every photo and clip, with its source and licence) to the user. Wait for a yes — this is the expensive part to change later.
 
 ## Step 5 — Source photos and clips
 
-Whenever the audio names a person, company, product or event, show it: the founder on stage, the
-product launch, the person saying the line. `find_media.py` searches licensed sources (Wikimedia
-Commons, Openverse, Internet Archive, and Pexels with `PEXELS_API_KEY`) alongside the open web (Bing
-images) and YouTube:
+Whenever the audio names a person, company, product or event, show it: the founder on stage, the product launch, the person saying the line. `find_media.py` searches licensed sources (Wikimedia Commons, Openverse, Internet Archive, and Pexels with `PEXELS_API_KEY`) alongside the open web (Bing images) and YouTube:
 
 ```bash
 python3 SKILL_DIR/scripts/find_media.py search "$work" "Yang Zhilin portrait"                       # photos
@@ -303,116 +157,49 @@ python3 SKILL_DIR/scripts/find_media.py search "$work" "facepalm" --kind gif    
 python3 SKILL_DIR/scripts/find_media.py fetch "$work" m11 --name facepalm
 ```
 
-Gifs come from Commons, and from GIPHY when `GIPHY_API_KEY` is set (GIPHY results are marked ⚠). A
-fetched gif becomes an mp4 in `clips/src/`; cut it like any clip, adding `--loop` so a 2-second gif
-fills a longer shot. Never put a `.gif` in an `<img>`: the browser plays it on its own clock, so every
-render would differ. One or two reaction beats per video, on a punchline, never on the point itself.
+Gifs come from Commons, and from GIPHY when `GIPHY_API_KEY` is set (GIPHY results are marked ⚠). A fetched gif becomes an mp4 in `clips/src/`; cut it like any clip with `--loop` so it fills a longer shot. Never put a `.gif` in an `<img>`: the browser plays it on its own clock, so every render would differ. One or two reaction beats per video, on a punchline, never on the point itself.
 
-Results without a licence are marked ⚠. When a licensed result is as good a shot, take it; otherwise
-use the best shot. Prefer the subject's own channel (a company's official YouTube) over re-uploads.
-Search queries that work: the name plus the company, then name + event ("keynote", "launch",
-"interview"). Watermarked stock sites are filtered out.
+Results without a licence are marked ⚠. When a licensed result is as good a shot, take it; otherwise use the best shot, preferring the subject's own channel over re-uploads. Queries that work: the name plus the company, then name + event ("keynote", "launch", "interview"). A YouTube or page fetch downloads the video once into `clips/src/.cache/` (720p over 15 minutes), then cuts `--section` (≤120s) from it, so later sections are instant — tell the user the first fetch of a long talk takes a few minutes. To find a quote inside a section, run `transcribe.py` on the fetched clip and use the word times as `--from` in Step 6. With the vision setup (`setup.sh --vision`), a fetched photo's face position is recorded in `faces.js`, so `.photo`/`.pip` boxes keep the face in frame automatically.
 
-A YouTube or page fetch downloads the whole video once into `clips/src/.cache/` (720p for anything over
-15 minutes), then cuts `--section` (≤120s) from it, so later sections of the same talk are instant. Tell
-the user the first fetch of a long talk takes a few minutes. To find a quote inside a section, run
-`transcribe.py` on the fetched clip and use the word times as `--from` in Step 6.
+**Look at every photo and every preview sheet before using it.** Search results lie: the wrong person with the same name, a news site's logo or banner burned into the image, a thumbnail with text on it. Crop around a banner with `object-position` or pick another result. If you cannot view images, list each file with its source and what you expect it to show, and ask the user to confirm.
 
-**Look at every photo and every preview sheet before using it.** Search results lie: the wrong person
-with the same name, a news site's logo or banner burned into the image, a thumbnail with text on it.
-Crop around a banner with `object-position` or pick another result. If you cannot view images, list each
-file with its source and what you expect it to show, and ask the user to confirm.
-
-Logos: `https://cdn.jsdelivr.net/npm/simple-icons@13/icons/<slug>.svg`. Every fetch is recorded in
-`<work>/credits.json`; log hand-sourced files yourself. The report lists every ⚠ file so the user knows
-which footage belongs to someone else before posting.
-
----
+Logos: `https://cdn.jsdelivr.net/npm/simple-icons@13/icons/<slug>.svg`. Every fetch is recorded in `<work>/credits.json`; log hand-sourced files yourself. The report lists every ⚠ file so the user knows which footage belongs to someone else before posting.
 
 ## Step 6 — Author the composition
 
 ```bash
 python3 SKILL_DIR/scripts/fill_template.py "$work" <duration> --format vertical --template <template-id> [--brand <kit>]
-# or --format landscape for 1920x1080
-# omit --template to use the default kinetic theme
+# --format vertical|landscape|square|portrait · omit --template for the default kinetic theme
+# --resolution 4k records a 2x master in render.json; render-frames.sh then renders 4k by default
 ```
 
-Colours in shots come from the kit: write `var(--brand-primary)`, `var(--brand-primary-ink)` (the brand
-colour as readable text), `var(--brand-text)`, `var(--brand-muted)`, `var(--brand-surface2)`,
-`var(--brand-success)`, `var(--brand-error)`, never a hex value, so the same shots render in any client's
-colours. Logos are in `BRAND.logos` (`mark`, `wordmark.onDark`, `wordmark.onLight`); see *Logo end card*
-and *Corner mark* in `scene-blocks.md`.
+Colours in shots come from the kit: write `var(--brand-primary)`, `var(--brand-primary-ink)` (the brand colour as readable text), `var(--brand-text)`, `var(--brand-muted)`, `var(--brand-surface2)`, `var(--brand-success)`, `var(--brand-error)`, never a hex value, so the same shots render in any client's colours. Logos are in `BRAND.logos` (`mark`, `wordmark.onDark`, `wordmark.onLight`); see *Logo end card* and *Corner mark* in `scene-blocks.md`.
 
-`<duration>` = last word end + ~2.5s for the outro; with a `video`, last word end + 0.5s, and never past
-the recording's length. Get the recording length with:
+`<duration>` = last word end + ~2.5s for the outro; with a `video`, last word end + 0.5s, and never past the recording's length (`ffprobe -v error -show_entries format=duration -of csv=p=0 <video>`).
 
-```bash
-ffprobe -v error -show_entries format=duration -of csv=p=0 <video>
-```
+Writes `<work>/index.html` from the template with brand, geometry and duration filled, and installs the vendored assets and the kit as `<work>/vendor` and `<work>/kit` — **copies**, so the project survives skill updates and being moved to another machine. **Re-running keeps your authored shots** (BEGIN/END SHOTS and TIMELINE carry over), so re-fill freely to change the kit, theme, format or duration; `--force` starts over with the stock demo. `--relink` re-installs `vendor/` and `kit/` without touching the composition — the fix when an old project's symlinks dangle after a skill update. Mode specifics: presenter mode sets `presenterPosition()` and the speaker's look once, then every shot's layout (`references/presenter.md`); bookends extracts the face frames with `extract_face.sh` and plays them with `faceCam()` (`references/face-bookends.md`).
 
-Writes `<work>/index.html` from the template with brand, geometry and duration filled, and links the
-vendored assets as `<work>/vendor`.
-
-In presenter mode, the speaker layer is already in the template. Set its look once, then give every
-shot the layout from the shot list; `presenterOff()` before a full-screen cutaway, and `chapter()` builds a
-chapter card and steps the speaker out for it:
-
-```js
-presenterStyle({halo:true, fade:"left"});        // push:.03 adds a slow zoom, off by default: it softens footage
-presenter("full", 0, 2.8);  shot("s01", 0, 2.8, "cut");
-presenter("split", 2.8, 6.4); shot("s02", 2.8, 6.4); fromRight("#s02p", 2.85);
-presenterOff(6.4);          shot("s03", 6.4, 10.3, "zoom");
-chapter("s12", 58.0, 61.1, "01", "The patch was never<br>the bottleneck");
-```
-
-The *Presenter* blocks in `scene-blocks.md` show the panel, checklist, diagram and stamp pieces these
-layouts use.
-
-With a `video` in `bookends` style, extract the camera frames for both face shots, using the shot list's in/out times:
-
-```bash
-bash SKILL_DIR/scripts/extract_face.sh <video> <work> vertical <hook-in> <hook-out> <signoff-in> <signoff-out>
-```
-
-For every clip shot, cut the fetched clip to the shot's in/out. The size is the box it fills — `vertical`
-or `landscape` for full-bleed, or the `.pip` box size like `900x620`. `--from` is the second inside the
-clip to start at. Add `--audio` when the clip's own sound should play — a founder's line, a crowd:
+For every clip shot, cut the fetched clip to the shot's in/out. The size is the box it fills — `vertical` or `landscape` for full-bleed, or the `.pip` box size like `900x620`. `--from` is the second inside the clip to start at. Add `--audio` when the clip's own sound should play — a founder's line, a crowd:
 
 ```bash
 bash SKILL_DIR/scripts/extract_clip.sh "$work"/clips/src/torvalds-talk.mp4 "$work" 900x620 torvalds 8.9 12.6 --from 20 --audio
 bash SKILL_DIR/scripts/extract_clip.sh "$work"/clips/src/facepalm.mp4 "$work" 900x620 facepalm 31.2 33.4 --loop
 ```
 
-Clip audio ducks under the narration automatically, so it only really plays over a pause in the voice.
-For the speaker's line to land, place the clip over a gap in the recording (a scripted `[CLIP]` beat) or
-leave it silent and put the quote on screen with a *Portrait quote*.
+Clip audio ducks under the narration automatically, so it only really plays over a pause in the voice. For the speaker's line to land, place the clip over a gap in the recording (a scripted `[CLIP]` beat) or leave it silent and put the quote on screen with a *Portrait quote*. **B-roll is the same mechanism** — a `clip()` (or the alias `broll()`) under narration; the *B-roll under narration* block in `scene-blocks.md` has the full-bleed + lower-third pattern.
 
-**B-roll is the same mechanism.** A full-bleed or picture-in-picture clip playing under narration is just
-a `clip()` (or the alias `broll()`). Use the *B-roll under narration* block in `scene-blocks.md` for the
-full-bleed + lower-third pattern.
+Replace the demo shots between `BEGIN SHOTS` / `END SHOTS` (markup) and `BEGIN TIMELINE` / `END TIMELINE` (GSAP) with your shot list, using the helpers the template already defines. Keep the outer `#world` and `#cam` containers intact: `shot()`, `slam()`, `hit()`, `rise()`, `pop()`, `stagger()`, `drift()`, `kenBurns()`, `lowerThird()`, `ticker()`, `typer()`, `counter()`, `terminal()`, `faceCam()`, `clip()`, `broll()`, the `NOCAP` ranges, and the `CAP_STYLE` constant. Every helper that makes noise pushes its own sound cue.
 
-Replace the demo shots between `BEGIN SHOTS` / `END SHOTS` (markup) and `BEGIN TIMELINE` /
-`END TIMELINE` (GSAP) with your shot list, using the helpers the template already defines. Keep the
-outer `#world` and `#cam` containers intact:
-`shot()`, `slam()`, `hit()`, `rise()`, `pop()`, `stagger()`, `drift()`, `kenBurns()`, `lowerThird()`, `ticker()`,
-`typer()`, `counter()`, `terminal()`, `faceCam()`, `clip()`, `broll()`, the `NOCAP` ranges, and the `CAP_STYLE` constant. Every helper that makes noise pushes its own sound cue.
-See `SKILL_DIR/examples/kafka-vs-rabbitmq/` for a complete worked composition.
-
-The display style (`.xl`) is uppercase and width-expanded; captions are condensed. Size headlines
-for the expanded width — a vertical frame fits ~6 characters at 250px.
-
----
+The display style (`.xl`) is uppercase and width-expanded; captions are condensed. Size headlines for the expanded width — a vertical frame fits ~6 characters at 250px.
 
 ## Step 7 — QA stills (loop until clean)
 
-Pick one timestamp per shot, at the moment of densest content:
+Pick one timestamp per shot, at the moment of densest content. Pass them as a comma-separated list with **no spaces**; spaces parse as `NaN`:
 
 ```bash
 node SKILL_DIR/scripts/render.js stills "$work"/index.html "$work"/stills 0.6,2.4,4.9,…
 bash SKILL_DIR/scripts/contact-sheet.sh "$work"/stills "$work"/contact.jpg
 ```
-
-Pass timestamps as a comma-separated list with **no spaces**; spaces parse as `NaN`.
 
 Measure first — this needs no eyes and runs in seconds:
 
@@ -420,18 +207,9 @@ Measure first — this needs no eyes and runs in seconds:
 node SKILL_DIR/scripts/render.js check "$work"/index.html ["$work"/check.json]
 ```
 
-It seeks to each shot at 25%, 50% and 85% of its window and reports text past the frame edge, text sitting under the caption
-box, shots that render nothing at all three moments, and `PAGE ERROR` lines. Exit 1 means findings. Fix and re-run until it
-is clean; it catches clipped headlines that a full render would waste minutes on.
+It seeks to each shot at 25%, 50% and 85% of its window and reports text past the frame edge, text under the caption box, text over the speaker's face (presenter mode), characters the kit's fonts lack (naming the characters; a kit `fonts.fallback` marks deliberate coverage), shots that render nothing at all three moments, dangling `vendor/`/`kit/` links from before the copy layout (fix: `fill_template.py … --relink`), and `PAGE ERROR` lines. Exit 1 means findings. Fix and re-run until it is clean; it catches clipped headlines that a full render would waste minutes on.
 
-Then, **if you can view images**, read `contact.jpg` for what measurement cannot judge: crops that cut
-off a face or subject, an image that does not match the line, and layouts that fit the frame but read
-badly. Fix, re-render only the affected stills, and look again.
-
-If you cannot view images, say so in the report and ask the user to look at `contact.jpg` before
-Step 9. Do not start Step 9 with a known defect — a full render costs minutes.
-
----
+Then, **if you can view images**, read `contact.jpg` for what measurement cannot judge: crops that cut off a face or subject, an image that does not match the line, and layouts that fit the frame but read badly. Fix, re-render only the affected stills, and look again. If you cannot view images, say so in the report and ask the user to look at `contact.jpg` before Step 9. Do not start Step 9 with a known defect — a full render costs minutes.
 
 ## Step 8 — Sound
 
@@ -440,62 +218,58 @@ node SKILL_DIR/scripts/render.js cues "$work"/index.html "$work"/cues.json
 python3 SKILL_DIR/scripts/synth_audio.py "$work"/cues.json <duration> "$work" --template <template-id> --drop <time-of-final-slam>
 ```
 
-Writes `sfx.wav` and `music.wav`. Pass the same `<template-id>` as Step 6: the music follows the theme's
-tempo, key and layers, and varies per video (the slug folder). Omit `--drop` if the video has no final slam; otherwise use the time
-of the last big hit. Optional pacing flags:
-
-- `--drums-from <t>` — bring the drums in at `<t>` seconds.
-- `--quiet <a>:<b>` — duck the music between `a` and `b` seconds (repeatable).
-
-With `music` set to a file, pass `--no-music` and give that file to Step 10. With `none`, pass
-`--no-music` and nothing else.
+Writes `sfx.wav` and `music.wav`. Pass the same `<template-id>` as Step 6: the music follows the theme's tempo, key and layers, and varies per video (the slug folder). Omit `--drop` if the video has no final slam; otherwise use the time of the last big hit. Optional pacing flags: `--drums-from <t>` brings the drums in at `<t>`; `--quiet <a>:<b>` ducks the music between `a` and `b` (repeatable). With `music` set to a file, pass `--no-music` and give that file to Step 10; with `none`, pass `--no-music` and nothing else.
 
 You cannot hear the result. Say so in the report and ask the user to listen.
-
----
 
 ## Step 9 — Render frames
 
 ```bash
-bash SKILL_DIR/scripts/render-frames.sh [--blur 4] "$work"/index.html "$work"/frames <duration> [workers] [from_frame to_frame]
+bash SKILL_DIR/scripts/render-frames.sh [--blur 4] [--resolution 4k] [--force] "$work"/index.html "$work"/frames <duration> [workers] [from_frame to_frame]
 ```
 
-Frames render supersampled (2x) and are saved as lossless PNG: crisp edges and exact brand colours,
-about 1.2 MB a frame (~4 GB for 108s) and 2–3x slower than a draft. Run it in the background. For a
-quick preview cut, prefix `VV_QUALITY=draft` (1x JPEG); render the final with the default. The optional
-frame range re-renders a single shot after a fix; each bound is its own argument, so it is safe under
-zsh. Re-render a range with the same quality as the rest, or Step 10 refuses to mix them.
+Frames render supersampled (2x) and are saved as lossless PNG: crisp edges and exact brand colours, about 1.2 MB a frame (~4 GB for 108s) and 2–3x slower than a draft. Run it in the background; progress lines (`progress 812/3240 frames · 2.1 fps · 18m05s left`) go to stdout. For a quick preview cut, prefix `VV_QUALITY=draft` (1x JPEG); render the final with the default.
 
-Pass `--blur 4` (first) for the final render only: it adds motion blur and makes the render about 8×
-slower than the default. Render drafts and single-shot fixes without it, unless re-rendering a range of a blurred final.
+**A killed render resumes:** completed frames are skipped, so re-run the same command — no gap hunting. `--force` re-renders everything, which a composition change needs. The optional frame range re-renders a single shot after a fix; each bound is its own argument, so it is safe under zsh. Re-render a range with the same quality as the rest, or Step 10 refuses to mix them.
 
----
+`--resolution 4k` renders a 4K master; without it the fill's `render.json` decides. Pass `--blur 4` for the final render only: it adds motion blur and makes the render about 8× slower, so render drafts and single-shot fixes without it, unless re-rendering a range of a blurred final.
+
+**Low on disk?** `render-chunks.sh` renders and encodes in chunks (default 30s, `--chunk`), so peak scratch is one chunk of frames (~1.6 GB) instead of the whole video; it muxes the audio with `mix-encode.sh`'s settings, and a killed run re-encodes only the chunks that are missing:
+
+```bash
+bash SKILL_DIR/scripts/render-chunks.sh [--blur 4] [--resolution 4k] [--chunk 30] [--music file] \
+  "$work"/index.html "$work" <duration> <audio> "$out"
+```
 
 ## Step 10 — Mix and encode
 
 ```bash
 out="<brand.output.dir>/<slug>/<slug>.mp4"
-bash SKILL_DIR/scripts/mix-encode.sh "$work" <audio> <duration> "$out" [music-file]
+bash SKILL_DIR/scripts/mix-encode.sh [--10bit] [--embed] "$work" <audio> <duration> "$out" [music-file]
 ```
 
-Normalises the voice, ducks the music under it, lays the SFX on top, pads everything to the full
-duration, and targets −14 LUFS. Video is H.264 at CRF 16 (slow preset, capped at 16 Mbps so film grain
-can't balloon the file), converted and tagged as BT.709 so phones show the brand colours as designed.
-A 108s vertical lands around 200 MB: high enough to survive the platform's own re-encode.
+Normalises the voice, ducks the music under it, lays the SFX on top, pads everything to the full duration, and targets −14 LUFS, with progress lines while it encodes. Video is H.264 at CRF 16 (slow preset, capped at 16 Mbps so film grain can't balloon the file), converted and tagged as BT.709 so phones show the brand colours as designed. A 108s vertical lands around 200 MB: high enough to survive the platform's own re-encode.
 
----
+- Draft JPEG frames encode `veryfast`/CRF 20 — a preview cut, fast. `VV_PRESET` overrides the preset (e.g. `medium` on a slow machine).
+- `--10bit` encodes 10-bit H.264 against banding in dark gradients.
+- `--embed` muxes `captions.srt` as a soft subtitle track. Either way, any `captions.srt`/`captions.vtt` are copied next to the mp4.
+
+## Step 10a — Deliver (optional, recommended)
+
+```bash
+bash SKILL_DIR/scripts/deliver.sh [--cover <seconds>] "$work" "$out"
+```
+
+Assembles `<work>/delivery/`: the master mp4, a web copy (~8 Mbps, under half the master's size), the `captions.srt`/`.vtt`, a cover frame (default 1.0s in, where the title card sits), `credits.txt` from `credits.json`, and a `README.txt` listing the folder. Hand the folder — or the web copy — to whoever posts the video.
 
 ## Step 11 — Verify, then report
 
-Before reporting, extract a frame from the **encoded file** at a shot you changed, read it, and check
-the duration and size:
+Before reporting, extract a frame from the **encoded file** at a shot you changed, read it, and check the duration and size — a still rendered from the HTML is not proof the video contains the fix:
 
 ```bash
 ffmpeg -v error -y -ss <t> -i <out.mp4> -frames:v 1 -vf scale=360:-1 <work>/verify.jpg
 ffprobe -v error -show_entries format=duration,size -of compact <out.mp4>
 ```
-
-A still rendered from the HTML is not proof the video contains the fix.
 
 ```
 <slug>.mp4 · 1080x1920 · 108.2s · 112 MB · -14.7 LUFS
@@ -508,9 +282,9 @@ A still rendered from the HTML is not proof the video contains the fix.
 Next: preview it on a phone, then post it with the credits in the description
 ```
 
-`mix-encode.sh` prints raw `ffprobe` output; reformat it into the line above for the report. Get the
-credits with `find_media.py credits "$work"` and give them to the user ready to paste into the description.
-Name any unlicensed clip on its own line.
+`mix-encode.sh` prints raw `ffprobe` output; reformat it into the line above for the report. Get the credits with `find_media.py credits "$work"` ready to paste into the description, and name any unlicensed clip on its own line. Point at the `delivery/` folder when Step 10a ran.
+
+**A retake of the same script:** don't re-author. Transcribe and trim the new take, `fill_template.py` its work dir, then `python3 SKILL_DIR/scripts/retime.py <old work> <new work>` re-times the whole edit — timeline, NOCAP ranges, `@time` keys in fixes/keywords — onto the new take. Passages that differ between takes (ad-libs, cut sentences) are listed, never silently mis-timed; handle those by hand, then re-run `build_captions.py` in the new work.
 
 ---
 
@@ -518,49 +292,34 @@ Name any unlicensed clip on its own line.
 
 - **Shot list confirmed before authoring.** Rendering is cheap; redesigning thirty shots is not.
 - **Every image and clip is looked at before it is used.** Never ship media you have not seen.
-- **Every file is credited.** Licensed or not, each photo and clip goes in the description credits, and
-  the report names every ⚠ file.
+- **Every file is credited.** Licensed or not, each photo and clip goes in the description credits, and the report names every ⚠ file and every invented detail (dates, labels) that isn't in the audio.
 - **Every fix is verified in the encoded file**, not just in a still.
-- Transcription is local. Never upload the audio. Voices are synthesized locally too.
+- Transcription is local. Never upload the audio. Voices are synthesized locally too, and named in the report so the user can disclose them.
 - Characters are original. Never draw, name or imitate an existing cartoon, film or game character.
-- Synthetic voices are named in the report, so the user can disclose them when they post.
 - Colours come from the kit's `--brand-*` tokens, never hex values in shots. One brand accent; `--brand-success` only for success states, `--brand-error` only for errors.
 - A client's logos and fonts come from the client. Never fetch a company's logo or font from the web, and never put a competitor's logo in a video unless the client asks for it.
 - Timelines are deterministic: no `Math.random()`, no `Date.now()`. The grain uses a seeded PRNG.
 - Captions never cover the element the viewer is meant to read; hide them via `NOCAP` instead.
-- Report every image credit and every invented detail (dates, labels) that isn't in the audio.
 - Never commit rendered files or `work/`.
-- `faceCam()` in/out times match the `extract_face.sh` ranges exactly; never re-time a face shot alone.
-  The same holds for `clip()` and `extract_clip.sh`.
-
----
+- `faceCam()` in/out times match the `extract_face.sh` ranges exactly; never re-time a face shot alone. The same holds for `clip()` and `extract_clip.sh`.
 
 ## Failure states
 
 | Symptom | Cause | Fix |
 |---|---|---|
 | `Executable doesn't exist at …ms-playwright…` | playwright-core updated, its Chromium build isn't installed | re-run `setup.sh` |
-| Fix visible in stills but not in the video | frames never re-rendered — a range passed as one quoted string renders zero frames | use `render-frames.sh` with the range as two separate args; check frame mtimes |
+| Fix visible in stills but not in the video | frames never re-rendered — a range passed as one quoted string renders zero frames | re-run `render-frames.sh` with the range as two separate args; completed frames are skipped |
+| `… is a dangling symlink` from `render.js` | an old project's `vendor/`/`kit/` links broke when the skill updated | `fill_template.py "$work" <duration> --relink` |
 | Video shorter than the audio | an audio filter trimmed the stream | `mix-encode.sh` pads and trims to the duration; don't hand-roll the mix |
 | Output file is hundreds of MB | film grain defeats compression at constant CRF | keep the `-maxrate` cap in `mix-encode.sh` |
 | `frames/ mixes high-quality PNG and draft JPEG frames` | a range was re-rendered with a different `VV_QUALITY` | re-render the whole video with one setting |
 | Accent colour looks orange or washed out on a phone | an encode without the BT.709 conversion and tags | use `mix-encode.sh`; don't hand-roll the encode |
-| Frame render fills the disk | high-quality PNG frames are ~1.2 MB each | free space, or preview with `VV_QUALITY=draft` and render the final once |
-| Wrong or fallback font in stills | fonts not downloaded for this brand | re-run `setup.sh` with the brand file |
+| Frame render fills the disk | high-quality PNG frames are ~1.2 MB each | free space, preview with `VV_QUALITY=draft`, or use `render-chunks.sh` |
+| Wrong or fallback font in stills | fonts not downloaded for this brand | re-run `setup.sh` with the kit |
+| `font X lacks glyphs for: …` from `render.js check` | characters the kit's fonts don't cover | swap them, or set `fonts.fallback` in brand.json (`references/brand-kits.md`) |
 | `PAGE ERROR` in render output | a script error in the timeline | fix it; GSAP only warns on missing selectors, so also check each shot visually |
-| Whisper sits at low CPU for minutes | model download on first run | expected once; the model is cached afterwards |
-| Shot renders blank | `shot()` start ≥ end, or the shot id is misspelled | check the shot row's in/out times |
 | `missing frame face/… ` or `clips/…` stops the render | a `faceCam()` / `clip()` range is wider than the extracted one | re-run `extract_face.sh` / `extract_clip.sh` with that shot's in/out |
-| `find_media.py` search returns nothing | query too specific, or a source is down (its error prints on stderr) | the name plus the company; then `--kind video`; then a logo or an era look |
 | YouTube fetch crawls or fails with a challenge warning | no JS runtime, or yt-dlp is out of date | needs `node` or `deno` on PATH; `pipx upgrade yt-dlp` |
-| Clip shows the wrong moment | `--from` is in the fetched clip's seconds, not the original's | subtract the `--section` start |
-| Old clip sound still in the mix | a stale `clips/<name>.wav` from an earlier cut | re-run `extract_clip.sh` for that clip; it removes the old `.wav` |
 | `kokoro-onnx is not installed` / `Voice model missing` / `Cannot load the 'base' alignment model` | script mode set up without voices, or offline before the models were fetched | `setup.sh --voices` (online, once) |
-| `Unknown voice` from `speak.py` | a cast file names a voice that doesn't exist | pick one from the list it prints |
-| A host never moves its mouth | its `who` doesn't match the speaker name in the script | use the lowercase name from `speech.json` |
-| `speech.js has no line N for …` in `PAGE ERROR` | `line()`/`say()` asks for a line the script doesn't have | count that speaker's lines in `speech.json` from 0 |
-| Face shots look grey and washed out | HDR (HLG) phone recording, tone-mapped without metadata | record in SDR (iPhone: Settings › Camera › Formats, HDR Video off) |
-| `… is a version-1 brand file` | a brand.json from before kits | `init_kit.py --from <that file>` (keeps the original as `brand.v1.json`) |
-| `Brand kit … is not installed, or changed since it was` | the kit is new or was edited after setup | `setup.sh <kit>` |
-| `font … did not load` from `render.js board` | a kit font file is missing or broken, or a Google family name is misspelled | fix the kit's `fonts`, re-run `setup.sh <kit>` |
-| Logo invisible on the end card | a dark logo on a dark canvas, or an SVG with no size | add `wordmark.onDark`; give the `<img>` a height (see *Logo end card*) |
+
+Mode-specific failures are in each mode's reference: `references/presenter.md` (keying), `references/face-bookends.md` (face shots), `references/brand-kits.md` (kits and fonts).
