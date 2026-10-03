@@ -349,7 +349,9 @@ jobs:
           errors = []
           if abs(actual - want) > 0.05:
               errors.append(f"duration {actual}s is not {want}s ±0.05")
-          if size != "1080,1920":
+          # ffprobe versions differ on trailing separators (1080,1920 / 1080,1920, / 1080x1920x)
+          dims = [p for p in size.replace("x", ",").split(",") if p]
+          if dims != ["1080", "1920"]:
               errors.append(f"size {size} is not 1080x1920")
           if abs(lufs + 14) > 1.5:
               errors.append(f"loudness {lufs} LUFS is not -14 ±1.5")
@@ -565,7 +567,9 @@ jobs:
           errors = []
           if abs(actual - want) > 0.05:
               errors.append(f"duration {actual}s is not {want}s ±0.05")
-          if size != "1080,1920":
+          # ffprobe versions differ on trailing separators (1080,1920 / 1080,1920, / 1080x1920x)
+          dims = [p for p in size.replace("x", ",").split(",") if p]
+          if dims != ["1080", "1920"]:
               errors.append(f"size {size} is not 1080x1920")
           if abs(lufs + 14) > 1.5:
               errors.append(f"loudness {lufs} LUFS is not -14 ±1.5")
