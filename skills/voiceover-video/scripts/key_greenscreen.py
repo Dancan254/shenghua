@@ -475,10 +475,11 @@ def main() -> int:
         print(f"No take to key: {video or 'pass --video, or run trim_take.py first'}", file=sys.stderr)
         print("Next: pass --video <the to-camera recording>", file=sys.stderr)
         return 1
-    # A minimal ffmpeg (some Homebrew builds) lacks libwebp; the writer would die mid-run with a broken pipe
+    # A minimal ffmpeg (Homebrew's core formula dropped libwebp) can't write WebP; the writer dies mid-run
     if not has_webp_encoder():
         print("This ffmpeg has no libwebp encoder, so presenter frames can't be written", file=sys.stderr)
-        print("Next: install a full ffmpeg (macOS: brew reinstall ffmpeg · Debian/Ubuntu: apt install ffmpeg)", file=sys.stderr)
+        print("Next: install a full ffmpeg (macOS: brew install homebrew-ffmpeg/ffmpeg/ffmpeg-full · "
+              "Debian/Ubuntu: apt install ffmpeg)", file=sys.stderr)
         return 1
     # The composition always loads faces.js (window.FACES); without the file a render fails on the missing request
     args.work.mkdir(parents=True, exist_ok=True)
