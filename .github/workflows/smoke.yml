@@ -487,8 +487,12 @@ jobs:
           for formula in ffmpeg espeak-ng python@3.12; do
             brew list --versions "$formula" > /dev/null 2>&1 || brew install "$formula"
           done
-          # Homebrew's core ffmpeg formula dropped libwebp; the keyer needs it for WebP presenter frames
-          ffmpeg -hide_banner -encoders 2> /dev/null | grep -q libwebp || brew install homebrew-ffmpeg/ffmpeg/ffmpeg-full
+          # Homebrew's core ffmpeg formula dropped libwebp; the keyer needs it for WebP presenter frames.
+          # The tap build compiles from source with webp on, so replace the core bottle first
+          if ! ffmpeg -hide_banner -encoders 2> /dev/null | grep -q libwebp; then
+            brew uninstall --ignore-dependencies ffmpeg || true
+            brew install homebrew-ffmpeg/ffmpeg/ffmpeg --with-webp
+          fi
           "$(brew --prefix python@3.12)/bin/python3.12" -m venv "$HOME/.venvs/voiceover-video"
           "$HOME/.venvs/voiceover-video/bin/pip" install faster-whisper 'av<19' numpy
           echo "$HOME/.venvs/voiceover-video/bin" >> "$GITHUB_PATH"

@@ -478,7 +478,7 @@ def main() -> int:
     # A minimal ffmpeg (Homebrew's core formula dropped libwebp) can't write WebP; the writer dies mid-run
     if not has_webp_encoder():
         print("This ffmpeg has no libwebp encoder, so presenter frames can't be written", file=sys.stderr)
-        print("Next: install a full ffmpeg (macOS: brew install homebrew-ffmpeg/ffmpeg/ffmpeg-full · "
+        print("Next: install an ffmpeg with webp (macOS: brew install homebrew-ffmpeg/ffmpeg/ffmpeg --with-webp · "
               "Debian/Ubuntu: apt install ffmpeg)", file=sys.stderr)
         return 1
     # The composition always loads faces.js (window.FACES); without the file a render fails on the missing request

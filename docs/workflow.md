@@ -45,7 +45,7 @@ or more. Below that it still works, it just looks softer. How to record well:
 ```bash
 brew install ffmpeg node python@3.12
 # presenter mode (green-screen keying) needs libwebp, which Homebrew's core ffmpeg dropped:
-# brew install homebrew-ffmpeg/ffmpeg/ffmpeg-full   # replaces ffmpeg
+# brew install homebrew-ffmpeg/ffmpeg/ffmpeg --with-webp   # builds from source, replaces ffmpeg
 python3.12 -m venv ~/.venvs/voiceover-video
 ~/.venvs/voiceover-video/bin/pip install faster-whisper 'av<19' numpy
 echo 'export PATH="$HOME/.venvs/voiceover-video/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
