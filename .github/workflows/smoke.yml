@@ -339,7 +339,7 @@ jobs:
           set -euo pipefail
           out="$RUNNER_TEMP/smoke/work/out.mp4"
           actual=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$out")
-          size=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$out")
+          size=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 "$out")
           ffmpeg -hide_banner -nostats -i "$out" -af ebur128=framelog=quiet -f null - 2> "$RUNNER_TEMP/smoke/ebur128.txt"
           lufs=$(awk '/^ *I:/ {v=$2} END {print v}' "$RUNNER_TEMP/smoke/ebur128.txt")
           echo "duration $actual (want $DURATION) · size $size · ${lufs} LUFS"
@@ -349,7 +349,7 @@ jobs:
           errors = []
           if abs(actual - want) > 0.05:
               errors.append(f"duration {actual}s is not {want}s ±0.05")
-          if size != "1080x1920":
+          if size != "1080,1920":
               errors.append(f"size {size} is not 1080x1920")
           if abs(lufs + 14) > 1.5:
               errors.append(f"loudness {lufs} LUFS is not -14 ±1.5")
@@ -555,7 +555,7 @@ jobs:
           set -euo pipefail
           out="$RUNNER_TEMP/smoke/work/out.mp4"
           actual=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$out")
-          size=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$out")
+          size=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 "$out")
           ffmpeg -hide_banner -nostats -i "$out" -af ebur128=framelog=quiet -f null - 2> "$RUNNER_TEMP/smoke/ebur128.txt"
           lufs=$(awk '/^ *I:/ {v=$2} END {print v}' "$RUNNER_TEMP/smoke/ebur128.txt")
           echo "duration $actual (want $DURATION) · size $size · ${lufs} LUFS"
@@ -565,7 +565,7 @@ jobs:
           errors = []
           if abs(actual - want) > 0.05:
               errors.append(f"duration {actual}s is not {want}s ±0.05")
-          if size != "1080x1920":
+          if size != "1080,1920":
               errors.append(f"size {size} is not 1080x1920")
           if abs(lufs + 14) > 1.5:
               errors.append(f"loudness {lufs} LUFS is not -14 ±1.5")
