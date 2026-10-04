@@ -86,7 +86,7 @@ for (( c = 0; c < CHUNK_COUNT; c++ )); do
     echo "chunk $(( c + 1 ))/$CHUNK_COUNT already encoded ($WANT frames) — skipped"
     continue
   fi
-  bash "$SCRIPTS_DIR/render-frames.sh" ${RF_OPTS[@]+"${RF_OPTS[@]}"} \
+  VV_FROM_CHUNKS=1 bash "$SCRIPTS_DIR/render-frames.sh" ${RF_OPTS[@]+"${RF_OPTS[@]}"} \
     "$HTML" "$WORK/frames" "$DURATION" "$WORKERS" "$FIRST" "$LAST"
   # Same video settings as mix-encode.sh, minus the audio; the tmp file keeps a killed encode
   # from looking complete, and chunk_ok's frame count is the second line of defence

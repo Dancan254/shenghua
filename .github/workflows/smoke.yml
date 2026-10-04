@@ -359,6 +359,20 @@ jobs:
               sys.exit("::error::" + "; ".join(errors))
           PY
 
+      # render-chunks.sh is the default final path for anything over ~a minute; exercise it and its resume
+      - name: Chunked render resumes at the first missing chunk
+        run: |
+          set -euo pipefail
+          S="$SKILL/scripts"; W="$RUNNER_TEMP/smoke/work"
+          bash "$S/render-chunks.sh" --chunk 3 "$W/index.html" "$W" "$DURATION" "$RUNNER_TEMP/smoke/clip.wav" "$W/chunked.mp4"
+          before=$(md5sum "$W/chunks/chunk-000.mp4" | cut -d' ' -f1)
+          rm "$W/chunks/chunk-001.mp4"
+          bash "$S/render-chunks.sh" --chunk 3 "$W/index.html" "$W" "$DURATION" "$RUNNER_TEMP/smoke/clip.wav" "$W/chunked.mp4"
+          after=$(md5sum "$W/chunks/chunk-000.mp4" | cut -d' ' -f1)
+          [[ "$before" == "$after" ]] || { echo "::error::chunk-000 was re-encoded; resume must skip complete chunks"; exit 1; }
+          actual=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$W/chunked.mp4")
+          python3 -c "import sys; a=$actual; sys.exit(0 if abs(a - $DURATION) < 0.05 else '::error::chunked duration differs')"
+
       # A synthetic green screen with a moving subject exercises trim, keying and every presenter layout
       - name: Presenter mode
         run: |

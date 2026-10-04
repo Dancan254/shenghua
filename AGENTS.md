@@ -44,7 +44,7 @@ skills/voiceover-video/
     ├── extract_clip.sh          fetched clip → clips/<name>/fNNNNN.jpg (+ clips/<name>.wav)
     ├── render.js                stills | frames | cues | check | board, driven by window.renderAt(t)
     ├── render-frames.sh         parallel frame rendering, resumable; --resolution 4k, --blur, --force
-    ├── render-chunks.sh         low-disk alternative: render + encode in chunks, resumable
+    ├── render-chunks.sh         default for finals: render + encode in chunks, resumable, ~2 GB peak scratch
     ├── contact-sheet.sh         stills → one review image
     ├── synth_audio.py           cues.json → sfx.wav + music.wav
     ├── mix-encode.sh            voice + ducked clip audio + ducked music + SFX → mp4; --10bit, --embed

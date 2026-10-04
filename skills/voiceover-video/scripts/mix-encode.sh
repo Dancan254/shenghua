@@ -183,4 +183,7 @@ NOTE=" · preset $PRESET"
 (( TEN_BIT )) && NOTE+=" · 10-bit"
 [[ -n "$CAPTIONS" ]] && NOTE+=" · captions: ${CAPTIONS% }"
 echo "$(basename "$OUT") · ${LOUDNESS} LUFS · ${INFO}${NOTE}"
+# The frames dir outlives its usefulness after a verified encode; say what it costs
+FRAMES_SIZE=$(du -sh "$WORK/frames" 2> /dev/null | cut -f1)
+[[ -n "$FRAMES_SIZE" ]] && echo "frames/ still holds $FRAMES_SIZE — rm -rf \"$WORK/frames\" once the video is verified"
 echo "Next: extract a frame from $(basename "$OUT") at a shot you changed and verify it"

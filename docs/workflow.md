@@ -190,7 +190,9 @@ e.g. competitor logos>.
 
 Run every long step (transcribe, key_greenscreen.py, render-frames.sh, mix-encode.sh)
 detached with nohup and a log file, and poll the log; never block on one command. If keying or frame
-rendering stops, re-run the same command; both resume.
+rendering stops, re-run the same command; both resume. Render the final with render-chunks.sh
+(the default over ~1 minute: ~2 GB peak scratch, resume at the first missing chunk) — it encodes
+and mixes too, so skip mix-encode.sh after it.
 
 Stop and wait for my approval at: the key preview, the shot list (include a layout column so I can
 see the variety), and the draft. Then render the final, verify a frame from the encoded file, and
