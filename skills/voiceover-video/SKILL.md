@@ -224,24 +224,28 @@ You cannot hear the result. Say so in the report and ask the user to listen.
 
 ## Step 9 — Render frames
 
-```bash
-bash SKILL_DIR/scripts/render-frames.sh [--blur 4] [--resolution 4k] [--force] "$work"/index.html "$work"/frames <duration> [workers] [from_frame to_frame]
-```
-
-Frames render supersampled (2x) and are saved as lossless PNG: crisp edges and exact brand colours, about 1.2 MB a frame (~4 GB for 108s) and 2–3x slower than a draft. Run it in the background; progress lines (`progress 812/3240 frames · 2.1 fps · 18m05s left`) go to stdout. For a quick preview cut, prefix `VV_QUALITY=draft` (1x JPEG); render the final with the default.
-
-**A killed render resumes:** completed frames are skipped, so re-run the same command — no gap hunting. `--force` re-renders everything, which a composition change needs. The optional frame range re-renders a single shot after a fix; each bound is its own argument, so it is safe under zsh. Re-render a range with the same quality as the rest, or Step 10 refuses to mix them.
-
-`--resolution 4k` renders a 4K master; without it the fill's `render.json` decides. Pass `--blur 4` for the final render only: it adds motion blur and makes the render about 8× slower, so render drafts and single-shot fixes without it, unless re-rendering a range of a blurred final.
-
-**Low on disk?** `render-chunks.sh` renders and encodes in chunks (default 30s, `--chunk`), so peak scratch is one chunk of frames (~1.6 GB) instead of the whole video; it muxes the audio with `mix-encode.sh`'s settings, and a killed run re-encodes only the chunks that are missing:
+**Anything over about a minute: render with `render-chunks.sh`** — it renders and encodes in ~30 s chunks, deletes each chunk's frames, and muxes the audio with `mix-encode.sh`'s settings, so peak scratch stays around one chunk (~1.6 GB) no matter how long the video is (the whole-frames path needs ~1.4 MB × frames: 18 GB for a 7-minute 1080p video, ~70 GB at 4K). A killed run resumes at the first missing chunk:
 
 ```bash
 bash SKILL_DIR/scripts/render-chunks.sh [--blur 4] [--resolution 4k] [--chunk 30] [--music file] \
   "$work"/index.html "$work" <duration> <audio> "$out"
 ```
 
+`--resolution 4k` renders a 4K master; without it the fill's `render.json` decides. Pass `--blur 4` for the final render only: it adds motion blur and makes the render about 8× slower. A chunked render produces the mp4 directly — **skip Step 10** and go to Step 10a.
+
+**Short videos, drafts and single-shot fixes** use `render-frames.sh`:
+
+```bash
+bash SKILL_DIR/scripts/render-frames.sh [--blur 4] [--resolution 4k] [--force] "$work"/index.html "$work"/frames <duration> [workers] [from_frame to_frame]
+```
+
+Frames render supersampled (2x) and are saved as lossless PNG: crisp edges and exact brand colours, about 1.2 MB a frame (~4 GB for 108s) and 2–3x slower than a draft. The script prints the frames' disk cost up front. Run it in the background; progress lines (`progress 812/3240 frames · 2.1 fps · 18m05s left`) go to stdout. For a quick preview cut, prefix `VV_QUALITY=draft` (1x JPEG); render the final with the default.
+
+**A killed render resumes:** completed frames are skipped, so re-run the same command — no gap hunting. `--force` re-renders everything, which a composition change needs. The optional frame range re-renders a single shot after a fix; each bound is its own argument, so it is safe under zsh. Re-render a range with the same quality as the rest, or Step 10 refuses to mix them.
+
 ## Step 10 — Mix and encode
+
+Skip this step when Step 9 used `render-chunks.sh` — it already encoded and mixed. Otherwise:
 
 ```bash
 out="<brand.output.dir>/<slug>/<slug>.mp4"
@@ -314,7 +318,7 @@ Next: preview it on a phone, then post it with the credits in the description
 | Output file is hundreds of MB | film grain defeats compression at constant CRF | keep the `-maxrate` cap in `mix-encode.sh` |
 | `frames/ mixes high-quality PNG and draft JPEG frames` | a range was re-rendered with a different `VV_QUALITY` | re-render the whole video with one setting |
 | Accent colour looks orange or washed out on a phone | an encode without the BT.709 conversion and tags | use `mix-encode.sh`; don't hand-roll the encode |
-| Frame render fills the disk | high-quality PNG frames are ~1.2 MB each | free space, preview with `VV_QUALITY=draft`, or use `render-chunks.sh` |
+| Frame render fills the disk | high-quality PNG frames are ~1.2 MB each | use `render-chunks.sh` (the default for finals), free space, or preview with `VV_QUALITY=draft` |
 | Wrong or fallback font in stills | fonts not downloaded for this brand | re-run `setup.sh` with the kit |
 | `font X lacks glyphs for: …` from `render.js check` | characters the kit's fonts don't cover | swap them, or set `fonts.fallback` in brand.json (`references/brand-kits.md`) |
 | `PAGE ERROR` in render output | a script error in the timeline | fix it; GSAP only warns on missing selectors, so also check each shot visually |

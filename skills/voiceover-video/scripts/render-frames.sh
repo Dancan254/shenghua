@@ -89,6 +89,25 @@ export VV_SCALE="$SCALE"
 
 mkdir -p "$OUT"
 
+# Say what the frames will cost before spending it: PNG ~0.7 bytes/px, JPEG ~0.24 (measured on the demo shots)
+python3 - "$(dirname "$HTML")/render.json" "$SPAN" "$SCALE" "$EXT" "$SCRIPTS_DIR" <<'PY'
+import json, os, sys
+
+render_json, span, scale, ext, scripts = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), sys.argv[4], sys.argv[5]
+width, height = 1080, 1920
+try:
+    info = json.load(open(render_json))
+    width, height = int(info["width"]), int(info["height"])
+except (OSError, ValueError, KeyError):
+    pass
+per_frame = width * height * scale * scale * (0.24 if ext == "jpg" else 0.7)
+total = per_frame * span
+print(f"{span} frames · ~{total / 1e9:.1f} GB of {ext.upper()}s in the frames dir")
+if total > 4e9 and ext == "png":
+    print(f"tip: {scripts}/render-chunks.sh renders the same video with ~2 GB peak scratch "
+          f"(encodes each chunk, deletes its frames)")
+PY
+
 # A frame counts as done only if its file is whole: PNG ends in IEND, JPEG in EOI. A render killed
 # mid-write leaves a truncated last frame, which must be re-rendered, not skipped.
 PLAN=$(python3 - "$OUT" "$EXT" "$FROM" "$TO" "$WORKERS" "$FORCE" <<'PY'
@@ -217,4 +236,6 @@ if (( COMPLETE < SPAN || failed > 0 )); then
   echo "Next: fix the first error printed above (PAGE ERROR = composition bug, Executable doesn't exist = run setup.sh), then re-run with the same range — complete frames are skipped"
   exit 1
 fi
-echo "Next: run mix-encode.sh"
+# render-chunks.sh encodes the frames itself, so the mix-encode pointer only makes sense standalone
+[[ -n "${VV_FROM_CHUNKS:-}" ]] || echo "Next: run mix-encode.sh"
+
