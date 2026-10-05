@@ -14,7 +14,7 @@ concurrency:
 
 env:
   VV_QUALITY: draft
-  SKILL: skills/voiceover-video
+  SKILL: skills/shenghua
 
 jobs:
   lint:
@@ -204,7 +204,7 @@ jobs:
             ${{ env.SKILL }}/scripts/node_modules
             ${{ env.SKILL }}/assets
             ~/.cache/ms-playwright
-          key: vendor-${{ runner.os }}-${{ hashFiles('skills/voiceover-video/scripts/package-lock.json', 'skills/voiceover-video/scripts/setup.sh', 'skills/voiceover-video/templates/templates.json', 'skills/voiceover-video/brand.example.json', 'skills/voiceover-video/scripts/brand_kit.py', 'skills/voiceover-video/examples/kits/**') }}
+          key: vendor-${{ runner.os }}-${{ hashFiles('skills/shenghua/scripts/package-lock.json', 'skills/shenghua/scripts/setup.sh', 'skills/shenghua/templates/templates.json', 'skills/shenghua/brand.example.json', 'skills/shenghua/scripts/brand_kit.py', 'skills/shenghua/examples/kits/**') }}
 
       - name: Cache the whisper model
         uses: actions/cache@v6
@@ -507,9 +507,9 @@ jobs:
             brew uninstall --ignore-dependencies ffmpeg || true
             brew install ffmpeg-full
           fi
-          "$(brew --prefix python@3.12)/bin/python3.12" -m venv "$HOME/.venvs/voiceover-video"
-          "$HOME/.venvs/voiceover-video/bin/pip" install faster-whisper 'av<19' numpy
-          echo "$HOME/.venvs/voiceover-video/bin" >> "$GITHUB_PATH"
+          "$(brew --prefix python@3.12)/bin/python3.12" -m venv "$HOME/.venvs/shenghua"
+          "$HOME/.venvs/shenghua/bin/pip" install faster-whisper 'av<19' numpy
+          echo "$HOME/.venvs/shenghua/bin" >> "$GITHUB_PATH"
 
       - name: Cache setup.sh downloads
         uses: actions/cache@v6
@@ -518,7 +518,7 @@ jobs:
             ${{ env.SKILL }}/scripts/node_modules
             ${{ env.SKILL }}/assets
             ~/Library/Caches/ms-playwright
-          key: vendor-${{ runner.os }}-${{ hashFiles('skills/voiceover-video/scripts/package-lock.json', 'skills/voiceover-video/scripts/setup.sh', 'skills/voiceover-video/templates/templates.json', 'skills/voiceover-video/brand.example.json', 'skills/voiceover-video/scripts/brand_kit.py', 'skills/voiceover-video/examples/kits/**') }}
+          key: vendor-${{ runner.os }}-${{ hashFiles('skills/shenghua/scripts/package-lock.json', 'skills/shenghua/scripts/setup.sh', 'skills/shenghua/templates/templates.json', 'skills/shenghua/brand.example.json', 'skills/shenghua/scripts/brand_kit.py', 'skills/shenghua/examples/kits/**') }}
 
       - name: Cache the whisper model
         uses: actions/cache@v6

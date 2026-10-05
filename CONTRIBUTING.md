@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping make voiceover-video better. Bug reports, new scene blocks, better sound design,
+Thanks for helping make shenghua better. Bug reports, new scene blocks, better sound design,
 and docs fixes are all welcome.
 
 AI coding agents: read [AGENTS.md](AGENTS.md) — it has the invariants and the verification procedure.
@@ -28,15 +28,15 @@ Open an issue first describing the *moment in a video* it is for ("a stat that s
 ## Development setup
 
 ```bash
-git clone https://github.com/Dancan254/voiceover-video-skill
-cd voiceover-video-skill
-bash skills/voiceover-video/scripts/setup.sh
+git clone https://github.com/Dancan254/shenghua
+cd shenghua
+bash skills/shenghua/scripts/setup.sh
 ```
 
 To try your working copy inside Claude Code, point a skill at it:
 
 ```bash
-ln -sfn "$PWD/skills/voiceover-video" ~/.claude/skills/voiceover-video
+ln -sfn "$PWD/skills/shenghua" ~/.claude/skills/shenghua
 ```
 
 ## Making a change

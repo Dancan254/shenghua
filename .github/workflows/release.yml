@@ -64,14 +64,14 @@ jobs:
             --generate-notes \
             --notes "$(cat <<'NOTES'
           Update an existing install:
-          /plugin marketplace update voiceover-video-skill
+          /plugin marketplace update shenghua
           /plugin update
 
           Install in Claude Code:
-          /plugin marketplace add Dancan254/voiceover-video-skill
-          /plugin install voiceover-video@voiceover-video-skill
+          /plugin marketplace add Dancan254/shenghua
+          /plugin install shenghua@shenghua
 
           Install in Kimi Code CLI:
-          /plugins install https://github.com/Dancan254/voiceover-video-skill
+          /plugins install https://github.com/Dancan254/shenghua
           NOTES
           )"

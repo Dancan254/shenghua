@@ -2,17 +2,17 @@
 
 Instructions for AI coding agents (Claude Code, Codex, Cursor, and others) working **on this
 repository**. If you are *running* the skill to make a video, follow
-`skills/voiceover-video/SKILL.md` instead.
+`skills/shenghua/SKILL.md` instead.
 
 ## What this repo is
 
-One skill, `voiceover-video`, packaged as a plugin for Claude Code and Kimi Code CLI. It is
+One skill, `shenghua`, packaged as a plugin for Claude Code and Kimi Code CLI. It is
 model-agnostic and turns a voice recording into an animated vertical video. With no recording (script
 mode), `speak.py` voices a written script with one offline voice per character, and cartoon hosts in the
-template act it out. Everything lives in `skills/voiceover-video/`.
+template act it out. Everything lives in `skills/shenghua/`.
 
 ```
-skills/voiceover-video/
+skills/shenghua/
 ├── SKILL.md                     the core workflow the agent follows at run time (every mode)
 ├── brand.example.json           fallback brand kit (version 2) when the user has none
 ├── examples/kits/               two fictional kits (dark Northwind, light Lumen) for testing and copying
@@ -136,14 +136,14 @@ names, breaks this.
 Run the unit-test suite first (numpy only, no setup needed):
 
 ```bash
-python3 -m unittest discover -s skills/voiceover-video/tests -t skills/voiceover-video
+python3 -m unittest discover -s skills/shenghua/tests -t skills/shenghua
 ```
 
 The pipeline itself is verified end to end on a **clean copy**, because a cached setup hides broken
 installs:
 
 ```bash
-C=$(mktemp -d) && cp -r skills/voiceover-video "$C/skill" && S="$C/skill/scripts" && W="$C/work"
+C=$(mktemp -d) && cp -r skills/shenghua "$C/skill" && S="$C/skill/scripts" && W="$C/work"
 K="$C/skill/examples/kits/northwind"                # repeat the run with examples/kits/lumen
 bash "$S/setup.sh" "$K"                              # must print "ready"
 python3 "$S/brand_kit.py" check "$K"                 # contrast report, exit 0

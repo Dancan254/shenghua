@@ -1,22 +1,22 @@
 {
-  "name": "voiceover-video-skill",
+  "name": "shenghua",
   "owner": {
     "name": "Dancan254",
     "url": "https://github.com/Dancan254"
   },
   "metadata": {
     "description": "Turn a voice recording into a fully animated, captioned, sound-designed short video.",
-    "version": "2.3.1",
-    "repository": "https://github.com/Dancan254/voiceover-video-skill"
+    "version": "2.4.0",
+    "repository": "https://github.com/Dancan254/shenghua"
   },
   "plugins": [
     {
-      "name": "voiceover-video",
+      "name": "shenghua",
       "source": "./",
       "strict": true,
       "description": "Voice note in, animated vertical Short out: word-level captions, kinetic typography, camera moves, synthesized sound design and a voice-ducked music bed.",
       "skills": [
-        "./skills/voiceover-video"
+        "./skills/shenghua"
       ]
     }
   ]

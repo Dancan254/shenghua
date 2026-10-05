@@ -69,7 +69,7 @@ Details that are not in these 40 seconds are listed at the end of `shot-list.md`
 `SKILL_DIR` is the directory holding `SKILL.md`. Cut the clip at the end of a sentence.
 
 ```bash
-work=~/voiceover-videos/my-example/work && mkdir -p "$work"
+work=~/shenghuas/my-example/work && mkdir -p "$work"
 python3 SKILL_DIR/scripts/transcribe.py my-clip.wav --outdir "$work" --model small --vocab "Kafka, RabbitMQ, Spring Boot"
 python3 SKILL_DIR/scripts/build_captions.py "$work"            # after writing fixes.json and keywords.json
 python3 SKILL_DIR/scripts/fill_template.py "$work" 42.3 --template blueprint --brand SKILL_DIR/brand.example.json

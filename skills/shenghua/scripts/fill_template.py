@@ -5,7 +5,7 @@
                    [--resolution 1080p|4k] [--brand kit] [--template id] [--board] [--force]
 
 Brand kit resolution order: --brand (a kit folder or its brand.json), ./brand.json,
-~/.config/voiceover-video/brand.json, then the bundled brand.example.json. setup.sh must have
+~/.config/shenghua/brand.json, then the bundled brand.example.json. setup.sh must have
 installed the kit, so its fonts and logos are on disk.
 
 Template (theme) selection: --template picks a visual theme from templates/templates.json.

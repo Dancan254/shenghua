@@ -9,9 +9,9 @@ fictional ones (dark Northwind, light Lumen) to copy.
 
 ## Where kits live and which one a video uses
 
-Named kits live in `~/.config/voiceover-video/kits/<name>/`; `init_kit.py --name <Name>` writes there
+Named kits live in `~/.config/shenghua/kits/<name>/`; `init_kit.py --name <Name>` writes there
 by default (`--out <folder>` puts a kit anywhere else, e.g. a client's project folder). The
-single-kit `~/.config/voiceover-video/brand.json` keeps working as the user's own kit.
+single-kit `~/.config/shenghua/brand.json` keeps working as the user's own kit.
 
 The kit a video uses, in order: the `kit` input (a path **or a kit name**), then `./brand.json`,
 then the configured default, then the legacy `brand.json`, then the bundled
@@ -40,11 +40,11 @@ before rendering. Four questions, each with its default, answered in one message
 | Name and handle shown on the video | required, no default |
 | Look: `midnight-pink`, `carbon-cyan`, `ink-amber`, `violet-signal`, or their own colours | `midnight-pink` |
 | Fonts: display and code — a Google font name, or a font file they have | `Archivo` / `Geist Mono` |
-| Where finished videos go | `~/voiceover-videos` |
+| Where finished videos go | `~/shenghuas` |
 
 ```bash
 python3 SKILL_DIR/scripts/init_kit.py --name "Their Name" --handle @theirhandle [--preset carbon-cyan] \
-  [--primary '#ff6600' --bg '#0d1117'] [--display Archivo --mono 'Geist Mono'] [--output-dir ~/voiceover-videos]
+  [--primary '#ff6600' --bg '#0d1117'] [--display Archivo --mono 'Geist Mono'] [--output-dir ~/shenghuas]
 ```
 
 Then `brand_kit.py default <name>` makes it the default if it is the user's own kit.
@@ -70,7 +70,7 @@ designed for the other scheme).
 kept as `brand.v1.json`:
 
 ```bash
-python3 SKILL_DIR/scripts/init_kit.py --from ~/.config/voiceover-video/brand.json
+python3 SKILL_DIR/scripts/init_kit.py --from ~/.config/shenghua/brand.json
 ```
 
 ## The brand board (Step 1a)

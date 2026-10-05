@@ -2,7 +2,7 @@
 """Create a brand kit from answers collected by the agent, or convert a version-1 brand.json.
 
   init_kit.py --name Acme --handle acme.com [--preset midnight-pink] [--primary '#e50914' --bg '#0a0a0a'] …
-  init_kit.py --from ~/.config/voiceover-video/brand.json
+  init_kit.py --from ~/.config/shenghua/brand.json
 
 Flags, not prompts: the skill runs this after asking the user, and an interactive prompt would hang
 there. Files the kit names (fonts, logos, a background image) are copied into the kit folder, so the
@@ -116,7 +116,7 @@ def create(args, kit_dir):
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Create a voiceover-video brand kit, or convert a version-1 brand.json.")
+    parser = argparse.ArgumentParser(description="Create a shenghua brand kit, or convert a version-1 brand.json.")
     parser.add_argument("--from", dest="source", type=Path, help="version-1 brand.json to convert")
     parser.add_argument("--name", help="brand name, shown on the end card")
     parser.add_argument("--handle", help="handle or domain shown in the corner, e.g. acme.com")
@@ -135,7 +135,7 @@ def main() -> int:
     parser.add_argument("--background", choices=sorted(brand_kit.BACKGROUND_STYLES - {"image"}), default="theme")
     parser.add_argument("--background-image", help="background image file; sets the background style to image")
     parser.add_argument("--output-dir", help="where finished videos go")
-    parser.add_argument("--out", type=Path, help="kit folder to write (default: ~/.config/voiceover-video/kits/<name>, or the --from file's folder)")
+    parser.add_argument("--out", type=Path, help="kit folder to write (default: ~/.config/shenghua/kits/<name>, or the --from file's folder)")
     parser.add_argument("--force", action="store_true", help="replace an existing kit's brand.json")
     parser.add_argument("--skip-font-check", action="store_true", help="don't verify Google font names")
     args = parser.parse_args()
