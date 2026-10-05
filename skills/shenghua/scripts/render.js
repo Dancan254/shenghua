@@ -4,6 +4,7 @@
  *
  *   node render.js stills <index.html> <out-dir> <t1,t2,…>
  *   node render.js frames <index.html> <out-dir> <from-frame> <to-frame> [subframes]  (to-frame is exclusive)
+ *   node render.js stream <index.html> <from-frame> <to-frame> [subframes]  (PNG/JPEG bytes to stdout, image2pipe)
  *   node render.js cues   <index.html> <cues.json>
  *   node render.js check  <index.html> [report.json]
  *   node render.js board  <board.html> <board.png>      (fill_template.py --board writes board.html)
@@ -28,19 +29,22 @@ const [,, mode, htmlFile, target, a, b, subframeArg] = process.argv;
 
 function usage(message) {
   console.error(message);
-  console.error('Usage: render.js stills|frames|cues|check|board <index.html> [out] [args]');
+  console.error('Usage: render.js stills|frames|stream|cues|check|board <index.html> [out] [args]');
   process.exit(1);
 }
 
-if (!['stills', 'frames', 'cues', 'check', 'board'].includes(mode)) usage(`Unknown mode: ${mode}`);
+if (!['stills', 'frames', 'stream', 'cues', 'check', 'board'].includes(mode)) usage(`Unknown mode: ${mode}`);
 if (mode === 'board' && !target) usage('board needs an output path, e.g. board.png');
 if (!htmlFile || !fs.existsSync(htmlFile)) usage(`No such composition: ${htmlFile}`);
-if (mode === 'frames' && (Number.isNaN(Number(a)) || Number.isNaN(Number(b)) || b === undefined)) {
-  usage(`frames needs <from-frame> <to-frame> as two separate numbers, got: ${a} ${b}`);
+// stream puts the frame range where frames puts the output dir; normalise so both modes share one range
+const range = mode === 'stream' ? { from: target, to: a, sub: b } : { from: a, to: b, sub: subframeArg };
+const isFrameMode = mode === 'frames' || mode === 'stream';
+if (isFrameMode && (Number.isNaN(Number(range.to)) || Number.isNaN(Number(range.from)) || range.to === undefined)) {
+  usage(`${mode} needs <from-frame> <to-frame> as two separate numbers, got: ${range.from} ${range.to}`);
 }
-const subframes = Number(subframeArg ?? 1);
-if (mode === 'frames' && !(/^\d+$/.test(String(subframeArg ?? 1)) && subframes >= 1 && subframes <= 16)) {
-  usage(`frames [subframes] must be an integer from 1 to 16, got: ${subframeArg}`);
+const subframes = Number(range.sub ?? 1);
+if (isFrameMode && !(/^\d+$/.test(String(range.sub ?? 1)) && subframes >= 1 && subframes <= 16)) {
+  usage(`${mode} [subframes] must be an integer from 1 to 16, got: ${range.sub}`);
 }
 
 // vendor/ and kit/ link into the skill's install dir; an update moves that dir and the links
@@ -351,22 +355,37 @@ if (dangling.length) {
     console.log(`${times.length} stills → ${target}`);
   }
 
-  if (mode === 'frames' && subframes === 1) {
-    fs.mkdirSync(target, { recursive: true });
-    const [ext, other] = DRAFT ? ['jpg', 'png'] : ['png', 'jpg'];
-    for (let f = Number(a); f < Number(b); f++) {
-      await page.evaluate(x => window.renderAt(x), f / FPS);
-      const name = path.join(target, `f${String(f).padStart(5, '0')}`);
-      // 'device' keeps the 2x pixels (4K); 'css' supersamples them to 1x. dsf is 1 under DRAFT,
-      // so 'device' still yields a 1x draft frame
-      await page.screenshot({ path: `${name}.${ext}`, scale: SCALE === 2 ? 'device' : 'css', ...(DRAFT ? { type: 'jpeg', quality: 92 } : { type: 'png' }) });
-      // A frame from an earlier render in the other quality would be encoded alongside this one
-      fs.rmSync(`${name}.${other}`, { force: true });
-    }
+  // stream mode pipes the same frames to stdout as image2pipe input, so stdout must carry frame
+  // bytes only: every message goes to stderr, and backpressure waits for the encoder to drain
+  const writeFrame = mode === 'stream'
+    ? buf => (process.stdout.write(buf) ? Promise.resolve() : new Promise(resolve => process.stdout.once('drain', resolve)))
+    : null;
+  if (mode === 'stream') {
+    process.stdout.on('error', e => { console.error(`stdout pipe failed: ${e.message}`); process.exit(1); });
   }
 
-  if (mode === 'frames' && subframes > 1) {
-    fs.mkdirSync(target, { recursive: true });
+  if (isFrameMode && subframes === 1) {
+    if (mode === 'frames') fs.mkdirSync(target, { recursive: true });
+    const [ext, other] = DRAFT ? ['jpg', 'png'] : ['png', 'jpg'];
+    for (let f = Number(range.from); f < Number(range.to); f++) {
+      await page.evaluate(x => window.renderAt(x), f / FPS);
+      // 'device' keeps the 2x pixels (4K); 'css' supersamples them to 1x. dsf is 1 under DRAFT,
+      // so 'device' still yields a 1x draft frame
+      const shot = { scale: SCALE === 2 ? 'device' : 'css', ...(DRAFT ? { type: 'jpeg', quality: 92 } : { type: 'png' }) };
+      if (mode === 'stream') {
+        await writeFrame(await page.screenshot(shot));
+      } else {
+        const name = path.join(target, `f${String(f).padStart(5, '0')}`);
+        await page.screenshot({ path: `${name}.${ext}`, ...shot });
+        // A frame from an earlier render in the other quality would be encoded alongside this one
+        fs.rmSync(`${name}.${other}`, { force: true });
+      }
+    }
+    if (mode === 'stream') console.error(`${Number(range.to) - Number(range.from)} frames → stdout`);
+  }
+
+  if (isFrameMode && subframes > 1) {
+    if (mode === 'frames') fs.mkdirSync(target, { recursive: true });
     const [ext, other] = DRAFT ? ['jpg', 'png'] : ['png', 'jpg'];
     // A scale-1 clip captures at CSS size, so the 2x page is supersampled to 1x; VV_SCALE=2
     // captures at device pixels (4K). The pixels match page.screenshot exactly and the
@@ -382,7 +401,7 @@ if (dangling.length) {
       window.blendContext = canvas.getContext('2d', { willReadFrequently: true });
       window.blendSum = new Uint32Array(width * height * 4);
     }, { width: size.width * clip.scale, height: size.height * clip.scale });
-    for (let f = Number(a); f < Number(b); f++) {
+    for (let f = Number(range.from); f < Number(range.to); f++) {
       await blend.evaluate(() => window.blendSum.fill(0));
       for (let k = 0; k < subframes; k++) {
         // 180° shutter: sub-frames span half a frame, so renderAt's Math.round keeps frame f's grain and footage
@@ -408,10 +427,15 @@ if (dangling.length) {
         window.blendContext.putImageData(averaged, 0, 0);
         return window.blendContext.canvas.toDataURL(type, 0.92).split(',')[1];
       }, { count: subframes, type: DRAFT ? 'image/jpeg' : 'image/png' });
-      const name = path.join(target, `f${String(f).padStart(5, '0')}`);
-      fs.writeFileSync(`${name}.${ext}`, Buffer.from(blended, 'base64'));
-      fs.rmSync(`${name}.${other}`, { force: true });
+      if (mode === 'stream') {
+        await writeFrame(Buffer.from(blended, 'base64'));
+      } else {
+        const name = path.join(target, `f${String(f).padStart(5, '0')}`);
+        fs.writeFileSync(`${name}.${ext}`, Buffer.from(blended, 'base64'));
+        fs.rmSync(`${name}.${other}`, { force: true });
+      }
     }
+    if (mode === 'stream') console.error(`${Number(range.to) - Number(range.from)} frames → stdout`);
   }
 
   await browser.close();

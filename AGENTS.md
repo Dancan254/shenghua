@@ -44,7 +44,7 @@ skills/shenghua/
     ├── extract_clip.sh          fetched clip → clips/<name>/fNNNNN.jpg (+ clips/<name>.wav)
     ├── render.js                stills | frames | cues | check | board, driven by window.renderAt(t)
     ├── render-frames.sh         parallel frame rendering, resumable; --resolution 4k, --blur, --force
-    ├── render-chunks.sh         default for finals: render + encode in chunks, resumable, ~2 GB peak scratch
+    ├── render-chunks.sh         default for finals: streams frames into the encoder in chunks, resumable, no frames directory
     ├── contact-sheet.sh         stills → one review image
     ├── synth_audio.py           cues.json → sfx.wav + music.wav
     ├── mix-encode.sh            voice + ducked clip audio + ducked music + SFX → mp4; --10bit, --embed
@@ -87,7 +87,8 @@ names, breaks this.
    phones shift the brand colours.
 6. **Final frames are supersampled PNG.** `render.js` renders at 2x device pixels and saves 1x PNG, so
    edges stay crisp and red text has no JPEG chroma bleed. JPEG frames are for `VV_QUALITY=draft` only,
-   and `mix-encode.sh` refuses a frames directory that mixes the two.
+   and `mix-encode.sh` refuses a frames directory that mixes the two. `render.js stream` writes those
+   same frame bytes to stdout only (image2pipe); every diagnostic goes to stderr.
 7. **Nothing third-party is committed.** GSAP, fonts, `node_modules`, and Chromium are downloaded by
    `setup.sh`. Never add them to git.
 8. **Placeholders are `{{dotted.names}}`** filled by `fill_template.py`. A new placeholder needs a value
