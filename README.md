@@ -1,6 +1,6 @@
-# voiceover-video
+# Shenghua 声画
 
-**An AI-agent skill that turns a recording into a fully edited, animated, on-brand video.**
+*Voice in, picture out.* **An AI-agent skill that turns a recording into a fully edited, animated, on-brand video.**
 
 Drop in a voice note, a to-camera take or a green-screen talk. Your agent transcribes it word by word,
 designs a shot list, finds licensed photos and video of the people and products you mention, builds every
@@ -8,14 +8,14 @@ scene as kinetic typography and motion graphics timed to your words in your bran
 logos, adds sound design and a music bed that ducks under your voice, and renders a 1080×1920 Short, a
 1920×1080 landscape, a 1080×1080 square or a 1080×1350 portrait video.
 
-This repo ships one skill, `voiceover-video`. It is model-agnostic: it works in Claude Code, Kimi Code
+This repo ships one skill, `shenghua`. It is model-agnostic: it works in Claude Code, Kimi Code
 CLI, OpenCode, or any agent that can run shell commands. **New here? Start with the
 [step-by-step workflow](docs/workflow.md).**
 
 ![A 42-second Kafka vs RabbitMQ explainer made with this skill: word-synced captions, a message-queue diagram, stamps and kinetic type on the blueprint theme](docs/demo.gif)
 
 The full 42 s with sound, made from one voice note (shot list and composition in
-[`examples/kafka-vs-rabbitmq`](skills/voiceover-video/examples/kafka-vs-rabbitmq/)):
+[`examples/kafka-vs-rabbitmq`](skills/shenghua/examples/kafka-vs-rabbitmq/)):
 
 https://github.com/user-attachments/assets/ce171d59-121d-4193-b6d0-cd011345ef41
 
@@ -135,14 +135,14 @@ On macOS, Homebrew's Python refuses a system-wide `pip install`; the
 Inside Claude Code:
 
 ```
-/plugin marketplace add Dancan254/voiceover-video-skill
-/plugin install voiceover-video@voiceover-video-skill
+/plugin marketplace add Dancan254/shenghua
+/plugin install shenghua@shenghua
 ```
 
 Inside Kimi Code CLI:
 
 ```
-/plugins install https://github.com/Dancan254/voiceover-video-skill
+/plugins install https://github.com/Dancan254/shenghua
 ```
 
 Then start a fresh session (`/new` in Kimi Code, or `/restart` in Claude Code).
@@ -150,11 +150,11 @@ Then start a fresh session (`/new` in Kimi Code, or `/restart` in Claude Code).
 **Or copy it** into your personal skills:
 
 ```bash
-git clone https://github.com/Dancan254/voiceover-video-skill
+git clone https://github.com/Dancan254/shenghua
 # Claude Code
-cp -r voiceover-video-skill/skills/voiceover-video ~/.claude/skills/
+cp -r shenghua/skills/shenghua ~/.claude/skills/
 # Kimi Code CLI
-cp -r voiceover-video-skill/skills/voiceover-video ~/.kimi-code/skills/
+cp -r shenghua/skills/shenghua ~/.kimi-code/skills/
 ```
 
 ### One-time setup
@@ -169,9 +169,9 @@ works without it.
 If you copied the skill instead of installing the plugin, you can run it yourself first:
 
 ```bash
-bash ~/.claude/skills/voiceover-video/scripts/setup.sh
+bash ~/.claude/skills/shenghua/scripts/setup.sh
 # or, for Kimi Code CLI:
-bash ~/.kimi-code/skills/voiceover-video/scripts/setup.sh
+bash ~/.kimi-code/skills/shenghua/scripts/setup.sh
 ```
 
 ---
@@ -186,10 +186,10 @@ bash ~/.kimi-code/skills/voiceover-video/scripts/setup.sh
    `--vision` for face framing. On macOS, put the Python packages in a venv first
    ([per-platform steps](docs/workflow.md#1-install-the-tools)).
 3. **Create your brand kit** (once, below): the agent asks four questions and writes it to
-   `~/.config/voiceover-video/kits/`. Already have kits? `brand_kit.py list` shows them and
+   `~/.config/shenghua/kits/`. Already have kits? `brand_kit.py list` shows them and
    `brand_kit.py default <name>` sets the one used when a request names none.
 4. **Make a video**, in any mode — the prompts below.
-5. **Find the result** in `<output dir>/<slug>/` (default `~/voiceover-videos/<slug>/`): the master mp4
+5. **Find the result** in `<output dir>/<slug>/` (default `~/shenghuas/<slug>/`): the master mp4
    with `captions.srt`/`.vtt` beside it, plus a `delivery/` folder in the project when the agent runs the
    optional delivery step — the master, a web copy, captions, a cover frame and `credits.txt`.
 
@@ -233,13 +233,13 @@ Useful follow-ups:
 
 ## Use it with another agent
 
-Nothing here is tied to one model. `skills/voiceover-video/SKILL.md` is a plain workflow document, and
+Nothing here is tied to one model. `skills/shenghua/SKILL.md` is a plain workflow document, and
 the scripts are Python, Node and bash that call no model at all. Any agent that can run shell commands
 and write files can follow it:
 
 ```bash
-git clone https://github.com/Dancan254/voiceover-video-skill
-bash voiceover-video-skill/skills/voiceover-video/scripts/setup.sh
+git clone https://github.com/Dancan254/shenghua
+bash shenghua/skills/shenghua/scripts/setup.sh
 ```
 
 Then point your agent at `SKILL.md` and give it the recording; the [workflow guide](docs/workflow.md)
@@ -257,7 +257,7 @@ you to listen to the mix before posting.
 Every video wears a **brand kit**: a folder with a `brand.json` and the fonts and logos it names. The
 first time you use the skill, the agent asks for your name and handle, your colours (a named look or your
 own), your fonts and where videos should go, then writes your kit to
-`~/.config/voiceover-video/kits/<name>/`. Every question has a default, so "just use the defaults" is a
+`~/.config/shenghua/kits/<name>/`. Every question has a default, so "just use the defaults" is a
 valid answer. Keep as many kits as you work with: `brand_kit.py list` shows them all with the default
 marked, `brand_kit.py default <name>` sets it, and naming one in the prompt ("in the Acme kit") picks it
 for that video — with several kits and none named, the agent asks before rendering.
@@ -286,20 +286,20 @@ border shades, a readable text shade of the brand colour, caption contrast again
 (or dark) canvas for themes designed for the other one. Before the first render the agent shows a
 **brand board**, one image of the kit inside the chosen theme, so a wrong colour costs seconds, not a
 render. Fonts can be any Google Font or the brand's own files; logos come from the brand, never from a
-web search. [`examples/kits/`](skills/voiceover-video/examples/kits/) has two fictional kits to copy.
+web search. [`examples/kits/`](skills/shenghua/examples/kits/) has two fictional kits to copy.
 
 Create one yourself:
 
 ```bash
 # Adjust the path if you installed the skill as a plugin or copied it elsewhere
-python3 ~/.claude/skills/voiceover-video/scripts/init_kit.py --name "Your Name" --handle @yourhandle --preset carbon-cyan
+python3 ~/.claude/skills/shenghua/scripts/init_kit.py --name "Your Name" --handle @yourhandle --preset carbon-cyan
 ```
 
 **Upgrading from 2.0:** brand files changed format in 2.1. Convert yours once; the original is kept as
 `brand.v1.json`:
 
 ```bash
-python3 ~/.claude/skills/voiceover-video/scripts/init_kit.py --from ~/.config/voiceover-video/brand.json
+python3 ~/.claude/skills/shenghua/scripts/init_kit.py --from ~/.config/shenghua/brand.json
 ```
 
 ### Editing for a company
@@ -308,7 +308,7 @@ Each client gets their own kit folder, and kits install side by side, so their f
 prompt that gets the best result:
 
 ```text
-Use the voiceover-video skill to edit this video.
+Use the shenghua skill to edit this video.
 
 Video:        ~/Projects/acme/keynote-take3.mp4
 Brand kit:    acme   (a kit name from brand_kit.py list, or a folder: ~/Projects/acme/brand-kit/)

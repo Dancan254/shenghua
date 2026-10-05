@@ -10,8 +10,8 @@ asset folder.
   brand_kit.py resolve <name-or-path>                print the kit a name or path resolves to
 
 A kit is a folder holding brand.json (version 2) plus the files it names, or a brand.json path.
-Named kits live in ~/.config/voiceover-video/kits/<name>/ (init_kit.py --name writes there); the
-single-kit ~/.config/voiceover-video/brand.json keeps working as the user's own kit.
+Named kits live in ~/.config/shenghua/kits/<name>/ (init_kit.py --name writes there); the
+single-kit ~/.config/shenghua/brand.json keeps working as the user's own kit.
 """
 
 import argparse
@@ -29,7 +29,7 @@ import zlib
 from pathlib import Path
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
-CONFIG_DIR = Path.home() / ".config" / "voiceover-video"
+CONFIG_DIR = Path.home() / ".config" / "shenghua"
 KITS_DIR = CONFIG_DIR / "kits"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 LEGACY_KIT = CONFIG_DIR / "brand.json"
@@ -651,7 +651,7 @@ def command_default(name) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Validate, install and manage voiceover-video brand kits.")
+    parser = argparse.ArgumentParser(description="Validate, install and manage shenghua brand kits.")
     sub = parser.add_subparsers(dest="command", required=True)
     check_parser = sub.add_parser("check", help="validate a kit and print its tokens and contrast report")
     check_parser.add_argument("kit", nargs="?", help="kit name, kit folder or brand.json (default: resolved like setup.sh)")

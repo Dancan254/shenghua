@@ -37,7 +37,7 @@ import numpy as np
 # The detector and the faces.js format live with the keyer, the skill's other vision consumer
 from key_greenscreen import face_in_image, load_detector, record_face
 
-USER_AGENT = "voiceover-video-skill/1.0 (https://github.com/Dancan254/voiceover-video-skill)"
+USER_AGENT = "shenghua/1.0 (https://github.com/Dancan254/shenghua)"
 BROWSER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36"
 SOURCES = {"image": ["commons", "openverse", "web", "pexels"], "video": ["commons", "youtube", "archive", "pexels"],
            "gif": ["commons", "giphy"]}

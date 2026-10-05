@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup.sh [--voices] [--vision] [kit] — one-time setup for voiceover-video. Safe to re-run.
+# setup.sh [--voices] [--vision] [kit] — one-time setup for shenghua. Safe to re-run.
 # --voices also fetches script mode's voice model (~350 MB) and the configured whisper
 # word-alignment model (base by default, ~145 MB), once.
 # --vision sets up the optional face detector: opencv-python-headless (pip) plus the YuNet model
@@ -10,12 +10,12 @@ SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILL_DIR="$(dirname "$SCRIPTS_DIR")"
 ASSETS_DIR="$SKILL_DIR/assets"
 GSAP_VERSION="3.12.5"
-KOKORO_DIR="${VV_KOKORO_DIR:-$HOME/.cache/voiceover-video/kokoro}"
+KOKORO_DIR="${VV_KOKORO_DIR:-$HOME/.cache/shenghua/kokoro}"
 KOKORO_URL="https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0"
-YUNET_DIR="${VV_YUNET_DIR:-$HOME/.cache/voiceover-video/yunet}"
+YUNET_DIR="${VV_YUNET_DIR:-$HOME/.cache/shenghua/yunet}"
 YUNET_MODEL="face_detection_yunet_2023mar.onnx"
 YUNET_URL="https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/$YUNET_MODEL"
-CONFIG_FILE="${VV_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/voiceover-video/config.json}"
+CONFIG_FILE="${VV_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/shenghua/config.json}"
 VOICES=0
 VISION=0
 while [[ "${1:-}" == --* ]]; do

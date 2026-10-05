@@ -20,7 +20,7 @@ aligned with faster-whisper, so the script's own words get the times they are sp
 
 The voice model downloads once with setup.sh --voices; after that it runs offline. The alignment
 model is any faster-whisper name or a local CTranslate2 folder; --device/--compute-type and the
-"whisper" section of ~/.config/voiceover-video/config.json apply to it as in transcribe.py.
+"whisper" section of ~/.config/shenghua/config.json apply to it as in transcribe.py.
 """
 
 import argparse
@@ -39,7 +39,7 @@ import numpy as np
 
 CONFIG_PATH = Path(os.environ.get(
     "VV_CONFIG",
-    Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "voiceover-video" / "config.json",
+    Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "shenghua" / "config.json",
 ))
 
 
@@ -91,7 +91,7 @@ def whisper_settings(cli_model, cli_device, cli_compute, default_model):
         compute = "float16" if device == "cuda" else "int8"
     return resolve_model(model), device, compute
 
-MODEL_DIR = Path(os.environ.get("VV_KOKORO_DIR", Path.home() / ".cache" / "voiceover-video" / "kokoro"))
+MODEL_DIR = Path(os.environ.get("VV_KOKORO_DIR", Path.home() / ".cache" / "shenghua" / "kokoro"))
 MODEL, VOICES = "kokoro-v1.0.onnx", "voices-v1.0.bin"
 SR_OUT = 48000
 # First speaker gets the first voice, and so on; a pitch above 1 makes a small, squeaky character

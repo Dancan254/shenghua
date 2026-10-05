@@ -132,14 +132,14 @@ def chromaticity(rgb):
 def vision_model():
     """The YuNet model setup.sh --vision recorded in config.json (or left in the default cache); None if absent."""
     config = Path(os.environ.get("VV_CONFIG") or
-                  Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "voiceover-video" / "config.json")
+                  Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "shenghua" / "config.json")
     model = None
     try:
         model = json.loads(config.read_text(encoding="utf-8")).get("vision", {}).get("model")
     except (OSError, json.JSONDecodeError):
         pass
     if not model:
-        model = Path(os.environ.get("VV_YUNET_DIR") or Path.home() / ".cache" / "voiceover-video" / "yunet") / YUNET_MODEL
+        model = Path(os.environ.get("VV_YUNET_DIR") or Path.home() / ".cache" / "shenghua" / "yunet") / YUNET_MODEL
     model = Path(model).expanduser()
     return model if model.is_file() else None
 

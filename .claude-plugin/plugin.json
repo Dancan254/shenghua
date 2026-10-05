@@ -1,14 +1,14 @@
 {
-  "name": "voiceover-video",
+  "name": "shenghua",
   "description": "Turn a voice recording into a fully animated, captioned, sound-designed short video.",
-  "version": "2.3.1",
+  "version": "2.4.0",
   "author": {
     "name": "Dancan254",
     "url": "https://github.com/Dancan254"
   },
-  "repository": "https://github.com/Dancan254/voiceover-video-skill",
+  "repository": "https://github.com/Dancan254/shenghua",
   "license": "MIT",
   "skills": [
-    "./skills/voiceover-video"
+    "./skills/shenghua"
   ]
 }

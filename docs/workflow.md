@@ -46,9 +46,9 @@ or more. Below that it still works, it just looks softer. How to record well:
 brew install ffmpeg node python@3.12
 # presenter mode (green-screen keying) needs libwebp, which Homebrew's core ffmpeg dropped:
 # brew install ffmpeg-full   # replaces ffmpeg
-python3.12 -m venv ~/.venvs/voiceover-video
-~/.venvs/voiceover-video/bin/pip install faster-whisper 'av<19' numpy
-echo 'export PATH="$HOME/.venvs/voiceover-video/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
+python3.12 -m venv ~/.venvs/shenghua
+~/.venvs/shenghua/bin/pip install faster-whisper 'av<19' numpy
+echo 'export PATH="$HOME/.venvs/shenghua/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
 ```
 
 **Linux (Debian/Ubuntu):**
@@ -68,22 +68,22 @@ There are two ways; use whichever your agent supports.
 
 **A. As an installed skill or plugin**, if your agent has a skill or plugin system. See
 [Add the skill](../README.md#add-the-skill) in the README; updating is that system's update command.
-In the prompts below, start with *"Use the voiceover-video skill"*.
+In the prompts below, start with *"Use the shenghua skill"*.
 
 **B. As a cloned folder**, which works with any agent:
 
 ```bash
-git clone https://github.com/Dancan254/voiceover-video-skill ~/skills/voiceover-video-skill
+git clone https://github.com/Dancan254/shenghua ~/skills/shenghua
 ```
 
 Update it later with:
 
 ```bash
-git -C ~/skills/voiceover-video-skill pull
-git -C ~/skills/voiceover-video-skill describe --tags     # the version you're on
+git -C ~/skills/shenghua pull
+git -C ~/skills/shenghua describe --tags     # the version you're on
 ```
 
-In the prompts below, start with *"Read ~/skills/voiceover-video-skill/skills/voiceover-video/SKILL.md
+In the prompts below, start with *"Read ~/skills/shenghua/skills/shenghua/SKILL.md
 and follow it exactly"*. Every prompt in this guide uses this form; with option A, swap that first line.
 
 ## 3. Start your agent in a project folder
@@ -104,7 +104,7 @@ prompts below use these paths relative to this folder.
 Once per brand. Paste:
 
 ```text
-Read ~/skills/voiceover-video-skill/skills/voiceover-video/SKILL.md and follow it exactly.
+Read ~/skills/shenghua/skills/shenghua/SKILL.md and follow it exactly.
 
 Set up the skill, then create a brand kit at ./brand-kit:
 name <Brand>, handle <handle or domain>,
@@ -123,7 +123,7 @@ A brand with a light background also gives a dark one for dark themes: add
 **You check:** setup prints `ready`, and the contrast report has no `BELOW` lines. A warning about a
 logo means it may be invisible on the background; supply the other wordmark.
 
-Kits live in `~/.config/voiceover-video/kits/<name>/` (a kit made with `--out` lives wherever you put
+Kits live in `~/.config/shenghua/kits/<name>/` (a kit made with `--out` lives wherever you put
 it). Working with several brands, `brand_kit.py list` shows every kit with the default marked, and
 `brand_kit.py default <name>` sets the one used when a prompt names none. Name a kit in the prompt —
 `Brand kit: acme` — to use it for that video; with several kits and none named, the agent asks before
@@ -160,7 +160,7 @@ Pick the prompt for your recording.
 The speaker is cut out of the green screen and stays on screen in the brand's background throughout.
 
 ```text
-Read ~/skills/voiceover-video-skill/skills/voiceover-video/SKILL.md and follow it exactly,
+Read ~/skills/shenghua/skills/shenghua/SKILL.md and follow it exactly,
 including references/scene-blocks.md. Edit this video in presenter mode.
 
 Video:     ./source/<recording>
@@ -202,7 +202,7 @@ report duration, size, loudness and where the file is.
 ### B. A talk without a green screen (face shots at start and end)
 
 ```text
-Read ~/skills/voiceover-video-skill/skills/voiceover-video/SKILL.md and follow it exactly,
+Read ~/skills/shenghua/skills/shenghua/SKILL.md and follow it exactly,
 including references/scene-blocks.md.
 
 Edit ./source/<recording>: the opening line and the sign-off stay on camera, everything between is
@@ -217,7 +217,7 @@ list and the draft. Then render the final, verify a frame from the encoded file,
 ### C. A voice note or narration (no video)
 
 ```text
-Read ~/skills/voiceover-video-skill/skills/voiceover-video/SKILL.md and follow it exactly,
+Read ~/skills/shenghua/skills/shenghua/SKILL.md and follow it exactly,
 including references/scene-blocks.md.
 
 Make a <60-second vertical Short | landscape | square | portrait video> from ./source/<audio file>.
@@ -236,7 +236,7 @@ recording."* The trim cuts the excerpt and keeps captions in sync.
 ### Choosing a transcription model
 
 The default `small` is right for most recordings. Pass another in the prompt ("use the base model") or
-set it once in `~/.config/voiceover-video/config.json`:
+set it once in `~/.config/shenghua/config.json`:
 
 ```json
 { "whisper": { "model": "large-v3-turbo", "device": "cuda", "compute_type": "float16" } }

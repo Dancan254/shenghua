@@ -1,9 +1,9 @@
 ---
-name: voiceover-video
+name: shenghua
 description: "Turn a voice recording (voice note, narration, podcast snippet) into a fully animated, brand-styled video — local word-level transcription, a timed shot list, kinetic typography, camera moves, real photos and licensed video clips of the people and products it mentions, synthesized sound design and a voice-ducked music bed, rendered as a 1080x1920 Short (or 1920x1080, 1080x1080, 1080x1350). Also takes a to-camera phone recording: the opening line and sign-off stay on camera as face shots and everything between is animated. With no recording at all, writes an explainer script, voices each cartoon character offline, and animates talking hosts that teach the concept through an analogy. Use when asked to 'make an animated explainer about X', 'explain Kafka with cartoon characters', 'make a video with characters teaching this', or to 'make a video out of this audio', 'animate this voice note', 'turn this narration into a Short', 'edit this like a pro', 'create a video from my voiceover', or 'make a reel from this recording'."
 ---
 
-# Voiceover Video Skill
+# Shenghua 声画
 
 Takes an audio file and builds a complete edit around it: every shot is an HTML/GSAP scene timed to the exact spoken word, rendered frame by frame in headless Chromium, then muxed with a mixed soundtrack (voice + synthesized SFX + ducked music). The judgement — what each line should *look* like — is yours. The scripts handle transcription, rendering, audio, and encoding.
 
@@ -35,9 +35,9 @@ Four ways in, one workflow:
 | `vocab` | No | names and terms the speaker uses: `"Kubernetes, Kafka, Jane Doe"` |
 | `slug` | No | inferred from the topic, e.g. `java-origin` |
 
-**Brand kit.** Resolved as: `kit` if given, then `./brand.json`, then the configured default, then `~/.config/voiceover-video/brand.json`, then the bundled `SKILL_DIR/brand.example.json`. **When the user has more than one kit (`brand_kit.py list` shows several) and the request names none, list them and ask which to use before anything renders.** Naming one — "in the Acme kit" — skips the question. To create, convert or manage kits, **load `references/brand-kits.md`**. A version-1 brand file converts once with `init_kit.py --from <file>`.
+**Brand kit.** Resolved as: `kit` if given, then `./brand.json`, then the configured default, then `~/.config/shenghua/brand.json`, then the bundled `SKILL_DIR/brand.example.json`. **When the user has more than one kit (`brand_kit.py list` shows several) and the request names none, list them and ask which to use before anything renders.** Naming one — "in the Acme kit" — skips the question. To create, convert or manage kits, **load `references/brand-kits.md`**. A version-1 brand file converts once with `init_kit.py --from <file>`.
 
-Output goes to `<kit output.dir>/<slug>/` (default `~/voiceover-videos`); work files go to `<output dir>/<slug>/work/`. Create it now:
+Output goes to `<kit output.dir>/<slug>/` (default `~/shenghuas`); work files go to `<output dir>/<slug>/work/`. Create it now:
 
 ```bash
 mkdir -p <output dir>/<slug>/work
@@ -81,7 +81,7 @@ python3 SKILL_DIR/scripts/transcribe.py <audio> --outdir "$work" --model small -
 
 Writes `words.json` (every word with start/end) and `transcript.txt` — one phrase per line as `[start] word@time word@time …`. Read `transcript.txt`; the per-word times are what you cut to.
 
-`--model` takes any faster-whisper name (`tiny` … `large-v3-turbo`) or a local CTranslate2 folder; `--device auto|cpu|cuda` and `--compute-type int8|float16|float32` control where it runs (a GPU is several times faster than CPU; larger models trade speed and disk for accuracy). Defaults come from `~/.config/voiceover-video/config.json` (`{"whisper": {"model": …, "device": …, "compute_type": …}}`; `VV_CONFIG` points at another file), then the built-ins.
+`--model` takes any faster-whisper name (`tiny` … `large-v3-turbo`) or a local CTranslate2 folder; `--device auto|cpu|cuda` and `--compute-type int8|float16|float32` control where it runs (a GPU is several times faster than CPU; larger models trade speed and disk for accuracy). Defaults come from `~/.config/shenghua/config.json` (`{"whisper": {"model": …, "device": …, "compute_type": …}}`; `VV_CONFIG` points at another file), then the built-ins.
 
 Run it in the background for anything over two minutes; never wait silently — the first run downloads the model and may sit at low CPU for a few minutes. **Long steps outlast shell time limits:** transcribing, keying, rendering and encoding can each outrun an agent's command timeout. Start them detached and poll the log: `nohup <command> > "$work"/<step>.log 2>&1 &`, then read the log until it prints its `Next:` line. `key_greenscreen.py` and `render-frames.sh` both resume where they stopped: re-run the same command.
 

@@ -13,5 +13,5 @@
     "fallback": { "google": "Noto Sans" }
   },
   "background": { "style": "theme" },
-  "output": { "dir": "~/voiceover-videos" }
+  "output": { "dir": "~/shenghuas" }
 }

@@ -20,7 +20,7 @@ os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
 PHRASE_MAX_WORDS = 5
 CONFIG_PATH = Path(os.environ.get(
     "VV_CONFIG",
-    Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "voiceover-video" / "config.json",
+    Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "shenghua" / "config.json",
 ))
 
 
