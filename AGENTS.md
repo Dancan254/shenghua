@@ -42,9 +42,10 @@ skills/shenghua/
     ├── extract_face.sh          to-camera video → face/fNNNNN.jpg, numbered by edit frame
     ├── find_media.py            photo/video search (Commons, Openverse, Archive, Pexels, web, YouTube) + credits.json
     ├── extract_clip.sh          fetched clip → clips/<name>/fNNNNN.jpg (+ clips/<name>.wav)
-    ├── render.js                stills | frames | cues | check | board, driven by window.renderAt(t)
+    ├── render.js                stills | frames | stream | cues | check | board, driven by window.renderAt(t)
     ├── render-frames.sh         parallel frame rendering, resumable; --resolution 4k, --blur, --force
     ├── render-chunks.sh         default for finals: streams frames into the encoder in chunks, resumable, no frames directory
+    ├── preview.py               serve a work dir with a browser shell: play/scrub/click-to-seek around renderAt; --check self-tests headless
     ├── contact-sheet.sh         stills → one review image
     ├── synth_audio.py           cues.json → sfx.wav + music.wav
     ├── mix-encode.sh            voice + ducked clip audio + ducked music + SFX → mp4; --10bit, --embed
@@ -75,6 +76,8 @@ names, breaks this.
 1. **Rendering is deterministic.** The composition exposes `window.renderAt(t)` and every frame is a
    seek to `f / 30`. No `Math.random()`, no `Date.now()`, no `requestAnimationFrame`-driven state, no
    GSAP `repeat: -1` or `yoyo` on the main timeline. Grain uses the seeded PRNG in the template.
+   Playback with a `requestAnimationFrame` loop lives only in `_preview.html` (preview.py's shell);
+   the composition itself never auto-plays.
 2. **Every sound comes from a cue.** Helpers that make noise push into `window.SFX`;
    `synth_audio.py` must handle every cue `type` the template or `scene-blocks.md` documents. Adding a
    cue type means changing both.

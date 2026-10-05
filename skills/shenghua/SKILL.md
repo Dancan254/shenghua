@@ -211,6 +211,17 @@ It seeks to each shot at 25%, 50% and 85% of its window and reports text past th
 
 Then, **if you can view images**, read `contact.jpg` for what measurement cannot judge: crops that cut off a face or subject, an image that does not match the line, and layouts that fit the frame but read badly. Fix, re-render only the affected stills, and look again. If you cannot view images, say so in the report and ask the user to look at `contact.jpg` before Step 9. Do not start Step 9 with a known defect — a full render costs minutes.
 
+## Step 7a — Preview the edit in the browser (fast, optional)
+
+Stills can't judge motion. Serve the work dir and review pacing, transitions, caption timing and word emphasis live:
+
+```bash
+python3 SKILL_DIR/scripts/preview.py "$work"             # prints http://localhost:8377/_preview.html
+python3 SKILL_DIR/scripts/preview.py "$work" --check     # headless self-test, exit 0/1
+```
+
+Play, scrub a frame at a time, or click any word in the transcript to jump the playhead to it — the edit loop before committing to a render. The shell drives `window.renderAt(t)` from its own rAF loop; the render path is untouched. Serve detached with `nohup` and a log if your shell has a time limit. Run `--check` to verify the shell headlessly; ask the user to open the URL when pacing matters. Fix, re-check, then move to sound.
+
 ## Step 8 — Sound
 
 ```bash
