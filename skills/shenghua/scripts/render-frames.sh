@@ -104,8 +104,8 @@ per_frame = width * height * scale * scale * (0.24 if ext == "jpg" else 0.7)
 total = per_frame * span
 print(f"{span} frames · ~{total / 1e9:.1f} GB of {ext.upper()}s in the frames dir")
 if total > 4e9 and ext == "png":
-    print(f"tip: {scripts}/render-chunks.sh renders the same video with ~2 GB peak scratch "
-          f"(encodes each chunk, deletes its frames)")
+    print(f"tip: {scripts}/render-chunks.sh renders the same video with no frames directory at all "
+          f"(frames stream from Chromium into the encoder)")
 PY
 
 # A frame counts as done only if its file is whole: PNG ends in IEND, JPEG in EOI. A render killed

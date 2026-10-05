@@ -224,7 +224,7 @@ You cannot hear the result. Say so in the report and ask the user to listen.
 
 ## Step 9 — Render frames
 
-**Anything over about a minute: render with `render-chunks.sh`** — it renders and encodes in ~30 s chunks, deletes each chunk's frames, and muxes the audio with `mix-encode.sh`'s settings, so peak scratch stays around one chunk (~1.6 GB) no matter how long the video is (the whole-frames path needs ~1.4 MB × frames: 18 GB for a 7-minute 1080p video, ~70 GB at 4K). A killed run resumes at the first missing chunk:
+**Anything over about a minute: render with `render-chunks.sh`** — it renders and encodes in ~30 s chunks, streaming each chunk's frames straight from Chromium into the encoder, so no frames directory ever exists and peak scratch is just the chunk mp4s no matter how long the video is (the old whole-frames path needs ~1.4 MB × frames: 18 GB for a 7-minute 1080p video, ~70 GB at 4K — pass `--png` only when you need PNG frames on disk for debugging, e.g. contact sheets or re-rendering a single frame by number). A killed run resumes at the first missing chunk:
 
 ```bash
 bash SKILL_DIR/scripts/render-chunks.sh [--blur 4] [--resolution 4k] [--chunk 30] [--music file] \
@@ -318,7 +318,7 @@ Next: preview it on a phone, then post it with the credits in the description
 | Output file is hundreds of MB | film grain defeats compression at constant CRF | keep the `-maxrate` cap in `mix-encode.sh` |
 | `frames/ mixes high-quality PNG and draft JPEG frames` | a range was re-rendered with a different `VV_QUALITY` | re-render the whole video with one setting |
 | Accent colour looks orange or washed out on a phone | an encode without the BT.709 conversion and tags | use `mix-encode.sh`; don't hand-roll the encode |
-| Frame render fills the disk | high-quality PNG frames are ~1.2 MB each | use `render-chunks.sh` (the default for finals), free space, or preview with `VV_QUALITY=draft` |
+| Frame render fills the disk | high-quality PNG frames are ~1.2 MB each | `render-chunks.sh` (the default for finals) streams frames into the encoder with no frames directory; the `--png` debug path needs real disk — free space, or preview with `VV_QUALITY=draft` |
 | Wrong or fallback font in stills | fonts not downloaded for this brand | re-run `setup.sh` with the kit |
 | `font X lacks glyphs for: …` from `render.js check` | characters the kit's fonts don't cover | swap them, or set `fonts.fallback` in brand.json (`references/brand-kits.md`) |
 | `PAGE ERROR` in render output | a script error in the timeline | fix it; GSAP only warns on missing selectors, so also check each shot visually |
