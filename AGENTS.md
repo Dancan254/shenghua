@@ -19,6 +19,7 @@ skills/shenghua/
 ├── references/
 │   ├── scene-blocks.md          scene catalogue, pacing rules, sound cues, safe zones
 │   ├── presenter.md             presenter mode: keying, layouts, speaker position, pacing
+│   ├── long-form.md             long form: chapter projects, holds, captions off, landscape zones, assembly
 │   ├── face-bookends.md         bookends mode: face shots, [FACE]/[VOICE] sections, extract_face.sh
 │   ├── brand-kits.md            creating and managing kits, the kits folder, the brand board, glyphs
 │   └── explainers.md            script mode: explainer shape, analogy, cast, script format, voices
@@ -51,7 +52,8 @@ skills/shenghua/
     ├── synth_audio.py           cues.json + the kit's audio block → sfx.wav + music.wav + mix.json
     ├── mix-audio.sh             the soundtrack both encoders share: voice + ducked clip audio + ducked music + SFX → mix.wav
     ├── mix-encode.sh            frames + mix-audio.sh → mp4; --10bit, --embed
-    └── deliver.sh               master + web copy + captions + cover + credits.txt → delivery/
+    ├── deliver.sh               master + web copy + captions + cover + credits.txt → delivery/
+    └── assemble.py              long form: chapters.json → one master, one loudness pass, merged captions, YouTube chapters
 ```
 
 `.claude-plugin/marketplace.json` registers the skill for Claude Code's `/plugin install`, and

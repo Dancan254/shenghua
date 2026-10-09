@@ -5,8 +5,8 @@
     "url": "https://github.com/Dancan254"
   },
   "metadata": {
-    "description": "Turn a voice recording into a fully animated, captioned, sound-designed short video.",
-    "version": "2.8.0",
+    "description": "Turn a voice recording into a fully animated, captioned, sound-designed video: a Short, or a long-form YouTube video built chapter by chapter.",
+    "version": "2.9.0",
     "repository": "https://github.com/Dancan254/shenghua"
   },
   "plugins": [
