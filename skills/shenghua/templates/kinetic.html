@@ -408,7 +408,7 @@ function renderText(t){
     lines.forEach(l=>{ if(t<l.t) return; const k = l.e>l.t?Math.min(1,(t-l.t)/(l.e-l.t)):1; html += k<1?l.html.slice(0,Math.floor(l.html.length*k)):l.html; });
     el.innerHTML = html + "<span class='caret'></span>";
     // The caret blinks as a pure function of t; a CSS animation would run on the wall clock (invariant 1)
-    el.querySelector(".caret").style.visibility = Math.floor(t*2)%2 ? "hidden" : "visible";
+    el.querySelector(".caret").style.visibility = Math.floor(t*2)%2 ? "hidden" : "inherit";
   });
 }
 
