@@ -17,5 +17,6 @@
     "wordmark": { "onDark": "logos/wordmark-light.svg", "onLight": "logos/wordmark-dark.svg" }
   },
   "background": { "style": "glow" },
+  "audio": { "levels": { "music": 0.18 }, "sfx": { "whoosh": { "gain": 0.5 }, "type": { "mute": true } } },
   "rules": { "competitorLogos": false }
 }

@@ -2,6 +2,7 @@
 """Synthesize the sound design for a composition.
 
   synth_audio.py <cues.json> <duration> <work-dir> [--template ID] [--drop T] [--quiet A:B] [--no-music]
+                 [--stop A:B] [--muffle A:B] [--stutter A:B]
 
 Writes sfx.wav (every cue the timeline pushed) and music.wav (the theme's pad, bass, pluck and
 pulse layers at its own tempo and key, drums from --drums-from onward). The chord order and pluck
@@ -299,6 +300,81 @@ def track_music(path, duration, samples, quiet, drop):
     return music * music_gain(duration, samples, quiet, drop)
 
 
+def tape_stop(music, a, b):
+    """The music winds down like a stopped tape at a, stays silent, and restarts at b."""
+    start, end = int(a * SR), min(len(music), int(b * SR))
+    wind = min(int(0.6 * SR), end - start)
+    if wind <= 0:
+        return music
+    n = np.arange(wind)
+    # Speed falls linearly from 1 to 0, so the read position is the integral of that ramp
+    position = start + n - n * n / (2 * wind)
+    music[start:start + wind] = np.interp(position, np.arange(len(music)), music)
+    music[start + wind:end] = 0.0
+    fade = min(int(0.03 * SR), len(music) - end)
+    if fade > 0:
+        music[end:end + fade] *= np.linspace(0, 1, fade)
+    return music
+
+
+def muffle(music, a, b):
+    """The music sits behind a low-pass between a and b, as if through a wall, and sweeps open into b."""
+    start, end = int(a * SR), min(len(music), int(b * SR))
+    if end <= start:
+        return music
+    sweep = min(int(0.4 * SR), end - start)
+    cutoff = np.full(end - start, 350.0)
+    cutoff[-sweep:] = np.geomspace(350.0, 16000.0, sweep)
+    alpha = 1 - np.exp(-2 * np.pi * cutoff / SR)
+    out = music[start:end].copy()
+    state = out[0]
+    for i in range(len(out)):
+        state += alpha[i] * (out[i] - state)
+        out[i] = state
+    music[start:end] = out
+    return music
+
+
+def stutter(music, a, b, beat):
+    """One beat from a repeats until b, like a stuck record; the music carries on from b."""
+    start, end = int(a * SR), min(len(music), int(b * SR))
+    length = max(1, int(beat * SR))
+    if end - start <= length or start + length > len(music):
+        return music
+    slice_ = music[start:start + length].copy()
+    edge = min(int(0.005 * SR), length // 4)
+    if edge:
+        slice_[:edge] *= np.linspace(0, 1, edge)
+        slice_[-edge:] *= np.linspace(1, 0, edge)
+    music[start:end] = np.tile(slice_, (end - start) // length + 1)[:end - start]
+    return music
+
+
+def story_moments(music, stops, muffles, stutters, beat):
+    """Music that acts out the script: tape stops, muffled stretches and stuck loops, applied after the bed is built."""
+    for a, b in muffles:
+        music = muffle(music, a, b)
+    for a, b in stutters:
+        music = stutter(music, a, b, beat)
+    for a, b in stops:
+        music = tape_stop(music, a, b)
+    return music
+
+
+def parse_range(flag, value):
+    """'A:B' → (A, B) seconds, or None after printing the problem and the fix."""
+    parts = value.split(":")
+    try:
+        a, b = (float(part) for part in parts) if len(parts) == 2 else (None, None)
+    except ValueError:
+        a = b = None
+    if a is None or b <= a:
+        print(f"{flag} must be A:B with A < B in seconds, got: {value}", file=sys.stderr)
+        print(f"Next: pass a range like {flag} 2.5:4.0", file=sys.stderr)
+        return None
+    return a, b
+
+
 def kit_audio(work):
     """The audio block fill_template.py installed with the kit, or the defaults for a work dir without one."""
     try:
@@ -328,6 +404,9 @@ def main() -> int:
     parser.add_argument("--drums-from", type=float, default=None, help="bring drums in at this time")
     parser.add_argument("--quiet", action="append", default=[], help="A:B range where music sits lower")
     parser.add_argument("--no-music", action="store_true")
+    parser.add_argument("--stop", action="append", default=[], help="A:B tape-stop at A, silence, music back at B")
+    parser.add_argument("--muffle", action="append", default=[], help="A:B music behind a wall, sweeping open at B")
+    parser.add_argument("--stutter", action="append", default=[], help="A:B one beat from A loops until B")
     args = parser.parse_args()
 
     if not args.cues.is_file():
@@ -352,20 +431,12 @@ def main() -> int:
     music_source = "none" if args.no_music else audio["music"]
 
     if music_source != "none":
-        quiet = []
-        for q in args.quiet:
-            parts = q.split(":")
-            if len(parts) != 2:
-                print(f"--quiet must be A:B, got: {q}", file=sys.stderr)
-                print("Next: pass a numeric range like --quiet 2.5:4.0", file=sys.stderr)
+        ranges = {}
+        for flag in ("quiet", "stop", "muffle", "stutter"):
+            ranges[flag] = [parse_range(f"--{flag}", value) for value in getattr(args, flag)]
+            if None in ranges[flag]:
                 return 1
-            try:
-                a, b = float(parts[0]), float(parts[1])
-            except ValueError:
-                print(f"--quiet times must be numbers, got: {q}", file=sys.stderr)
-                print("Next: pass a numeric range like --quiet 2.5:4.0", file=sys.stderr)
-                return 1
-            quiet.append((a, b))
+        quiet = ranges["quiet"]
         if music_source == "synth":
             resolved_work = args.work.resolve()
             seed_key = f"{resolved_work.parent.name}/{resolved_work.name}"
@@ -373,6 +444,7 @@ def main() -> int:
             music = build_music(args.duration, samples, args.drums_from, args.drop, quiet, profile, np.random.default_rng(seed))
         else:
             music = track_music(args.work / music_source, args.duration, samples, quiet, args.drop)
+        music = story_moments(music, ranges["stop"], ranges["muffle"], ranges["stutter"], 60 / profile["bpm"])
         write_wav(args.work / "music.wav", music)
         written.append("music.wav")
 
