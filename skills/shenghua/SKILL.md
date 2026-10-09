@@ -1,6 +1,6 @@
 ---
 name: shenghua
-description: "Turn a voice recording (voice note, narration, podcast snippet) into a fully animated, brand-styled video — local word-level transcription, a timed shot list, kinetic typography, camera moves, real photos and licensed video clips of the people and products it mentions, synthesized sound design and a voice-ducked music bed, rendered as a 1080x1920 Short (or 1920x1080, 1080x1080, 1080x1350). Also takes a to-camera phone recording: the opening line and sign-off stay on camera as face shots and everything between is animated. With no recording at all, writes an explainer script, voices each cartoon character offline, and animates talking hosts that teach the concept through an analogy. Use when asked to 'make an animated explainer about X', 'explain Kafka with cartoon characters', 'make a video with characters teaching this', or to 'make a video out of this audio', 'animate this voice note', 'turn this narration into a Short', 'edit this like a pro', 'create a video from my voiceover', or 'make a reel from this recording'."
+description: "Turn a voice recording (voice note, narration, podcast snippet) into a fully animated, brand-styled video — local word-level transcription, a timed shot list, kinetic typography, camera moves, real photos and licensed video clips of the people and products it mentions, synthesized sound design and a voice-ducked music bed, rendered as a 1080x1920 Short (or 1920x1080, 1080x1080, 1080x1350). Long-form YouTube videos are built in chapters, one recording and one render each, then joined with YouTube chapter timestamps and merged captions. Also takes a to-camera phone recording: the opening line and sign-off stay on camera as face shots and everything between is animated. With no recording at all, writes an explainer script, voices each cartoon character offline, and animates talking hosts that teach the concept through an analogy. Use when asked to 'make an animated explainer about X', 'explain Kafka with cartoon characters', 'make a video with characters teaching this', or to 'make a video out of this audio', 'animate this voice note', 'turn this narration into a Short', 'edit this like a pro', 'create a video from my voiceover', or 'make a reel from this recording', or 'make a YouTube video from these chapters'."
 ---
 
 # Shenghua 声画
@@ -14,6 +14,8 @@ Four ways in, one workflow:
 - **A green-screen video** (`presenter`): the keyed speaker stays on screen throughout, moving between layouts while graphics build beside them. Mode detail: `references/presenter.md`.
 - **A topic or script** (script mode): you write the script, Step 1b voices it with one offline voice per character, and original cartoon hosts act it out. Mode detail: `references/explainers.md`. Everything after Step 1b runs on the generated `<work>/voice.wav` as if it were a recording.
 
+Any of these can be **long form** (`length: long`): a YouTube video over about five minutes, recorded and built chapter by chapter, each chapter its own project, joined at the end by Step 10b. **Load `references/long-form.md` before Step 2**: the project layout, pacing, captions and assembly all change.
+
 `SKILL_DIR` = the directory containing this SKILL.md. **Always load `SKILL_DIR/references/scene-blocks.md` before writing the shot list** (block catalogue, pacing rules, safe zones, sound-cue vocabulary). Load each mode's reference at the step that needs it.
 
 ---
@@ -25,6 +27,7 @@ Four ways in, one workflow:
 | `audio`, `video` or `topic` | Yes | `~/Downloads/voice-note.m4a` · a to-camera `~/Movies/take-1.mp4` · `"explain Kafka consumer groups"` (script mode) |
 | `script` | No | the script, plain or with `[FACE]` / `[VOICE]` sections (each starts on its own line); the spelling reference for captions. In script mode, `Name: line` lines, and it *is* the input |
 | `cast` | No | script mode: who's in it and which voice, e.g. `teacher Mama Log, sidekick Pip (squeaky)` |
+| `length` | No | `short` (default) · `long`: a YouTube video in chapters, usually `landscape` (`references/long-form.md`) |
 | `format` | No | `vertical` 1080x1920 (default) · `landscape` 1920x1080 · `square` 1080x1080 · `portrait` 1080x1350 |
 | `style` | No | for a `video`: `bookends` (default: face shots open and close) · `presenter` (green screen) |
 | `position` | No | presenter mode: where the speaker stands — `auto` (default: you vary layouts under the pacing rules) · `bottom-right` · `bottom-left` · `left` · `right` · `full` |
@@ -131,7 +134,7 @@ Load `references/scene-blocks.md`. Write a shot table — one row per shot, cut 
 03  6.10-8.30     Back in the early 1990s            vhs + counter      tick, hit@7.20
 ```
 
-Rules: a new shot every 1–4 seconds; a hit only on a word that deserves it; captions hidden whenever the spoken word *is* the visual. Read the script once for a reaction beat — a fail, a dry aside, a payoff the viewer would react to out loud — and if one stands out, give it a *Reaction gif* row (`scene-blocks.md` says which lines qualify); none is fine, more than one is rarely right. Find photos and clips before the table is final (Step 5). See `SKILL_DIR/examples/kafka-vs-rabbitmq/` for a complete worked shot list.
+Rules (short form; long form holds evolving diagrams instead, `references/long-form.md` → *Pacing*): a new shot every 1–4 seconds; a hit only on a word that deserves it; captions hidden whenever the spoken word *is* the visual. Read the script once for a reaction beat — a fail, a dry aside, a payoff the viewer would react to out loud — and if one stands out, give it a *Reaction gif* row (`scene-blocks.md` says which lines qualify); none is fine, more than one is rarely right. Find photos and clips before the table is final (Step 5). See `SKILL_DIR/examples/kafka-vs-rabbitmq/` for a complete worked shot list.
 
 **Pick the template (theme) now.** Read `templates/templates.json` and choose the `id` whose mood matches the topic — each theme changes type, colour, captions *and* motion (default shot entry, shake, flash), so it is a real choice, not a palette swap. `kinetic` fast dark explainers (default) · `documentary` founder stories · `newsroom` announcements · `blueprint` architecture · `brutalist` hot takes · `aurora` AI/SaaS launches · `minimal` editorial deep dives · `retro` history of tech. If the user asked for a specific look, use that.
 
@@ -188,7 +191,7 @@ bash SKILL_DIR/scripts/extract_clip.sh "$work"/clips/src/facepalm.mp4 "$work" 90
 
 Clip audio ducks under the narration automatically, so it only really plays over a pause in the voice. For the speaker's line to land, place the clip over a gap in the recording (a scripted `[CLIP]` beat) or leave it silent and put the quote on screen with a *Portrait quote*. **B-roll is the same mechanism** — a `clip()` (or the alias `broll()`) under narration; the *B-roll under narration* block in `scene-blocks.md` has the full-bleed + lower-third pattern.
 
-Replace the demo shots between `BEGIN SHOTS` / `END SHOTS` (markup) and `BEGIN TIMELINE` / `END TIMELINE` (GSAP) with your shot list, using the helpers the template already defines. Keep the outer `#world` and `#cam` containers intact: `shot()`, `slam()`, `hit()`, `rise()`, `pop()`, `stagger()`, `drift()`, `kenBurns()`, `lowerThird()`, `ticker()`, `typer()`, `counter()`, `swap()`, `terminal()`, `faceCam()`, `clip()`, `broll()`, the `NOCAP` ranges, and the `CAP_STYLE` constant. Every helper that makes noise pushes its own sound cue.
+Replace the demo shots between `BEGIN SHOTS` / `END SHOTS` (markup) and `BEGIN TIMELINE` / `END TIMELINE` (GSAP) with your shot list, using the helpers the template already defines. Keep the outer `#world` and `#cam` containers intact: `shot()`, `slam()`, `hit()`, `rise()`, `pop()`, `stagger()`, `drift()`, `kenBurns()`, `lowerThird()`, `ticker()`, `typer()`, `counter()`, `swap()`, `terminal()`, `moveTo()`, `centerOf()`, `gantt()`, `faceCam()`, `clip()`, `broll()`, the `NOCAP` ranges, and the `CAP_STYLE` constant. Every helper that makes noise pushes its own sound cue.
 
 The display style (`.xl`) is uppercase and width-expanded; captions are condensed. Size headlines for the expanded width — a vertical frame fits ~6 characters at 250px.
 
@@ -278,6 +281,17 @@ bash SKILL_DIR/scripts/deliver.sh [--cover <seconds>] "$work" "$out"
 ```
 
 Assembles `<work>/delivery/`: the master mp4, a web copy (~8 Mbps, under half the master's size), the `captions.srt`/`.vtt`, a cover frame (default 1.0s in, where the title card sits), `credits.txt` from `credits.json`, and a `README.txt` listing the folder. Hand the folder — or the web copy — to whoever posts the video.
+
+## Step 10b — Assemble the chapters (long form)
+
+Once every chapter has its `<dir>/<dir>.mp4`:
+
+```bash
+python3 SKILL_DIR/scripts/assemble.py <output dir>/<slug>
+bash SKILL_DIR/scripts/deliver.sh --cover <seconds> <output dir>/<slug>/assembly <output dir>/<slug>/<slug>.mp4
+```
+
+Joins the chapters listed in `chapters.json` without re-encoding the video, normalises the joined audio once to −14 LUFS, and writes `assembly/captions.srt`/`.vtt` on the joined timeline, `assembly/chapters.txt` (YouTube timestamps) and `assembly/credits.json`. Details and its warnings: `references/long-form.md` → *Assemble*.
 
 ## Step 11 — Verify, then report
 

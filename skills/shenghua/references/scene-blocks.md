@@ -7,6 +7,9 @@ lines. Pick a block for each line of speech, then time it to the word.
 
 ## Pacing
 
+Short form (a Short, a reel, anything under ~3 minutes). Long form holds diagrams and cuts on ideas
+instead: `long-form.md` → *Pacing*.
+
 - **Cut every 1–4 seconds.** A shot held longer than ~5s needs internal motion (a push-in, a
   line drawing, a counter) or the viewer scrolls.
 - **Cut on the word, not the sentence.** The shot starts at the first word of its idea.
@@ -309,6 +312,45 @@ Tokens are positioned by `left`/`top` (the token's centre) so `send()` can read 
 Slots in a lane: `left + 80 + i * 120`, centred on `top + 75`. `--tag` colours the strip that marks a
 key; `--lane` colours the label. Start a token off-frame (`top:-80px`) to drop it in from above.
 
+### Slots and tiles
+Places in a row or grid (cores, carriers, pool slots) and the things that move between them (threads,
+tasks, requests). The rack lays the slots out; `centerOf()` reads a slot's centre from that layout, and
+`moveTo()` moves a tile there. Each move starts where the last move of that tile ended, so call the moves of
+one tile in time order.
+```html
+<div class="rack" id="s04r" style="left:160px;top:200px">
+  <div class="slot" id="c1"><small>core 1</small></div><div class="slot" id="c2"><small>core 2</small></div>
+</div>
+<div class="tile" id="t1" style="left:300px;top:560px">T1</div>
+<div class="tile alt" id="t2" style="left:460px;top:560px">T2</div>
+```
+```js
+const c1 = centerOf("#c1");
+moveTo("#t1", c1.x, c1.y, 12.4, .6, "pop");     // optional sound cue on the move
+tl.set("#c1", {attr:{class:"slot on"}}, 12.9);   // the core lights while it runs
+moveTo("#t1", 300, 560, 16.0);                   // switched out: back to the queue
+moveTo("#t2", c1.x, c1.y, 16.2);                 // the next thread takes the core
+```
+`.tile` is the main kind of thing (the brand colour), `.tile.alt` a second kind, `.tile.wait` a thing that
+is parked or waiting. `.slot.on` glows, `.slot.dead` dims. A tile is 120x76 and centred on its
+`left`/`top`, so slots fit one tile each.
+
+### Scheduling timeline
+Rows of blocks that fill in as the narration plays: which thread ran on which core, when a request waited,
+a trace. Block times are video seconds; the axis spans the shot window `s`..`e`, and each block grows from
+its `t` to its `e`.
+```html
+<div id="s05g" style="left:160px;top:420px;width:1600px"></div>
+```
+```js
+gantt("#s05g", [
+  {label:"core 1", blocks:[{t:30.2, e:33.0, text:"T1"}, {t:33.0, e:36.4, text:"T25", cls:"alt"}]},
+  {label:"core 2", blocks:[{t:30.6, e:34.1, text:"T2"}, {t:34.4, e:38.0, text:"T26"}]},
+], 30, 40);
+```
+`cls`: `alt`, `muted` (idle or switching), `bad` (blocked), `ok` (done). Stagger the switches across rows;
+lockstep blocks read as fake.
+
 ### Failure and recovery
 Break the thing the video is about, then show the concept fixing it: a host crashes (`mood(…,"panic")`,
 a red `.pill` "CRASHED", `hit()`), a lane dims (`tl.to("#s07l",{opacity:.3},t)`), then the fix lands
@@ -525,6 +567,7 @@ Two caption styles, set with `CAP_STYLE` in the template:
 |---|---|---|
 | `"phrase"` *(default)* | whole phrase dimmed, one pulse, the spoken word marked | calm explainers, long sentences |
 | `"pop"` | each word pops in on its own timestamp | fast Shorts, listicles, hype |
+| `"off"` | no burned-in captions; upload `captions.srt` instead | long form (`long-form.md` → *Captions*) |
 
 Both use the theme's mark for the spoken word. Words flagged in `keywords.json` stay in the accent
 colour after they are spoken.
@@ -581,6 +624,8 @@ y=1910   └── progress ───┘
 ```
 
 Full-bleed photos and backgrounds may fill the whole frame; readable elements may not.
+
+Landscape (1920x1080) safe zones are in `long-form.md`.
 
 ## Layout safe zones (square 1080x1080, portrait 1080x1350)
 

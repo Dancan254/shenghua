@@ -190,6 +190,12 @@ if (dangling.length) {
               top: my(minY), bottom: my(minY + 0.35 * (maxY - minY)),
             };
           })();
+          // Opacity multiplies down the tree: text inside a parent waiting at opacity 0 to animate in is not on screen yet
+          const shownOpacity = el => {
+            let opacity = 1;
+            for (let node = el; node && node !== document.body; node = node.parentElement) opacity *= parseFloat(getComputedStyle(node).opacity);
+            return opacity;
+          };
           const seenNames = new Map();
           for (const el of section.querySelectorAll('*')) {
             // Counted before any filter so an element keeps its index whether or not it offends at this sample
@@ -199,7 +205,7 @@ if (dangling.length) {
             const classes = el.getAttribute('class') || '';
             if (decorative.test(classes) || el.closest('.ticker')) continue;
             const style = getComputedStyle(el);
-            if (style.visibility === 'hidden' || style.display === 'none' || parseFloat(style.opacity) < 0.05) continue;
+            if (style.visibility === 'hidden' || style.display === 'none' || shownOpacity(el) < 0.05) continue;
             const rect = el.getBoundingClientRect();
             if (rect.width < 2 || rect.height < 2) continue;
             const isText = el.children.length === 0 && el.textContent.trim().length > 0;

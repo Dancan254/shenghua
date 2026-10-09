@@ -28,6 +28,10 @@ your machine.
 
 - **Word-level captions** with a highlight box that follows the word being spoken
 - **A new shot every 1–4 seconds**, cut on the word, not the sentence
+- **Long-form YouTube videos too**: record and build a 30-minute explainer chapter by chapter, each one
+  its own small project, then `assemble.py` joins them with one loudness pass, merged captions and
+  ready-to-paste YouTube chapter timestamps. Diagrams hold and evolve instead of cutting every few
+  seconds: slots, tiles that move between them, and scheduling timelines that fill in as you speak
 - **Kinetic typography**: slams, highlight boxes, strike-throughs, stacked slogans, counters
 - **Scene blocks**: terminals typing, stamps, VHS and CRT era looks, diagrams with flowing packets,
   charts, photo tape-ins, logo walls, montages

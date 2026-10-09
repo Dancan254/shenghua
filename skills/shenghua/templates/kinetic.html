@@ -234,6 +234,40 @@ function chapter(id, s, e, number, title){
   rise(`#${id} .no`, s + .1, .4); rise(`#${id} .tt`, s + .2, .5); grow(`#${id} .rule`, s + .5, .6);
 }
 
+// Diagram motion (long-form): positions are shot pixels of the element's centre, like send(). Each move starts where the
+// last one on that element ended, so every tween has explicit start values; call the moves for one element in time order
+const POS = new Map();
+function posOf(el){ if(!POS.has(el)) POS.set(el, {left:parseFloat(el.style.left)||0, top:parseFloat(el.style.top)||0}); return POS.get(el); }
+function moveTo(sel, x, y, t, d=.6, sound=null){
+  const el = q(sel);
+  tl.fromTo(el, {...posOf(el)}, {left:x, top:y, duration:d, ease:"power3.inOut", immediateRender:false}, t);
+  POS.set(el, {left:x, top:y});
+  if(sound) SFX.push({t, type:sound});
+}
+// The centre of an element in shot pixels, from the authored layout: where a tile lands in a .slot
+function centerOf(sel){
+  const el = q(sel);
+  let x = el.offsetWidth/2, y = el.offsetHeight/2;
+  for(let node = el; node && !node.classList.contains("shot"); node = node.offsetParent){ x += node.offsetLeft; y += node.offsetTop; }
+  return {x, y};
+}
+// A scheduling timeline: rows of blocks [{t, e, text, cls}] in video seconds, laid on an axis that spans s..e;
+// each block grows from its t to its e as the video plays, so the chart fills in under the narration
+const GANTTS = [];
+function gantt(sel, rows, s, e){
+  const el = q(sel);
+  el.classList.add("gantt");
+  el.innerHTML = rows.map(row=>`<div class="g-row"><div class="g-label">${row.label}</div><div class="g-track">${
+    row.blocks.map(b=>`<div class="g-block ${b.cls||""}"><span>${b.text||""}</span></div>`).join("")}</div></div>`).join("");
+  const blocks = [];
+  el.querySelectorAll(".g-row").forEach((rowEl, i)=>rowEl.querySelectorAll(".g-block").forEach((node, j)=>{
+    const b = rows[i].blocks[j];
+    node.style.left = ((b.t-s)/(e-s)*100).toFixed(3)+"%";
+    blocks.push({node, t:b.t, e:b.e});
+  }));
+  GANTTS.push({blocks, s, e});
+}
+
 // Lines with mixed colours: [{t, e, html}] rebuilt every frame so seeking stays deterministic
 const TERMINALS = [];
 function terminal(el, lines){ TERMINALS.push({el:q(el),lines}); lines.forEach(l=>{ if(l.e>l.t) SFX.push({t:l.t,type:"type",dur:l.e-l.t}); }); }
@@ -307,8 +341,9 @@ const SAID = [];
 function say(sel, who, n=0){ const l = line(who, n); bubble(sel, l.s-.1, l.e+.6); SAID.push([l.s-.1, l.e+.6]); return l; }
 // A token flies along an arc to (x, y) in shot pixels and lands with a pop
 function send(sel, x, y, s, d=.6, arc=140){
-  const el = q(sel), x0 = parseFloat(el.style.left), y0 = parseFloat(el.style.top);
-  tl.fromTo(sel,{left:x0,top:y0},{keyframes:[{left:(x0+x)/2,top:Math.min(y0,y)-arc,duration:d/2,ease:"sine.out"},{left:x,top:y,duration:d/2,ease:"sine.in"}]},s);
+  const el = q(sel), {left:x0, top:y0} = posOf(el);
+  tl.fromTo(sel,{left:x0,top:y0},{keyframes:[{left:(x0+x)/2,top:Math.min(y0,y)-arc,duration:d/2,ease:"sine.out"},{left:x,top:y,duration:d/2,ease:"sine.in"}],immediateRender:false},s);
+  POS.set(el, {left:x, top:y});
   SFX.push({t:s,type:"whoosh"}); SFX.push({t:s+d,type:"pop"});
 }
 const within = (list, el, t) => list.find(m=>m.el===el && t>=m.s && t<m.e);
@@ -371,13 +406,14 @@ const NOCAP = [[0,2.7],[4.1,5.6]];
 
 // "phrase": the whole phrase shows dimmed, one pulse, the theme marks the spoken word.
 // "pop": each word pops in on its own timestamp, the theme still marks the spoken word.
+// "off": no burned-in captions (long-form: upload captions.srt instead).
 const CAP_STYLE = "phrase";
 
 const capbox = q("#capbox"); let lastPhrase = -1;
 function renderCaptions(t){
   // words.js may still be the empty placeholder on a preview render, before transcription
   const PH = window.PHRASES || [];
-  const hidden = NOCAP.concat(SAID).some(([a,b])=>t>=a&&t<b);
+  const hidden = CAP_STYLE === "off" || NOCAP.concat(SAID).some(([a,b])=>t>=a&&t<b);
   const idx = PH.findIndex((p,i)=>{const n=PH[i+1];return t>=p[0].s-.05 && t<(n?Math.min(n[0].s-.05,p[p.length-1].e+.6):p[p.length-1].e+.6);});
   if(hidden || idx<0){ capbox.style.visibility="hidden"; return; }
   capbox.style.visibility="visible";
@@ -427,6 +463,10 @@ function renderText(t){
     const html = at.reduce((shown,x)=>t>=x.t?x.html:shown, original);
     if(el.innerHTML !== html) el.innerHTML = html;
   });
+  GANTTS.forEach(({blocks,s,e})=>blocks.forEach(({node,t:from,e:to})=>{
+    node.style.visibility = t>=from ? "visible" : "hidden";
+    node.style.width = t>=from ? ((Math.min(t,to)-from)/(e-s)*100).toFixed(3)+"%" : "0";
+  }));
   TERMINALS.forEach(({el,lines})=>{
     let html = "";
     lines.forEach(l=>{ if(t<l.t) return; const k = l.e>l.t?Math.min(1,(t-l.t)/(l.e-l.t)):1; html += k<1?typedHtml(l.html,k):l.html; });

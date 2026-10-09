@@ -309,6 +309,67 @@ jobs:
           })();
           JS
 
+      # Long-form diagrams: moves, a lit slot and a filling timeline must land the same however frames are seeked,
+      # captions "off" must hide the caption box, and check must skip text whose parent is still at opacity 0
+      - name: Long-form helpers seek deterministically
+        run: |
+          set -euo pipefail
+          S="$SKILL/scripts"; L="$RUNNER_TEMP/smoke/long"
+          python3 "$S/fill_template.py" "$L" 8 --format landscape --brand "$SKILL/examples/kits/northwind"
+          python3 - "$L/index.html" <<'PY'
+          import re, sys
+          path = sys.argv[1]
+          html = open(path).read()
+          shots = """<!-- BEGIN SHOTS -->
+          <section class="shot" id="d1">
+            <div class="rack" style="left:160px;top:180px"><div class="slot" id="c1"><small>core 1</small></div><div class="slot" id="c2"><small>core 2</small></div></div>
+            <div class="tile" id="v1" style="left:300px;top:520px">V1</div>
+            <div class="tile alt" id="v2" style="left:460px;top:520px">V2</div>
+            <div id="d1g" style="left:160px;top:640px;width:1600px"></div>
+            <div style="opacity:0"><div class="cx xl" style="top:300px;font-size:900px">HIDDEN</div></div>
+          </section>
+          <!-- END SHOTS -->"""
+          timeline = """// BEGIN TIMELINE
+          shot("d1", 0, 8);
+          const c2 = centerOf("#c2");
+          moveTo("#v1", c2.x, c2.y, 1, .6, "pop");
+          moveTo("#v1", 300, 520, 3, .6);
+          send("#v2", centerOf("#c1").x, centerOf("#c1").y, 2);
+          tl.set("#c2", {attr:{class:"slot on"}}, 1.6);
+          gantt("#d1g", [{label:"core 1", blocks:[{t:.5, e:3, text:"T1"}, {t:3, e:6, text:"T25", cls:"alt"}]}], 0, 8);
+          // END TIMELINE"""
+          html = re.sub(r"<!-- BEGIN SHOTS -->.*<!-- END SHOTS -->", lambda _: shots, html, flags=re.S)
+          html = re.sub(r"// BEGIN TIMELINE.*// END TIMELINE", lambda _: timeline, html, flags=re.S)
+          html = re.sub(r'const CAP_STYLE = "phrase";', 'const CAP_STYLE = "off";', html, count=1)
+          open(path, "w").write(html)
+          PY
+          node "$S/render.js" check "$L/index.html"
+          node - "$L/index.html" <<'JS'
+          const { chromium } = require(process.env.GITHUB_WORKSPACE + "/" + process.env.SKILL + "/scripts/node_modules/playwright-core");
+          (async () => {
+            const browser = await chromium.launch();
+            const page = await browser.newPage();
+            await page.goto("file://" + process.argv[2]);
+            await page.waitForFunction(() => window.renderAt);
+            const at = t => page.evaluate(t => {
+              window.renderAt(t);
+              const pos = id => { const s = document.getElementById(id).style; return Math.round(parseFloat(s.left)) + "," + Math.round(parseFloat(s.top)); };
+              const blocks = [...document.querySelectorAll(".g-block")].map(b => b.style.visibility === "visible" ? Math.round(parseFloat(b.style.width)) : "-").join("/");
+              return [pos("v1"), pos("v2"), document.getElementById("c2").className, blocks, document.getElementById("capbox").style.visibility].join(" ");
+            }, t);
+            const seen = {};
+            for (const t of [7, 4, 2, 0.2, 7, 0.2, 4, 2]) {
+              const state = await at(t);
+              if (seen[t] && seen[t] !== state) { console.error(`::error::t=${t} rendered "${state}" after "${seen[t]}"`); process.exit(1); }
+              seen[t] = state;
+            }
+            await browser.close();
+            const want = { 0.2: "300,520 460,520 slot -/- hidden", 4: "300,520 235,235 slot on 31/13 hidden" };
+            for (const [t, state] of Object.entries(want)) if (seen[t] !== state) { console.error(`::error::t=${t} rendered "${seen[t]}", want "${state}"`); process.exit(1); }
+            console.log("moveTo, send, a lit slot and gantt land the same in any seek order; captions off");
+          })();
+          JS
+
       # A check that never fails is no check: a headline blown past the frame edge must exit 1
       - name: Prove check catches a clipped headline
         run: |
@@ -421,6 +482,42 @@ jobs:
           [[ "$before" == "$after" ]] || { echo "::error::chunk-000 was re-encoded; resume must skip complete chunks"; exit 1; }
           actual=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$W/chunked.mp4")
           python3 -c "import sys; a=$actual; sys.exit(0 if abs(a - $DURATION) < 0.05 else '::error::chunked duration differs')"
+
+      # Long form joins finished chapters: video copied, audio normalised once, captions and chapters on the joined timeline
+      - name: Assemble chapters
+        run: |
+          set -euo pipefail
+          S="$SKILL/scripts"; W="$RUNNER_TEMP/smoke/work"; P="$RUNNER_TEMP/smoke/assembled"
+          for name in 01-one 02-two 03-three; do
+            mkdir -p "$P/$name/work"
+            cp "$W/chunked.mp4" "$P/$name/$name.mp4"
+            cp "$W/captions.srt" "$P/$name/work/captions.srt"
+          done
+          printf '{"slug":"joined","chapters":[{"dir":"01-one","title":"One"},{"dir":"02-two","title":"Two"},{"dir":"03-three","title":"Three"}]}' > "$P/chapters.json"
+          python3 "$S/assemble.py" "$P"
+          bash "$S/deliver.sh" "$P/assembly" "$P/joined.mp4"
+          actual=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$P/joined.mp4")
+          ffmpeg -hide_banner -nostats -i "$P/joined.mp4" -af ebur128=framelog=quiet -f null - 2> "$P/ebur128.txt"
+          lufs=$(awk '/^ *I:/ {v=$2} END {print v}' "$P/ebur128.txt")
+          python3 - "$actual" "$DURATION" "$lufs" "$W/captions.srt" "$P/assembly" <<'PY'
+          import sys
+          from pathlib import Path
+          actual, one, lufs = float(sys.argv[1]), float(sys.argv[2]), float(sys.argv[3])
+          cues = Path(sys.argv[4]).read_text().count(" --> ")
+          assembly = Path(sys.argv[5])
+          errors = []
+          if abs(actual - 3 * one) > 0.15:
+              errors.append(f"joined duration {actual}s is not 3 x {one}s")
+          if abs(lufs + 14) > 1.5:
+              errors.append(f"joined loudness {lufs} LUFS is not -14 ±1.5")
+          if (assembly / "captions.srt").read_text().count(" --> ") != 3 * cues:
+              errors.append("merged captions.srt does not hold every chapter's cues")
+          if not (assembly / "chapters.txt").read_text().startswith("0:00 One\n"):
+              errors.append("chapters.txt does not start at 0:00")
+          if not (assembly / "delivery" / "joined.srt").is_file():
+              errors.append("deliver.sh did not pick up the merged captions")
+          sys.exit("::error::" + "; ".join(errors) if errors else 0)
+          PY
 
       # A synthetic green screen with a moving subject exercises trim, keying and every presenter layout
       - name: Presenter mode
