@@ -131,7 +131,7 @@ Load `references/scene-blocks.md`. Write a shot table — one row per shot, cut 
 03  6.10-8.30     Back in the early 1990s            vhs + counter      tick, hit@7.20
 ```
 
-Rules: a new shot every 1–4 seconds; a hit only on a word that deserves it; captions hidden whenever the spoken word *is* the visual. Find photos and clips before the table is final (Step 5). See `SKILL_DIR/examples/kafka-vs-rabbitmq/` for a complete worked shot list.
+Rules: a new shot every 1–4 seconds; a hit only on a word that deserves it; captions hidden whenever the spoken word *is* the visual. Read the script once for a reaction beat — a fail, a dry aside, a payoff the viewer would react to out loud — and if one stands out, give it a *Reaction gif* row (`scene-blocks.md` says which lines qualify); none is fine, more than one is rarely right. Find photos and clips before the table is final (Step 5). See `SKILL_DIR/examples/kafka-vs-rabbitmq/` for a complete worked shot list.
 
 **Pick the template (theme) now.** Read `templates/templates.json` and choose the `id` whose mood matches the topic — each theme changes type, colour, captions *and* motion (default shot entry, shake, flash), so it is a real choice, not a palette swap. `kinetic` fast dark explainers (default) · `documentary` founder stories · `newsroom` announcements · `blueprint` architecture · `brutalist` hot takes · `aurora` AI/SaaS launches · `minimal` editorial deep dives · `retro` history of tech. If the user asked for a specific look, use that.
 
@@ -188,7 +188,7 @@ bash SKILL_DIR/scripts/extract_clip.sh "$work"/clips/src/facepalm.mp4 "$work" 90
 
 Clip audio ducks under the narration automatically, so it only really plays over a pause in the voice. For the speaker's line to land, place the clip over a gap in the recording (a scripted `[CLIP]` beat) or leave it silent and put the quote on screen with a *Portrait quote*. **B-roll is the same mechanism** — a `clip()` (or the alias `broll()`) under narration; the *B-roll under narration* block in `scene-blocks.md` has the full-bleed + lower-third pattern.
 
-Replace the demo shots between `BEGIN SHOTS` / `END SHOTS` (markup) and `BEGIN TIMELINE` / `END TIMELINE` (GSAP) with your shot list, using the helpers the template already defines. Keep the outer `#world` and `#cam` containers intact: `shot()`, `slam()`, `hit()`, `rise()`, `pop()`, `stagger()`, `drift()`, `kenBurns()`, `lowerThird()`, `ticker()`, `typer()`, `counter()`, `terminal()`, `faceCam()`, `clip()`, `broll()`, the `NOCAP` ranges, and the `CAP_STYLE` constant. Every helper that makes noise pushes its own sound cue.
+Replace the demo shots between `BEGIN SHOTS` / `END SHOTS` (markup) and `BEGIN TIMELINE` / `END TIMELINE` (GSAP) with your shot list, using the helpers the template already defines. Keep the outer `#world` and `#cam` containers intact: `shot()`, `slam()`, `hit()`, `rise()`, `pop()`, `stagger()`, `drift()`, `kenBurns()`, `lowerThird()`, `ticker()`, `typer()`, `counter()`, `swap()`, `terminal()`, `faceCam()`, `clip()`, `broll()`, the `NOCAP` ranges, and the `CAP_STYLE` constant. Every helper that makes noise pushes its own sound cue.
 
 The display style (`.xl`) is uppercase and width-expanded; captions are condensed. Size headlines for the expanded width — a vertical frame fits ~6 characters at 250px.
 
@@ -229,7 +229,7 @@ node SKILL_DIR/scripts/render.js cues "$work"/index.html "$work"/cues.json
 python3 SKILL_DIR/scripts/synth_audio.py "$work"/cues.json <duration> "$work" --template <template-id> --drop <time-of-final-slam>
 ```
 
-Writes `sfx.wav` and `music.wav`. Pass the same `<template-id>` as Step 6: the music follows the theme's tempo, key and layers, and varies per video (the slug folder). Omit `--drop` if the video has no final slam; otherwise use the time of the last big hit. Optional pacing flags: `--drums-from <t>` brings the drums in at `<t>`; `--quiet <a>:<b>` ducks the music between `a` and `b` (repeatable). With `music` set to a file, pass `--no-music` and give that file to Step 10; with `none`, pass `--no-music` and nothing else.
+Writes `sfx.wav` and `music.wav`. Pass the same `<template-id>` as Step 6: the music follows the theme's tempo, key and layers, and varies per video (the slug folder). Omit `--drop` if the video has no final slam; otherwise use the time of the last big hit. Optional pacing flags: `--drums-from <t>` brings the drums in at `<t>`; `--quiet <a>:<b>` ducks the music between `a` and `b` (repeatable). Story moments make the music act out a line: `--stop <a>:<b>` (tape stop, silence, back at `b`), `--muffle <a>:<b>` (behind a wall, opening into `b`), `--stutter <a>:<b>` (a stuck one-beat loop until `b`); when to use each is in `scene-blocks.md` → *Sound cues*. With `music` set to a file, pass `--no-music` and give that file to Step 10; with `none`, pass `--no-music` and nothing else.
 
 The kit's `audio` block (`references/brand-kits.md` → *Sound*) applies here without flags: a sound pack or the kit's own files replace synth cues, any cue can be quieter, louder or muted, the kit can bring its own music track, and its mix levels go into `mix.json` for Step 9 or 10. When the user asks for a different whoosh, quieter hits or their own music, change the kit, not the scripts; for one video only, pass the track to Step 10 instead.
 

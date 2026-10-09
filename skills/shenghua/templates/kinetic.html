@@ -108,6 +108,14 @@ const TYPERS = [], COUNTERS = [];
 function typer(el, text, s, e){ TYPERS.push({el:q(el),text,s,e}); SFX.push({t:s,type:"type",dur:e-s}); }
 // sep=true prints 200,000 instead of 200000; leave it off for years
 function counter(el, from, to, s, e, sep=false){ COUNTERS.push({el:q(el),from,to,s,e,sep}); SFX.push({t:s,type:"tick",dur:e-s}); }
+// Content that changes at a moment (5 → 6, RUNNING → HUNG); before the first swap the element shows its authored HTML
+const SWAPS = [];
+function swap(el, t, html){
+  const target = q(el);
+  let entry = SWAPS.find(x=>x.el===target);
+  if(!entry){ entry = {el:target, original:target.innerHTML, at:[]}; SWAPS.push(entry); }
+  entry.at.push({t, html}); entry.at.sort((a,b)=>a.t-b.t);
+}
 
 // Camera and clip frames come from extract_face.sh / extract_clip.sh, numbered by edit frame, so seeking stays frame-exact
 const MEDIA = [];
@@ -393,6 +401,18 @@ function renderCaptions(t){
   [...capbox.children].forEach((el,i)=>{ el.className = state(PH[idx][i]); });
 }
 
+// Types a fraction of a line's visible characters; tags and entities stay whole, so a coloured line never breaks mid-tag
+function typedHtml(html, k){
+  const parts = html.match(/<[^>]*>|&[#\w]+;|[^<&]/g) || [];
+  let left = Math.floor(parts.filter(p=>p[0]!=="<").length*k), out = "";
+  for(const part of parts){
+    if(part[0]==="<"){ out += part; continue; }
+    if(left-- <= 0) continue;
+    out += part;
+  }
+  return out;
+}
+
 function renderText(t){
   TYPERS.forEach(({el,text,s,e})=>{
     const n = t<s?0:t>=e?text.length:Math.floor((t-s)/(e-s)*text.length);
@@ -403,9 +423,13 @@ function renderText(t){
     const n = Math.round(from+(to-from)*(1-Math.pow(1-k,3)));
     el.textContent = sep ? n.toLocaleString("en-US") : n;
   });
+  SWAPS.forEach(({el,original,at})=>{
+    const html = at.reduce((shown,x)=>t>=x.t?x.html:shown, original);
+    if(el.innerHTML !== html) el.innerHTML = html;
+  });
   TERMINALS.forEach(({el,lines})=>{
     let html = "";
-    lines.forEach(l=>{ if(t<l.t) return; const k = l.e>l.t?Math.min(1,(t-l.t)/(l.e-l.t)):1; html += k<1?l.html.slice(0,Math.floor(l.html.length*k)):l.html; });
+    lines.forEach(l=>{ if(t<l.t) return; const k = l.e>l.t?Math.min(1,(t-l.t)/(l.e-l.t)):1; html += k<1?typedHtml(l.html,k):l.html; });
     el.innerHTML = html + "<span class='caret'></span>";
     // The caret blinks as a pure function of t; a CSS animation would run on the wall clock (invariant 1)
     el.querySelector(".caret").style.visibility = Math.floor(t*2)%2 ? "hidden" : "inherit";

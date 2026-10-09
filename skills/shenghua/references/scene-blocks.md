@@ -83,8 +83,23 @@ counter("#s18n", 0, 200000, 50.6, 51.3, true);   // true adds thousands separato
 
 ### Typewriter / terminal
 Code, commands, errors. The template's `.term` gives the window chrome; `typer()` types plain
-text and pushes typing SFX. For mixed colours (red error lines), keep a line array and rebuild
-`innerHTML` in the `renderText` loop — see `terminal()` in the template.
+text and pushes typing SFX. For mixed colours (red error lines), use `terminal()`: each line is
+HTML, and it types visible characters only, so tags and entities never break mid-way.
+```js
+terminal("#s05t", [
+  {t: 12.0, e: 13.2, html: `<span class="k">synchronized</span> (lock) {`},
+  {t: 13.6, e: 13.6, html: `<span style="color:var(--brand-error)">pinned: carrier blocked</span>`},
+]);
+```
+
+### Swap
+A value or word that changes on a beat: a count going 5 → 6, `RUNNING` → `HUNG`, a status
+flipping. Before the first swap the element shows its authored HTML; every swap holds until the
+next. Deterministic (any frame renders alone), unlike setting `textContent` from a GSAP callback.
+```js
+swap("#s07n", 24.8, "6"); hit(24.8, .5);
+swap("#s07st", 31.2, `<span style="color:var(--brand-error)">HUNG</span>`);
+```
 
 ### Photo tape-in
 A person or artefact. Tilted polaroid with a tape strip, slow push-in (`drift` on the `<img>`
@@ -124,8 +139,19 @@ clip("#s04img", "torvalds", 8.9, 12.6);   // same name, in and out as extract_cl
 
 ### Reaction gif
 A punchline beat: the facepalm, the "this is fine" dog. A `.pip` box, never full-bleed, looping for
-1.5–2.5s. Fetch it with `find_media.py … --kind gif` and cut it with `extract_clip.sh … --loop`. One
-or two per video; the box size matches the size passed to `extract_clip.sh`.
+1.5–2.5s. Fetch it with `find_media.py … --kind gif` and cut it with `extract_clip.sh … --loop`; the
+box size matches the size passed to `extract_clip.sh`.
+
+Only where it earns its place: zero is a fine answer, one is the norm, two only in a long video.
+A line qualifies when the viewer would react to it out loud:
+- a fail or a reveal of pain: "and then production just hangs", "it worked on my laptop"
+- an understatement or a dry aside: "so that went well"
+- the payoff after a long setup: "and that one keyword fixes it"
+
+Never on the point itself (the fix, the definition, the number): the gif would steal the line the
+viewer needs to remember. Query the reaction, not the topic: "this is fine", "facepalm", "mind blown",
+"waiting skeleton", not "deadlock". GIPHY results carry no licence and often come from film or TV,
+which YouTube's Content ID can claim; name each one in the report.
 ```html
 <div class="pip" id="s09pip" style="left:140px;top:520px;width:800px;height:560px;transform:rotate(-3deg)"><img id="s09img" alt=""></div>
 <div class="credit" style="left:140px;top:1100px">GIPHY / @creator</div>
@@ -468,6 +494,20 @@ Hide captions under the card with `NOCAP` when the heading is the spoken line.
 
 ---
 
+## Animating one element twice
+
+Every helper is a `fromTo`, and GSAP renders a `fromTo`'s start values the moment the timeline is
+built. That is what hides an entrance before its time, but a *second* tween on the same element
+(in, out, back in) applies its start values at build time too, so the element shows up early as a
+ghost. Give every later tween on an element `immediateRender:false`, and set its hidden state at
+the shot start with `tl.set`:
+```js
+rise("#s08tag", 30.1);
+tl.to("#s08tag", {opacity:0, duration:.2}, 31.0);
+tl.set("#s08tag", {opacity:0}, 32.0);
+tl.fromTo("#s08tag", {y:70, opacity:0}, {y:0, opacity:1, duration:.45, ease:EX, immediateRender:false}, 32.4);
+```
+
 ## Captions
 
 Captions are burned in automatically from `words.js`. Hide them whenever the spoken word *is* the
@@ -513,6 +553,17 @@ Each cue's sound, level or mute, and the music itself, can come from the kit's `
 automatically at mix time (`mix-audio.sh`). Use `--drop <t>`
 in `synth_audio.py` to cut the music just before the final slam — silence before the punchline is
 the strongest hit.
+
+Let the music act out the script, not just sit under it. `synth_audio.py` takes three moments,
+each an `A:B` range in seconds and repeatable, on the synth bed or a kit's own track:
+
+| Flag | What the listener hears | Use it on |
+|---|---|---|
+| `--stop A:B` | the music winds down like a stopped tape at A, silence, back at B | "it hangs", "everything froze", a crash |
+| `--muffle A:B` | the music behind a wall, sweeping open into B | something hidden or stale, opening on the reveal word |
+| `--stutter A:B` | one beat from A repeats until B, like a stuck record | a loop, a retry storm, something stuck, released on the fix |
+
+One or two per video: a moment lands because the rest of the bed is steady.
 
 ---
 

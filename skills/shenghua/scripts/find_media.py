@@ -40,7 +40,7 @@ from key_greenscreen import face_in_image, load_detector, record_face
 USER_AGENT = "shenghua/1.0 (https://github.com/Dancan254/shenghua)"
 BROWSER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36"
 SOURCES = {"image": ["commons", "openverse", "web", "pexels"], "video": ["commons", "youtube", "archive", "pexels"],
-           "gif": ["commons", "giphy"]}
+           "gif": ["giphy", "commons"]}   # GIPHY first: Commons gifs are diagrams and animations, rarely reactions
 API_KEYS = {"pexels": ("PEXELS_API_KEY", "https://www.pexels.com/api/"),
             "giphy": ("GIPHY_API_KEY", "https://developers.giphy.com/dashboard/")}
 LICENSED_SOURCES = {"commons", "openverse", "archive", "pexels"}
@@ -317,6 +317,7 @@ def search(args):
           (" --section <from>-<to>" if args.kind == "video" else ""))
     if args.kind == "gif":
         print("      a gif is converted to mp4 in clips/src/; cut it with extract_clip.sh --loop")
+        print("      reactions come from GIPHY (⚠ rights reserved: one beat per video, two only in a long one; film and TV clips can draw a Content ID claim)")
     return 0
 
 

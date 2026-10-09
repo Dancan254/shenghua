@@ -266,6 +266,49 @@ jobs:
       - name: Check the default composition
         run: node "$SKILL/scripts/render.js" check "$RUNNER_TEMP/smoke/work/index.html"
 
+      # A coloured terminal line typed mid-tag used to break the caret and crash the render; swap() must hold its text per frame
+      - name: Terminal HTML lines and swap() render
+        run: |
+          set -euo pipefail
+          S="$SKILL/scripts"; T="$RUNNER_TEMP/smoke/text"
+          python3 "$S/fill_template.py" "$T" 6 --brand "$SKILL/examples/kits/northwind"
+          python3 - "$T/index.html" <<'PY'
+          import re, sys
+          path = sys.argv[1]
+          html = open(path).read()
+          shots = """<!-- BEGIN SHOTS -->
+          <section class="shot" id="t1">
+            <div class="term" id="t1t" style="left:90px;top:300px;width:900px;height:400px"></div>
+            <div class="cx xl" id="t1n" style="top:900px;font-size:220px">5</div>
+          </section>
+          <!-- END SHOTS -->"""
+          timeline = """// BEGIN TIMELINE
+          shot("t1", 0, 6);
+          terminal("#t1t", [{t: .5, e: 2.5, html: `<span class="k">synchronized</span> (lock) { &lt;T&gt; }`}]);
+          swap("#t1n", 2.0, "6"); swap("#t1n", 4.0, "HUNG");
+          // END TIMELINE"""
+          html = re.sub(r"<!-- BEGIN SHOTS -->.*<!-- END SHOTS -->", lambda _: shots, html, flags=re.S)
+          html = re.sub(r"// BEGIN TIMELINE.*// END TIMELINE", lambda _: timeline, html, flags=re.S)
+          html = re.sub(r"const NOCAP = \[.*?\];", "const NOCAP = [[0,6]];", html, count=1)
+          open(path, "w").write(html)
+          PY
+          node "$S/render.js" stills "$T/index.html" "$T/stills" 0.55,0.6,0.62,0.66,1.0,3.0,4.5
+          node "$S/render.js" check "$T/index.html"
+          node - "$T/index.html" <<'JS'
+          const { chromium } = require(process.env.GITHUB_WORKSPACE + "/" + process.env.SKILL + "/scripts/node_modules/playwright-core");
+          (async () => {
+            const browser = await chromium.launch();
+            const page = await browser.newPage();
+            await page.goto("file://" + process.argv[2]);
+            await page.waitForFunction(() => window.renderAt);
+            const at = t => page.evaluate(t => { window.renderAt(t); return document.getElementById("t1n").textContent; }, t);
+            const seen = [await at(1), await at(3), await at(5), await at(1)];
+            await browser.close();
+            if (seen.join() !== "5,6,HUNG,5") { console.error(`::error::swap() showed ${seen.join()}, want 5,6,HUNG,5`); process.exit(1); }
+            console.log("swap() holds 5, 6, HUNG and seeks back to 5");
+          })();
+          JS
+
       # A check that never fails is no check: a headline blown past the frame edge must exit 1
       - name: Prove check catches a clipped headline
         run: |
@@ -330,7 +373,13 @@ jobs:
         run: |
           set -euo pipefail
           S="$SKILL/scripts"; W="$RUNNER_TEMP/smoke/work"
-          python3 "$S/synth_audio.py" "$W/cues.json" "$DURATION" "$W"
+          python3 "$S/synth_audio.py" "$W/cues.json" "$DURATION" "$W" --stutter 1:2 --muffle 3:4.5 --stop 5:6
+          # Northwind's audio block sets music to 0.18; mix.json is how that reaches mix-audio.sh
+          python3 - "$W/mix.json" <<'PY'
+          import json, sys
+          mix = json.load(open(sys.argv[1]))
+          sys.exit(0 if mix["music"] == 0.18 and mix["music_file"] == "music.wav" else f"::error::mix.json ignores the kit audio block: {mix}")
+          PY
           bash "$S/render-frames.sh" "$W/index.html" "$W/frames" "$DURATION" 2
           bash "$S/mix-encode.sh" "$W" "$RUNNER_TEMP/smoke/clip.wav" "$DURATION" "$W/out.mp4"
 
@@ -568,7 +617,13 @@ jobs:
         run: |
           set -euo pipefail
           S="$SKILL/scripts"; W="$RUNNER_TEMP/smoke/work"
-          python3 "$S/synth_audio.py" "$W/cues.json" "$DURATION" "$W"
+          python3 "$S/synth_audio.py" "$W/cues.json" "$DURATION" "$W" --stutter 1:2 --muffle 3:4.5 --stop 5:6
+          # Northwind's audio block sets music to 0.18; mix.json is how that reaches mix-audio.sh
+          python3 - "$W/mix.json" <<'PY'
+          import json, sys
+          mix = json.load(open(sys.argv[1]))
+          sys.exit(0 if mix["music"] == 0.18 and mix["music_file"] == "music.wav" else f"::error::mix.json ignores the kit audio block: {mix}")
+          PY
           bash "$S/render-frames.sh" "$W/index.html" "$W/frames" "$DURATION" 2
           bash "$S/mix-encode.sh" "$W" "$RUNNER_TEMP/smoke/clip.wav" "$DURATION" "$W/out.mp4"
 

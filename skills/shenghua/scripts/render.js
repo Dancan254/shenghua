@@ -138,9 +138,9 @@ if (dangling.length) {
     for (const shotWindow of shots) {
       const samples = [0.25, 0.5, 0.85].map(p => Number((shotWindow.s + p * (shotWindow.e - shotWindow.s)).toFixed(2)));
       const measured = [];
-      for (const sampleTime of samples) {
-        await page.evaluate(x => window.renderAt(x), sampleTime);
-        const found = await page.evaluate(({ id, W, H }) => {
+      const measureAt = async time => {
+        await page.evaluate(x => window.renderAt(x), time);
+        return page.evaluate(({ id, W, H }) => {
           const section = document.getElementById(id);
           if (!section) return { missing: true, overflow: [], collide: [], visible: 0 };
           const decorative = /gridbg|glow|scan|track|pkt|bars|strike|vhs|ticker/;
@@ -230,6 +230,17 @@ if (dangling.length) {
           }
           return out;
         }, { id: shotWindow.id, W: size.width, H: size.height });
+      };
+      for (const sampleTime of samples) {
+        const found = await measureAt(sampleTime);
+        // An entrance in flight (slam starts at 2.4x) is past the edge for a few frames by design; only what is still out once it lands counts
+        const settleTime = Math.min(sampleTime + 0.3, shotWindow.e - 0.02);
+        if (found.overflow.length && settleTime > sampleTime) {
+          const settled = await measureAt(settleTime);
+          const identity = ({ item, nth }) => `${item.split(' at ')[0]}#${nth}`;
+          const still = new Set(settled.overflow.map(identity));
+          found.overflow = found.overflow.filter(entry => still.has(identity(entry)));
+        }
         measured.push(found);
       }
       // One line per element, keyed by name and occurrence so a moving element merges but same-class siblings stay apart; the first box seen is shown
@@ -272,7 +283,8 @@ if (dangling.length) {
         for (const ch of String(s)) if (ch.trim() && ch.codePointAt(0) >= 32) set.add(ch);
       };
       const firstFamily = el => (getComputedStyle(el).fontFamily.split(',')[0] || '').trim().replace(/^["']+|["']+$/g, '');
-      document.querySelectorAll('body *').forEach(el => {
+      // Script and style text never renders; a non-ASCII character in a timeline comment is not a missing glyph
+      document.querySelectorAll('body *:not(script):not(style):not(noscript):not(template)').forEach(el => {
         if (!el.children.length && el.textContent.trim()) add(firstFamily(el), el.textContent);
       });
       const capbox = document.getElementById('capbox');
