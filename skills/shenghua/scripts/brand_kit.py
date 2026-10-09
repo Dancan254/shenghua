@@ -243,7 +243,7 @@ def validate_audio(audio, root):
     if "pack" in audio and audio["pack"] not in sound_packs():
         raise KitError(f"audio.pack {audio['pack']!r} is unknown", f"use one of {', '.join(sound_packs())}, or remove it")
     music = audio.get("music", "synth")
-    if music not in ("synth", "none"):
+    if music not in ("synth", "none") and not library_track(music):
         audio_file(str(music), "audio.music")
     for name, level in audio.get("levels", {}).items():
         if name not in MIX_LEVELS:
@@ -268,14 +268,46 @@ def sound_packs():
     return json.loads(SOUNDS_JSON.read_text(encoding="utf-8"))["packs"]
 
 
+def music_library():
+    return json.loads(SOUNDS_JSON.read_text(encoding="utf-8")).get("music", {})
+
+
+def library_track(name):
+    """(album, track) when audio.music names a track in the CC0 music library as album/track, else None."""
+    album, _, track = str(name).partition("/")
+    library = music_library()
+    return (album, track) if album in library and track in library[album]["tracks"] else None
+
+
 def audio_files(kit):
     """Every audio file brand.json names, relative to the kit root."""
     audio = kit.get("audio", {})
-    files = [audio["music"]] if audio.get("music", "synth") not in ("synth", "none") else []
+    music = audio.get("music", "synth")
+    files = [music] if music not in ("synth", "none") and not library_track(music) else []
     for setting in audio.get("sfx", {}).values():
         named = setting.get("file", [])
         files += [named] if isinstance(named, str) else named
     return files
+
+
+def fetch_archive(label, source, files, folder, field):
+    """Download one archive listed in sounds.json, check its sha256, keep only the named files in folder."""
+    if all((folder / file).is_file() for file in files):
+        return
+    folder.mkdir(parents=True, exist_ok=True)
+    zip_path = folder.parent / f"{folder.name}.zip.part"
+    download(source["url"], zip_path)
+    if hashlib.sha256(zip_path.read_bytes()).hexdigest() != source["sha256"]:
+        zip_path.unlink()
+        raise KitError(f"{label}: {source['url']} does not match its sha256",
+                       f"the download changed upstream; update templates/sounds.json or remove {field}")
+    with zipfile.ZipFile(zip_path) as bundle:
+        members = {Path(member).name: member for member in bundle.namelist()}
+        for file in files:
+            if file not in members:
+                raise KitError(f"{label}: {file} is not in {source['url']}", "fix the file list in templates/sounds.json")
+            (folder / file).write_bytes(bundle.read(members[file]))
+    zip_path.unlink()
 
 
 def fetch_pack(name, assets):
@@ -288,24 +320,16 @@ def fetch_pack(name, assets):
             archive, _, file = entry.partition("/")
             wanted.setdefault(archive, set()).add(file)
     for archive, files in wanted.items():
-        if all((folder / archive / file).is_file() for file in files):
-            continue
-        source = pack["archives"][archive]
-        (folder / archive).mkdir(parents=True, exist_ok=True)
-        zip_path = folder / f"{archive}.zip.part"
-        download(source["url"], zip_path)
-        if hashlib.sha256(zip_path.read_bytes()).hexdigest() != source["sha256"]:
-            zip_path.unlink()
-            raise KitError(f"sound pack {name}: {source['url']} does not match its sha256",
-                           "the download changed upstream; update templates/sounds.json or remove audio.pack")
-        with zipfile.ZipFile(zip_path) as bundle:
-            members = {Path(member).name: member for member in bundle.namelist()}
-            for file in files:
-                if file not in members:
-                    raise KitError(f"sound pack {name}: {file} is not in {source['url']}", "fix the cue list in templates/sounds.json")
-                (folder / archive / file).write_bytes(bundle.read(members[file]))
-        zip_path.unlink()
+        fetch_archive(f"sound pack {name}", pack["archives"][archive], files, folder / archive, "audio.pack")
     return folder
+
+
+def fetch_music(album, track, assets):
+    """Download a library album once and keep its listed tracks; return the chosen track's file."""
+    entry = music_library()[album]
+    folder = assets / "music" / album
+    fetch_archive(f"music {album}", entry["archive"], set(entry["tracks"].values()), folder, "audio.music")
+    return folder / entry["tracks"][track]
 
 
 def install_audio(kit, root, assets, target):
@@ -322,7 +346,13 @@ def install_audio(kit, root, assets, target):
         return f"kit/sounds/{name}"
 
     music = audio.get("music", "synth")
-    manifest["music"] = music if music in ("synth", "none") else copy(root / music, "music" + Path(music).suffix.lower())
+    if music in ("synth", "none"):
+        manifest["music"] = music
+    elif library_track(music):
+        source = fetch_music(*library_track(music), assets)
+        manifest["music"] = copy(source, "music" + source.suffix.lower())
+    else:
+        manifest["music"] = copy(root / music, "music" + Path(music).suffix.lower())
     if "pack" in audio:
         folder = fetch_pack(audio["pack"], assets)
         for cue, files in sound_packs()[audio["pack"]]["cues"].items():
@@ -492,18 +522,30 @@ def digest(kit, root):
     files += audio_files(kit)
     if "pack" in kit.get("audio", {}):
         sha.update(json.dumps(sound_packs()[kit["audio"]["pack"]], sort_keys=True).encode())
+    if library_track(kit.get("audio", {}).get("music", "synth")):
+        sha.update(json.dumps(music_library()[library_track(kit["audio"]["music"])[0]], sort_keys=True).encode())
     for name in sorted(files):
         sha.update((root / name).read_bytes())
     return sha.hexdigest()
 
 
-def download(url, destination):
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    try:
-        with urllib.request.urlopen(request, timeout=20) as response:
-            destination.write_bytes(response.read())
-    except OSError as error:
-        raise KitError(f"could not download {url} ({error})", "check the connection and re-run setup.sh")
+def download(url, destination, attempts=5):
+    destination.write_bytes(b"")
+    error = None
+    for _ in range(attempts):
+        # A dropped connection resumes from the bytes already saved; music albums run to 80 MB
+        have = destination.stat().st_size
+        headers = {"User-Agent": USER_AGENT, **({"Range": f"bytes={have}-"} if have else {})}
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=20) as response:
+                if have and response.status != 206:
+                    destination.write_bytes(b"")
+                with destination.open("ab") as out:
+                    shutil.copyfileobj(response, out, 1 << 20)
+            return
+        except OSError as caught:
+            error = caught
+    raise KitError(f"could not download {url} ({error})", "check the connection and re-run setup.sh")
 
 
 # --- glyph coverage: does the kit's fonts contain every character a text uses? -----------------

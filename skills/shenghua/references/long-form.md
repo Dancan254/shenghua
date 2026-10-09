@@ -46,6 +46,9 @@ Run the normal workflow on each chapter, with its own `work` dir and its take as
 Step 2a trim, Step 2 transcribe, Step 3 proofread, Step 4 shot list, Steps 6 to 8, then Step 9 with
 `render-chunks.sh` writing `<dir>/<dir>.mp4`. Skip Step 10a per chapter; delivery happens once, after assembly.
 
+- **Fill the chapters in order.** Each chapter's music starts where the previous chapter ends, so
+  `fill_template.py` must have run on every earlier chapter before Step 8. It rounds the duration up to a
+  whole frame and prints it: pass that exact number to `synth_audio.py` and `render-chunks.sh`.
 - **One format and one resolution for every chapter.** `assemble.py` joins the video without re-encoding
   and refuses chapters that differ.
 - **One kit and one theme for every chapter**, so the viewer never relearns the look.
@@ -82,10 +85,24 @@ joined timeline for upload. Keep `"phrase"` only when the user asks for burned-i
 
 ## Sound
 
-- Run `synth_audio.py` per chapter. Music under long narration should sit low: set `audio.levels.music`
-  around 0.12 in the kit, or pass `--no-music` for chapters that are mostly explanation and keep the bed for
-  the opening and the close.
-- Story moments (`--stop`, `--muffle`, `--stutter`) work per chapter; one per chapter at most.
+- **The music runs on across chapters.** `synth_audio.py` sees that its work dir is a chapter in
+  `chapters.json` and writes that chapter's slice of one continuous bed: seeded from the project, starting
+  where the earlier chapters end, at one level in every chapter, faded in only in the first chapter and out
+  only in the last. A kit's own music track plays on from where the last chapter stopped instead of
+  restarting. Nothing to pass; the result line says `chapter 3/14, music from 4:31.20`.
+- **Drums:** `--drums-from` is chapter time. Pass `--drums-from 0` in every chapter after the one where the
+  drums came in, so they carry across the join; leave it out to drop them for a chapter.
+- A recorded track suits long form better than the synth bed, which is built for a minute or two: set
+  `audio.music` to a library track (`brand-kits.md` → *Music library*), `dream-pop` or `old-age` for the
+  fewest repeats.
+- Music under long narration should sit low: set `audio.levels.music` around 0.12 in the kit. Keep the music
+  in every chapter: for a stretch that needs space, `--quiet A:B` lowers it; `--no-music` on one chapter cuts
+  the bed off hard at both of its joins.
+- Story moments (`--stop`, `--muffle`, `--stutter`) and `--drop` work per chapter, in chapter time; one per
+  chapter at most.
+- Each chapter's mix is normalised on its own before assembly, so a chapter recorded much louder or quieter
+  than its neighbours moves the music by the same amount at the join (usually under 1 dB). Record every
+  chapter at the same distance from the microphone.
 - `assemble.py` measures the joined audio once and applies one gain to -14 LUFS, so the chapters keep their
   relative levels.
 
@@ -158,4 +175,6 @@ Watch each join before reporting: a cut between chapters should land on a pause,
 | `chapter N … has no render at …` | the render went somewhere else | render to `<dir>/<dir>.mp4` or set `"video"` in `chapters.json` |
 | `⚠ no captions.srt for …` | `build_captions.py` never ran in that chapter's work dir | run it, then re-run `assemble.py` |
 | YouTube shows no chapters | under three chapters, one under 10 s, or the list does not start at 0:00 | `assemble.py` names the problem; merge the short chapter into its neighbour |
-| A jump in the music at a join | each chapter's synth bed is its own | expected; pass `--no-music` for the middle chapters, or end each chapter on `--drop` |
+| `… music starts at 61.03s but the chapter starts at 62.50s` from `assemble.py` | an earlier chapter changed length after this chapter's music was made | re-run `synth_audio.py` and `render-chunks.sh` in each named chapter; only the audio is redone |
+| `chapter "…" has no duration in …/render.json` from `synth_audio.py` | an earlier chapter was never filled | run `fill_template.py` on the chapters in order |
+| `duration … differs from this chapter's …` from `synth_audio.py` | the duration typed before `fill_template.py` rounded it | pass the duration `fill_template.py` printed |

@@ -9,6 +9,10 @@ pulse layers at its own tempo and key, drums from --drums-from onward). The chor
 pattern vary per video (the slug folder above work/). Without a kit audio block everything is generated
 here, so there is nothing to license.
 
+A work dir that is a chapter in ../../chapters.json (long form) gets its slice of one continuous bed: seeded
+from the project, offset by the earlier chapters' durations, faded in only in the first chapter and out only
+in the last, at one level across chapters, so the music runs on across every join.
+
 The kit's audio block (work/kit/kit.json, installed by fill_template.py) can swap any cue for recorded
 files, change its gain or mute it, replace the synth music with a track or none, and set the mix
 levels. mix.json records those levels and the music file for mix-encode.sh and render-chunks.sh.
@@ -26,6 +30,7 @@ from pathlib import Path
 import numpy as np
 
 SR = 48000
+LOOP_FADE = 2.0
 TEMPLATES_JSON = Path(__file__).resolve().parent.parent / "templates" / "templates.json"
 rng = np.random.default_rng(7)
 
@@ -50,8 +55,9 @@ def note(midi):
     return 440.0 * 2 ** ((midi - 69) / 12)
 
 
-def place(buffer, sound, at):
-    start = int(at * SR)
+def place(buffer, sound, at, origin=0):
+    # origin: the buffer's first sample on a longer clock, so a slice of the music bed places notes on the same samples as the whole
+    start = int(at * SR) - origin
     if start < 0:
         sound, start = sound[-start:], 0
     if start >= len(buffer):
@@ -239,15 +245,19 @@ def pulse_note(midi, seconds):
     return saw * np.exp(-t * 18) * 0.05
 
 
-def build_music(duration, samples, drums_from, drop, quiet, profile, music_rng):
+def build_music(duration, samples, drums_from, drop, quiet, profile, music_rng, offset=0.0, fades=(True, True)):
     beat = 60 / profile["bpm"]
     bar = beat * 4
     root, layers = profile["root"], profile["layers"]
     rotation = int(music_rng.integers(0, 4))
     progression = profile["progression"][rotation:] + profile["progression"][:rotation]
     pluck_order = [int(i) for i in music_rng.permutation(3)]
+    # One fixed noise burst for every hat, so any slice of the bed renders the same samples as the whole
+    hat_noise = np.random.default_rng(11).standard_normal(int(SR * 0.05))
     music = np.zeros(samples)
-    for b in range(int(duration / bar) + 2):
+    origin = int(round(offset * SR))
+    # Bars sit on the bed's own clock; the bar before the window still rings into it
+    for b in range(max(0, int(offset // bar) - 1), int((offset + duration) / bar) + 2):
         start = b * bar
         offsets = progression[b % 4]
         chord = [root + o for o in offsets]
@@ -257,31 +267,35 @@ def build_music(duration, samples, drums_from, drop, quiet, profile, music_rng):
                 np.sin(2 * np.pi * note(m) * 2 ** (d / 12) * pad_t) + 0.3 * np.sin(4 * np.pi * note(m) * 2 ** (d / 12) * pad_t)
                 for m in chord for d in (-0.12, 0.0, 0.12)
             ) / 9
-            place(music, pad * envelope(len(pad_t), 0.6, 0.8) * 0.16, start)
+            place(music, pad * envelope(len(pad_t), 0.6, 0.8) * 0.16, start, origin)
         if "bass" in layers:
             bass_t = t_axis(bar)
-            place(music, np.sin(2 * np.pi * note(root + offsets[0] - 12) * bass_t) * envelope(len(bass_t), 0.05, 0.4) * 0.14, start)
+            place(music, np.sin(2 * np.pi * note(root + offsets[0] - 12) * bass_t) * envelope(len(bass_t), 0.05, 0.4) * 0.14, start, origin)
         if "pluck" in layers:
             for i in range(8):
                 pluck_t = t_axis(0.25)
-                place(music, np.sin(2 * np.pi * note(chord[pluck_order[i % 3]] + 12) * pluck_t) * np.exp(-pluck_t * 14) * 0.05, start + i * beat / 2)
+                place(music, np.sin(2 * np.pi * note(chord[pluck_order[i % 3]] + 12) * pluck_t) * np.exp(-pluck_t * 14) * 0.05, start + i * beat / 2, origin)
         if "pulse" in layers:
             for i in range(8):
-                place(music, pulse_note(root + offsets[0], beat / 2), start + i * beat / 2)
-        if drums_from is not None and start >= drums_from:
+                place(music, pulse_note(root + offsets[0], beat / 2), start + i * beat / 2, origin)
+        # Drums from 0 were already playing before this slice: the last bar's hits ring on across a chapter join
+        if drums_from is not None and (drums_from <= 0 or start - offset >= drums_from):
             for i in range(4):
                 kick_t = t_axis(0.3)
-                place(music, np.sin(2 * np.pi * np.cumsum(50 + 120 * np.exp(-kick_t * 30)) / SR) * np.exp(-kick_t * 9) * 0.2, start + i * beat)
+                place(music, np.sin(2 * np.pi * np.cumsum(50 + 120 * np.exp(-kick_t * 30)) / SR) * np.exp(-kick_t * 9) * 0.2, start + i * beat, origin)
                 hat_t = t_axis(0.05)
-                hat = rng.standard_normal(len(hat_t))
-                place(music, (hat - smooth(hat, 4)) * np.exp(-hat_t * 90) * 0.03, start + i * beat + beat / 2)
+                place(music, (hat_noise - smooth(hat_noise, 4)) * np.exp(-hat_t * 90) * 0.03, start + i * beat + beat / 2, origin)
 
-    return music * music_gain(duration, samples, quiet, drop)
+    return music * music_gain(duration, samples, quiet, drop, fades)
 
 
-def music_gain(duration, samples, quiet, drop):
+def music_gain(duration, samples, quiet, drop, fades=(True, True)):
     t = np.arange(samples) / SR
-    gain = np.clip(t / 1.5, 0, 1) * np.clip((duration - t) / 1.2, 0, 1)
+    gain = np.ones(samples)
+    if fades[0]:
+        gain *= np.clip(t / 1.5, 0, 1)
+    if fades[1]:
+        gain *= np.clip((duration - t) / 1.2, 0, 1)
     for a, b in quiet:
         gain[(t > a) & (t < b)] *= 0.55
     if drop is not None:
@@ -291,13 +305,31 @@ def music_gain(duration, samples, quiet, drop):
     return gain
 
 
-def track_music(path, duration, samples, quiet, drop):
-    """The kit's own music track, looped to the video's length, under the same fades and drop."""
-    track = decode(path)
-    if not len(track):
-        raise SystemExit(f"{path} decoded to no audio\nNext: check the file plays, or set audio.music to synth")
-    music = np.tile(track, samples // len(track) + 1)[:samples]
-    return music * music_gain(duration, samples, quiet, drop)
+def trim_silence(track):
+    """The track without its silent lead-in and fade-out tail, so a loop never dips between repeats."""
+    window = SR // 10
+    loudness = np.sqrt(np.convolve(track ** 2, np.ones(window) / window, mode="same"))
+    # -30 dB under the track's loudest tenth of a second: a fade-out or room tone, not music
+    playing = np.flatnonzero(loudness > loudness.max() * 0.03)
+    return track[playing[0]:playing[-1] + 1] if len(playing) else track
+
+
+def track_music(track, duration, samples, quiet, drop, offset=0.0, fades=(True, True)):
+    """The kit's own music track, looped to the video's length from offset seconds in, under the same fades and drop."""
+    track = trim_silence(track)
+    # Each repeat starts as the last one's final seconds fade out, so the loop has no seam
+    fade = min(int(LOOP_FADE * SR), len(track) // 4)
+    unit = track[:len(track) - fade].copy()
+    if fade:
+        ramp = np.linspace(0, 1, fade)
+        unit[:fade] = track[:fade] * ramp + track[-fade:] * (1 - ramp)
+    origin = int(round(offset * SR))
+    start = origin % len(unit)
+    music = np.tile(unit, (start + samples) // len(unit) + 2)[start:start + samples]
+    # The first play starts clean: nothing before it to fade out of
+    clean = max(0, min(samples, fade - origin))
+    music[:clean] = track[origin:origin + clean]
+    return music * music_gain(duration, samples, quiet, drop, fades)
 
 
 def tape_stop(music, a, b):
@@ -375,6 +407,33 @@ def parse_range(flag, value):
     return a, b
 
 
+def chapter_position(work):
+    """Where a long-form chapter's music sits in the whole bed, or None for a work dir that is no chapter."""
+    work = work.resolve()
+    project = work.parent.parent
+    manifest = project / "chapters.json"
+    if not manifest.is_file():
+        return None
+    try:
+        chapters = json.loads(manifest.read_text(encoding="utf-8")).get("chapters") or []
+    except json.JSONDecodeError as error:
+        raise SystemExit(f"{manifest} is not valid JSON: {error}\nNext: fix chapters.json and re-run")
+    works = [(project / entry.get("work", f"{entry.get('dir', '')}/work")).resolve() for entry in chapters]
+    if work not in works:
+        return None
+    index = works.index(work)
+    offset = 0.0
+    for entry, earlier in zip(chapters[:index], works[:index]):
+        try:
+            offset += float(json.loads((earlier / "render.json").read_text(encoding="utf-8"))["duration"])
+        except (OSError, KeyError, ValueError, json.JSONDecodeError):
+            raise SystemExit(f"chapter \"{entry.get('title', earlier.parent.name)}\" has no duration in {earlier / 'render.json'}\n"
+                             "Next: run fill_template.py on every earlier chapter first; the music picks up where they end")
+    own = work / "render.json"
+    duration = float(json.loads(own.read_text(encoding="utf-8"))["duration"]) if own.is_file() else None
+    return {"project": project, "offset": offset, "number": index + 1, "of": len(chapters), "duration": duration}
+
+
 def kit_audio(work):
     """The audio block fill_template.py installed with the kit, or the defaults for a work dir without one."""
     try:
@@ -384,9 +443,10 @@ def kit_audio(work):
     return audio or {"music": "synth", "levels": {"music": 0.22, "sfx": 0.5}, "sfx": {}}
 
 
-def write_wav(path, data):
-    peak = np.max(np.abs(data)) or 1.0
-    pcm = (data / peak * 0.9 * 32767).astype(np.int16)
+def write_wav(path, data, peak=None):
+    # A chapter passes the whole bed's peak, so every chapter's music.wav sits at the same level
+    peak = peak or np.max(np.abs(data)) or 1.0
+    pcm = (np.clip(data / peak * 0.9, -1, 1) * 32767).astype(np.int16)
     with wave.open(str(path), "wb") as handle:
         handle.setnchannels(1)
         handle.setsampwidth(2)
@@ -422,6 +482,12 @@ def main() -> int:
         return 1
     profile = profiles[args.template]
 
+    chapter = chapter_position(args.work)
+    if chapter and chapter["duration"] is not None and abs(chapter["duration"] - args.duration) > 0.001:
+        print(f"duration {args.duration} differs from this chapter's {chapter['duration']} in render.json", file=sys.stderr)
+        print(f"Next: pass {chapter['duration']}, the duration fill_template.py printed, so the next chapter's music starts where this one ends", file=sys.stderr)
+        return 1
+
     samples = int(SR * args.duration)
     cues = json.loads(args.cues.read_text())
     audio = kit_audio(args.work)
@@ -437,22 +503,39 @@ def main() -> int:
             if None in ranges[flag]:
                 return 1
         quiet = ranges["quiet"]
+        offset = chapter["offset"] if chapter else 0.0
+        fades = (not chapter or chapter["number"] == 1, not chapter or chapter["number"] == chapter["of"])
+        peak = None
         if music_source == "synth":
             resolved_work = args.work.resolve()
-            seed_key = f"{resolved_work.parent.name}/{resolved_work.name}"
+            seed_key = chapter["project"].name if chapter else f"{resolved_work.parent.name}/{resolved_work.name}"
             seed = int.from_bytes(hashlib.sha256(seed_key.encode()).digest()[:8], "big")
-            music = build_music(args.duration, samples, args.drums_from, args.drop, quiet, profile, np.random.default_rng(seed))
+            music = build_music(args.duration, samples, args.drums_from, args.drop, quiet, profile, np.random.default_rng(seed), offset, fades)
+            if chapter:
+                # Four bars of the full bed with drums, plus the drop's 1.25 boost: the level every chapter shares
+                reference = 4 * 4 * 60 / profile["bpm"]
+                peak = 1.25 * np.max(np.abs(build_music(reference, int(SR * reference), 0, None, [], profile, np.random.default_rng(seed), 0.0, (False, False))))
         else:
-            music = track_music(args.work / music_source, args.duration, samples, quiet, args.drop)
+            track = decode(args.work / music_source)
+            if not len(track):
+                raise SystemExit(f"{args.work / music_source} decoded to no audio\nNext: check the file plays, or set audio.music to synth")
+            music = track_music(track, args.duration, samples, quiet, args.drop, offset, fades)
+            if chapter:
+                peak = 1.25 * np.max(np.abs(track))
         music = story_moments(music, ranges["stop"], ranges["muffle"], ranges["stutter"], 60 / profile["bpm"])
-        write_wav(args.work / "music.wav", music)
+        write_wav(args.work / "music.wav", music, peak)
         written.append("music.wav")
 
     # The mix scripts read this, so a stale music.wav from an earlier run never sneaks into a --no-music mix
     mix = {**audio["levels"], "music_file": "music.wav" if music_source != "none" else None}
+    if chapter and music_source != "none":
+        mix["music_offset"] = round(chapter["offset"], 4)
     (args.work / "mix.json").write_text(json.dumps(mix, indent=2) + "\n", encoding="utf-8")
 
     tempo = {"none": "", "synth": f" · {args.template} {profile['bpm']} bpm"}.get(music_source, f" · kit track {Path(music_source).name}")
+    if chapter and music_source != "none":
+        minutes, seconds = divmod(chapter["offset"], 60)
+        tempo += f" · chapter {chapter['number']}/{chapter['of']}, music from {int(minutes)}:{seconds:05.2f}"
     tuned = sorted(cue for cue, setting in audio["sfx"].items() if setting.get("files") or setting.get("mute") or setting.get("gain", 1) != 1)
     if tuned:
         tempo += f" · kit sounds: {', '.join(tuned)}"

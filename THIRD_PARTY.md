@@ -14,6 +14,7 @@ machine, and each stays under its own licence.
 | [Space Grotesk](https://fonts.google.com/specimen/Space+Grotesk), [JetBrains Mono](https://fonts.google.com/specimen/JetBrains+Mono) | the fictional Northwind example kit | SIL Open Font License 1.1 |
 | [Manrope](https://fonts.google.com/specimen/Manrope), [IBM Plex Mono](https://fonts.google.com/specimen/IBM+Plex+Mono) | the fictional Lumen example kit | SIL Open Font License 1.1 |
 | [Kenney](https://kenney.nl) Interface Sounds, Digital Audio, Impact Sounds *(only when a kit sets `audio.pack` to `kenney-tech`)* | recorded sound effects | CC0 1.0, public domain |
+| [HoliznaCC0](https://holiznacc0.bandcamp.com) Chill Beats collection, via [OpenGameArt](https://opengameart.org/content/chill-beats-collection) *(only when a kit sets `audio.music` to a `holizna-chill-beats/…` track)* | music beds | CC0 1.0, public domain; credit optional |
 | [playwright-core](https://github.com/microsoft/playwright) + Chromium headless shell | deterministic frame rendering | Apache 2.0 (Chromium: BSD-style) |
 | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) | local transcription | MIT |
 | [FFmpeg](https://ffmpeg.org) | mixing and encoding | LGPL / GPL depending on your build |

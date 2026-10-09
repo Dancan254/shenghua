@@ -1,7 +1,7 @@
 {
   "$schema": "https://kimi.com/schemas/kimi.plugin.schema.json",
   "name": "shenghua",
-  "version": "2.9.0",
+  "version": "2.9.1",
   "description": "Turn a voice recording into a fully animated, captioned, sound-designed video: a Short, or a long-form YouTube video built chapter by chapter.",
   "keywords": [
     "video",

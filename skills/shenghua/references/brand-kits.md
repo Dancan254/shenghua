@@ -113,7 +113,7 @@ carries the creator's sound everywhere it is used:
 | Field | Default | What it does |
 |---|---|---|
 | `pack` | none (all synth) | a CC0 sound pack from `templates/sounds.json`; it replaces every cue it maps with recorded sounds, downloaded once on install |
-| `music` | `synth` | `synth` (the theme's generated bed), `none`, or a track in the kit, looped to the video's length with the same fades and `--drop` |
+| `music` | `synth` | `synth` (the theme's generated bed), `none`, a library track such as `holizna-chill-beats/old-age`, or a track in the kit; a track loops to the video's length, crossfading each repeat, with the same fades and `--drop` |
 | `levels.music` / `levels.sfx` | `0.22` / `0.5` | mix levels, 0 to 2; the music still ducks under the voice |
 | `sfx.<cue>.gain` | `1` | 0 to 4, on top of `levels.sfx` |
 | `sfx.<cue>.file` | the pack's, else synth | one file or a list, played in turn; overrides the pack for that cue |
@@ -130,6 +130,24 @@ confirmation ding and an error blip; a digital power-up riser and power-down; pu
 hits and stamps. It maps no whoosh, so whooshes stay synthesized; tune them with `sfx.whoosh.gain`.
 `brand_kit.py install` (and `setup.sh <kit>`) downloads the archives, checks each against its sha256
 and keeps only the mapped files in `assets/sounds/<pack>/`.
+
+**Music library.** `audio.music` can name a CC0 track as `<album>/<track>`; `brand_kit.py install` downloads
+the album once (checked against its sha256) and keeps only its listed tracks in `assets/music/<album>/`.
+
+| `audio.music` | Length | Feel (measured, not listened to; audition before choosing) |
+|---|---|---|
+| `holizna-chill-beats/city-in-the-rearview` | 2:56 | slow (~74 bpm), dark and warm |
+| `holizna-chill-beats/families` | 2:24 | ~81 bpm, brighter, the most dynamic of the six |
+| `holizna-chill-beats/opinions` | 2:48 | ~81 bpm, bright |
+| `holizna-chill-beats/old-age` | 3:34 | ~86 bpm, warm and even |
+| `holizna-chill-beats/dream-pop` | 4:02 | slow (~72 bpm), even; the longest, so the fewest repeats |
+| `holizna-chill-beats/autumn` | 2:50 | the fastest and brightest, very even |
+
+All six are by [HoliznaCC0](https://holiznacc0.bandcamp.com), dedicated to the public domain (CC0): no
+credit required, though "Music: HoliznaCC0" in a description is a kind gesture. The album is an 81 MB
+download the first time a kit uses it. A track loops like a playlist: each repeat crossfades into the next
+over 2 s, after its silent ends are trimmed, so a long video hears the song end and start again every few
+minutes.
 
 `brand_kit.py check` prints an `audio:` line summarising the block. The kit's sounds travel into the
 project with `kit/`, `synth_audio.py` applies them, and it writes `mix.json`, which `mix-encode.sh`
