@@ -70,6 +70,26 @@ class PackCatalogueTest(unittest.TestCase):
                     self.assertIn(entry.split("/")[0], pack["archives"], f"{name}: {entry}")
 
 
+class MusicLibraryTest(unittest.TestCase):
+    def test_should_accept_every_library_track_as_music(self):
+        root = Path(tempfile.mkdtemp())
+        for album, entry in brand_kit.music_library().items():
+            for track in entry["tracks"]:
+                brand_kit.validate(kit_with({"music": f"{album}/{track}"}), root)
+
+    def test_should_treat_an_unknown_album_as_a_kit_file(self):
+        self.assertIsNone(brand_kit.library_track("music/bed.mp3"))
+        with self.assertRaises(KitError):
+            brand_kit.validate(kit_with({"music": "music/bed.mp3"}), Path(tempfile.mkdtemp()))
+
+    def test_should_list_a_checked_archive_and_audio_files_for_every_album(self):
+        for album, entry in brand_kit.music_library().items():
+            self.assertRegex(entry["archive"]["sha256"], r"^[0-9a-f]{64}$", album)
+            self.assertTrue(entry["licence"] and entry["credit"], album)
+            for file in entry["tracks"].values():
+                self.assertIn(Path(file).suffix.lower(), brand_kit.AUDIO_EXTENSIONS, f"{album}: {file}")
+
+
 class SynthAudioTest(unittest.TestCase):
     def setUp(self):
         self.work = Path(tempfile.mkdtemp())

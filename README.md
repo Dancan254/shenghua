@@ -48,7 +48,7 @@ your machine.
 - **Clip audio**: a speaking clip can carry its own sound, ducked under your narration
 - **Camera moves**: whips, punch-in zooms, micro-shake on hits
 - **Sound design**: 10 cue types (hits, whooshes, typing, ticks, risers…) placed by the timeline
-  itself, synthesized by default; a brand kit can swap in a CC0 sound pack or its own files, mute or
+  itself, synthesized by default; a brand kit can swap in a CC0 sound pack, a CC0 lo-fi music track or its own files, mute or
   re-level any of them, and bring its own music track
 - **A music bed** that ducks automatically under the voice, drops out before the final line, and can act
   out the script: a tape stop when something hangs, a muffled stretch that opens on the reveal, a stuck loop

@@ -122,6 +122,20 @@ def chapter_list(titles: list[str], starts: list[float], total: float) -> tuple[
     return text, problems
 
 
+def stale_music(chapters: list[dict], starts: list[float]) -> list[str]:
+    """Chapters whose music slice was made for a different start than the chapter now has."""
+    stale = []
+    for chapter, start in zip(chapters, starts):
+        try:
+            made_for = json.loads((chapter["work"] / "mix.json").read_text(encoding="utf-8")).get("music_offset")
+        except (OSError, json.JSONDecodeError):
+            continue
+        # 2 ms: well under a frame, well over the 4-decimal rounding of each chapter's duration
+        if made_for is not None and abs(made_for - start) > 0.002:
+            stale.append(f'"{chapter["title"]}" music starts at {made_for:.2f}s but the chapter starts at {start:.2f}s')
+    return stale
+
+
 def merge_credits(works: list[Path]) -> list[dict]:
     merged, seen = [], set()
     for work in works:
@@ -184,6 +198,12 @@ def main() -> int:
                  "render every chapter with the same --format, --resolution and render-chunks.sh settings")
     lengths = [p["seconds"] for p in probes]
     starts = [float(sum(lengths[:i])) for i in range(len(lengths))]
+    stale = stale_music(chapters, starts)
+    if stale:
+        for line in stale:
+            print(f"{line}; an earlier chapter changed length")
+        fail("the music would jump at those joins",
+             "re-run synth_audio.py and render-chunks.sh in each chapter named above (complete video chunks are kept), then assemble again")
 
     scratch = project / "assembly"
     scratch.mkdir(exist_ok=True)
@@ -210,6 +230,7 @@ def main() -> int:
         print(f"⚠ no captions.srt for \"{title}\"; run build_captions.py in its work dir and re-run")
     for problem in problems:
         print(f"⚠ {problem}")
+
     print(f"Next: bash deliver.sh \"{scratch}\" \"{out}\", then paste assembly/chapters.txt into the YouTube description")
     return 0
 

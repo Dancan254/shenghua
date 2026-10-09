@@ -26,7 +26,7 @@ skills/shenghua/
 ├── templates/                   visual theme engine + themes
 │   ├── kinetic.html             the shared HTML/JS engine + demo shots
 │   ├── board.html               the brand board: one kit shown in one theme, for approval
-│   ├── sounds.json              CC0 sound packs a kit's audio.pack can name: archive URLs, sha256, cue → files
+│   ├── sounds.json              CC0 sound packs (audio.pack) and the music library (audio.music): archive URLs, sha256, files
 │   ├── templates.json           theme catalogue: canvas (dark/light), mood, extra fonts, motion profile
 │   └── themes/                  shared.css (kit tokens, backgrounds, people/footage blocks) + one CSS per theme
 ├── tests/                       unittest suite (numpy only), run from the repo root

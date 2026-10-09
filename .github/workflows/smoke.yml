@@ -483,6 +483,53 @@ jobs:
           actual=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$W/chunked.mp4")
           python3 -c "import sys; a=$actual; sys.exit(0 if abs(a - $DURATION) < 0.05 else '::error::chunked duration differs')"
 
+      # Long-form chapters each synthesize their slice of one bed; laid end to end they must be the whole bed, with no dip at a join
+      - name: Long-form music runs on across chapters
+        run: |
+          set -euo pipefail
+          S="$SKILL/scripts"; P="$RUNNER_TEMP/smoke/music-chapters"
+          mkdir -p "$P"
+          printf '{"slug":"bed","chapters":[{"dir":"01-a","title":"A"},{"dir":"02-b","title":"B"},{"dir":"03-c","title":"C"}]}' > "$P/chapters.json"
+          for chapter in "01-a 7.02" "02-b 5.5" "03-c 6.01"; do
+            set -- $chapter
+            fill=$(python3 "$S/fill_template.py" "$P/$1/work" "$2" --format landscape --brand "$SKILL/examples/kits/northwind")
+            duration=$(printf '%s\n' "$fill" | head -1 | sed -E 's/.* · ([0-9.]+)s · template.*/\1/')
+            echo '[]' > "$P/$1/work/cues.json"
+            python3 "$S/synth_audio.py" "$P/$1/work/cues.json" "$duration" "$P/$1/work" --template kinetic --drums-from 0
+          done
+          python3 - "$P" "$GITHUB_WORKSPACE/$SKILL/scripts" <<'PY'
+          import json, sys, wave
+          from pathlib import Path
+          import numpy as np
+          project, scripts = Path(sys.argv[1]), sys.argv[2]
+          sys.path.insert(0, scripts)
+          import synth_audio
+          read = lambda p: np.frombuffer(wave.open(str(p)).readframes(10**9), np.int16).astype(float) / 32767
+          parts = [read(project / d / "work" / "music.wav") for d in ("01-a", "02-b", "03-c")]
+          offset = json.loads((project / "02-b" / "work" / "mix.json").read_text())["music_offset"]
+          first = json.loads((project / "01-a" / "work" / "render.json").read_text())["duration"]
+          joined = np.concatenate(parts)
+          # Every chapter shares one peak, so the joins are level: the RMS just before and after each join matches
+          errors = []
+          if abs(offset - first) > 0.0001:
+              errors.append(f"chapter 2 music_offset {offset} is not chapter 1's duration {first}")
+          for at in np.cumsum([len(p) for p in parts[:-1]]):
+              before = np.sqrt(np.mean(joined[at - 4800:at] ** 2)); after = np.sqrt(np.mean(joined[at:at + 4800] ** 2))
+              if min(before, after) < 0.25 * max(before, after):
+                  errors.append(f"level jumps at sample {at}: {before:.3f} → {after:.3f}")
+          profile = next(t["music"] for t in json.loads(synth_audio.TEMPLATES_JSON.read_text())["templates"] if t["id"] == "kinetic")
+          seed = int.from_bytes(__import__("hashlib").sha256(b"music-chapters").digest()[:8], "big")
+          whole = synth_audio.build_music(len(joined) / 48000, len(joined), 0, None, [], profile, np.random.default_rng(seed))
+          reference = 4 * 4 * 60 / profile["bpm"]
+          peak = 1.25 * np.max(np.abs(synth_audio.build_music(reference, int(48000 * reference), 0, None, [], profile, np.random.default_rng(seed), 0.0, (False, False))))
+          whole = np.clip(whole / peak * 0.9, -1, 1)
+          worst = np.max(np.abs(joined - whole))
+          if worst > 2e-4:
+              errors.append(f"the chapters' music differs from one continuous bed by {worst:.5f}")
+          sys.exit("::error::" + "; ".join(errors) if errors else 0)
+          PY
+          echo "three chapters' music joins into one continuous bed"
+
       # Long form joins finished chapters: video copied, audio normalised once, captions and chapters on the joined timeline
       - name: Assemble chapters
         run: |

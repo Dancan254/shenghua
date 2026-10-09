@@ -30,6 +30,7 @@ at 2x device pixels and saves at 2x (no downscale) for a 2160x3840 master.
 import argparse
 import html as markup
 import json
+import math
 import re
 import shutil
 import sys
@@ -45,6 +46,7 @@ FORMATS = {
     "square": {"width": 1080, "height": 1080, "captionTop": 850},
     "portrait": {"width": 1080, "height": 1350, "captionTop": 1050},
 }
+FPS = 30
 RESOLUTIONS = {"1080p": 1, "4k": 2}
 
 # The authored regions of a composition, carried over on a re-fill
@@ -131,6 +133,15 @@ def write_placeholder(path, body):
         path.write_text(body, encoding="utf-8")
 
 
+def whole_frames(duration: float) -> float:
+    """The duration rounded up to a whole frame, written so render-chunks.sh's ceil(duration x 30) gives that frame count."""
+    frames = math.ceil(round(duration * FPS, 6))
+    seconds = math.floor(frames / FPS * 10000) / 10000
+    while math.ceil(seconds * FPS) != frames:
+        seconds = round(seconds - 0.0001, 4)
+    return seconds
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("work", type=Path)
@@ -176,7 +187,7 @@ def main() -> int:
             print(f"No composition at {index} to relink into", file=sys.stderr)
             print(f"Next: run fill_template.py {args.work} <duration> for a full fill", file=sys.stderr)
             return 1
-        install(args.work / "vendor", SKILL_DIR / "assets", ignore=shutil.ignore_patterns("kits", "sounds"))
+        install(args.work / "vendor", SKILL_DIR / "assets", ignore=shutil.ignore_patterns("kits", "sounds", "music"))
         install(args.work / "kit", kit_assets)
         write_placeholder(args.work / "words.js", "window.PHRASES=[];")
         write_placeholder(args.work / "speech.js", "window.SPEECH=[];")
@@ -190,6 +201,7 @@ def main() -> int:
         print(f"{problem}, got: {args.duration}", file=sys.stderr)
         print("Next: pass the composition length in seconds, or --relink to only re-install vendor/ and kit/", file=sys.stderr)
         return 1
+    args.duration = whole_frames(args.duration)
 
     template = resolve_template(args.template)
     if template is None:
@@ -206,7 +218,7 @@ def main() -> int:
         "captionTop": geometry["captionTop"],
         "grainWidth": geometry["width"] // 2,
         "grainHeight": geometry["height"] // 2,
-        "duration": f"{args.duration:.2f}",
+        "duration": f"{args.duration:g}",
         "brand.tokens": brand_kit.css_tokens(colors),
         "brand.fonts.display": manifest["families"]["display"],
         "brand.fonts.mono": manifest["families"].get("mono", "ui-monospace"),
@@ -268,19 +280,19 @@ def main() -> int:
     # key_greenscreen.py and find_media.py write faces.js when the vision detector ran
     write_placeholder(args.work / "faces.js", "window.FACES={};")
     # kits/ and sounds/ stay out of vendor: each project gets only its own kit, sounds included, below
-    install(args.work / "vendor", SKILL_DIR / "assets", ignore=shutil.ignore_patterns("kits", "sounds"))
+    install(args.work / "vendor", SKILL_DIR / "assets", ignore=shutil.ignore_patterns("kits", "sounds", "music"))
     # Re-copied every run, so switching kits in one work dir never renders the old brand
     install(args.work / "kit", kit_assets)
     # render-frames.sh reads scale: render at 2x device pixels, save at scale x CSS pixels
     (args.work / "render.json").write_text(json.dumps({
         "width": geometry["width"], "height": geometry["height"], "format": args.format,
-        "resolution": args.resolution, "scale": RESOLUTIONS[args.resolution],
+        "resolution": args.resolution, "scale": RESOLUTIONS[args.resolution], "duration": args.duration,
     }, indent=2) + "\n", encoding="utf-8")
 
     kept = " · kept the existing shots" if carried else ""
     size = f"{geometry['width'] * RESOLUTIONS[args.resolution]}x{geometry['height'] * RESOLUTIONS[args.resolution]}"
     res = f" · {args.resolution} ({size})" if args.resolution != "1080p" else ""
-    print(f"{out} · {geometry['width']}x{geometry['height']}{res} · {args.duration:.2f}s · template {template['id']} · kit {manifest['name'] or root}{kept}")
+    print(f"{out} · {geometry['width']}x{geometry['height']}{res} · {args.duration:g}s · template {template['id']} · kit {manifest['name'] or root}{kept}")
     if args.board:
         print(f"Next: node {SKILL_DIR / 'scripts' / 'render.js'} board {out} {args.work / 'board.png'}")
     elif carried:

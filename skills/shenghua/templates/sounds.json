@@ -30,5 +30,25 @@
         "error": ["interface/error_004.ogg"]
       }
     }
+  },
+  "music": {
+    "holizna-chill-beats": {
+      "title": "HoliznaCC0, Chill Beats: lo-fi instrumentals",
+      "licence": "CC0 1.0",
+      "credit": "HoliznaCC0 (holiznacc0.bandcamp.com), Chill Beats collection",
+      "page": "https://opengameart.org/content/chill-beats-collection",
+      "archive": {
+        "url": "https://opengameart.org/sites/default/files/chill_beats.zip",
+        "sha256": "53ce04d6c124843235ccfbea94be3f8c6afb3cfd3c6924badc124a4ec0d49f37"
+      },
+      "tracks": {
+        "city-in-the-rearview": "01 HoliznaCC0 - City In The Rearview.mp3",
+        "families": "03 HoliznaCC0 - Families.mp3",
+        "opinions": "05 HoliznaCC0 - Opinions.mp3",
+        "old-age": "06 HoliznaCC0 - Old Age.mp3",
+        "dream-pop": "08 HoliznaCC0 - Dream Pop.mp3",
+        "autumn": "28 HoliznaCC0 - Autumn.mp3"
+      }
+    }
   }
 }
