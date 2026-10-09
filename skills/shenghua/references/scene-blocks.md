@@ -508,7 +508,9 @@ Every helper pushes its own cue into `SFX`; add extras with `SFX.push({t, type, 
 | `down` (dur) | falling tone | crashes, failures |
 | `error` | square buzz | red error lines |
 
-The music bed ducks under the voice automatically at mix time (`mix-encode.sh`). Use `--drop <t>`
+Each cue's sound, level or mute, and the music itself, can come from the kit's `audio` block
+(`brand-kits.md` → *Sound*); the cue you push stays the same. The music bed ducks under the voice
+automatically at mix time (`mix-audio.sh`). Use `--drop <t>`
 in `synth_audio.py` to cut the music just before the final slam — silence before the punchline is
 the strongest hit.
 

@@ -176,7 +176,7 @@ def main() -> int:
             print(f"No composition at {index} to relink into", file=sys.stderr)
             print(f"Next: run fill_template.py {args.work} <duration> for a full fill", file=sys.stderr)
             return 1
-        install(args.work / "vendor", SKILL_DIR / "assets", ignore=shutil.ignore_patterns("kits"))
+        install(args.work / "vendor", SKILL_DIR / "assets", ignore=shutil.ignore_patterns("kits", "sounds"))
         install(args.work / "kit", kit_assets)
         write_placeholder(args.work / "words.js", "window.PHRASES=[];")
         write_placeholder(args.work / "speech.js", "window.SPEECH=[];")
@@ -267,8 +267,8 @@ def main() -> int:
     write_placeholder(args.work / "speech.js", "window.SPEECH=[];")
     # key_greenscreen.py and find_media.py write faces.js when the vision detector ran
     write_placeholder(args.work / "faces.js", "window.FACES={};")
-    # kits/ stays out of vendor: every kit installed in the skill would be copied into each project
-    install(args.work / "vendor", SKILL_DIR / "assets", ignore=shutil.ignore_patterns("kits"))
+    # kits/ and sounds/ stay out of vendor: each project gets only its own kit, sounds included, below
+    install(args.work / "vendor", SKILL_DIR / "assets", ignore=shutil.ignore_patterns("kits", "sounds"))
     # Re-copied every run, so switching kits in one work dir never renders the old brand
     install(args.work / "kit", kit_assets)
     # render-frames.sh reads scale: render at 2x device pixels, save at scale x CSS pixels

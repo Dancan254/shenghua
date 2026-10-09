@@ -5,12 +5,19 @@
 
 Writes sfx.wav (every cue the timeline pushed) and music.wav (the theme's pad, bass, pluck and
 pulse layers at its own tempo and key, drums from --drums-from onward). The chord order and pluck
-pattern vary per video (the slug folder above work/). Everything is generated here, so there is nothing to license.
+pattern vary per video (the slug folder above work/). Without a kit audio block everything is generated
+here, so there is nothing to license.
+
+The kit's audio block (work/kit/kit.json, installed by fill_template.py) can swap any cue for recorded
+files, change its gain or mute it, replace the synth music with a track or none, and set the mix
+levels. mix.json records those levels and the music file for mix-encode.sh and render-chunks.sh.
 """
 
 import argparse
 import hashlib
 import json
+import shutil
+import subprocess
 import sys
 import wave
 from pathlib import Path
@@ -120,35 +127,109 @@ def error():
     return np.sign(np.sin(2 * np.pi * 180 * t)) * np.exp(-t * 14) * 0.05
 
 
-def build_sfx(cues, samples):
+# The synth sound a recorded file stands in for; its peak is the level the file is matched to
+REFERENCE = {
+    "hit": lambda: hit(1), "whoosh": whoosh, "riser": lambda: riser(1.0), "down": lambda: down(0.6),
+    "type": key_click, "tick": tick, "pop": pop, "ding": ding, "stamp": stamp, "error": error,
+}
+
+
+def decode(path):
+    """Any audio file → mono float at SR. Plain WAV needs only the standard library."""
+    if path.suffix.lower() == ".wav":
+        try:
+            with wave.open(str(path), "rb") as handle:
+                if handle.getsampwidth() == 2 and handle.getframerate() == SR:
+                    data = np.frombuffer(handle.readframes(handle.getnframes()), np.int16).astype(float) / 32768
+                    return data.reshape(-1, handle.getnchannels()).mean(axis=1)
+        except wave.Error:
+            pass
+    if not shutil.which("ffmpeg"):
+        raise SystemExit(f"decoding {path} needs ffmpeg\nNext: install ffmpeg, or give the kit 16-bit {SR} Hz WAV files")
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(path), "-f", "f32le", "-ac", "1", "-ar", str(SR), "-"],
+                         capture_output=True, check=True).stdout
+    return np.frombuffer(raw, np.float32).astype(float)
+
+
+class Sounds:
+    """Each cue's sound: the synth by default, or the kit's files in rotation, at the kit's gain."""
+
+    def __init__(self, sfx_settings, work):
+        self.settings = sfx_settings
+        self.files = {}
+        self.turn = {}
+        for cue, setting in sfx_settings.items():
+            if setting.get("files") and not setting.get("mute"):
+                # Restoring rng's state keeps measuring the reference from shifting every synth cue's noise
+                state = rng.bit_generator.state
+                reference = float(np.max(np.abs(REFERENCE[cue]()))) or 1.0
+                rng.bit_generator.state = state
+                decoded = [decode(work / name) for name in setting["files"]]
+                self.files[cue] = [clip / (np.max(np.abs(clip)) or 1.0) * reference for clip in decoded]
+
+    def muted(self, cue):
+        return self.settings.get(cue, {}).get("mute", False)
+
+    def gain(self, cue):
+        return self.settings.get(cue, {}).get("gain", 1)
+
+    def recorded(self, cue):
+        """The next file for this cue, or None when the cue stays synthesized."""
+        if cue not in self.files:
+            return None
+        index = self.turn.get(cue, 0)
+        self.turn[cue] = index + 1
+        return self.files[cue][index % len(self.files[cue])]
+
+
+def fit(sound, duration, end_aligned):
+    """Crop a recorded riser to end on its cue, or a recorded down-sweep to stop with it."""
+    length = int(SR * duration)
+    if duration <= 0 or len(sound) <= length:
+        return sound
+    if end_aligned:
+        return sound[-length:]
+    fade = min(length, SR // 20)
+    out = sound[:length].copy()
+    out[length - fade:] *= np.linspace(1, 0, fade)
+    return out
+
+
+def build_sfx(cues, samples, sounds):
     sfx = np.zeros(samples)
     unknown = set()
     for cue in cues:
         kind, at, duration = cue["type"], cue["t"], cue.get("dur", 0)
-        if kind == "hit":
-            place(sfx, hit(cue.get("power", 1)), at)
-        elif kind == "whoosh":
-            place(sfx, whoosh(), at)
-        elif kind == "riser":
-            place(sfx, riser(duration), at)
-        elif kind == "down":
-            place(sfx, down(duration), at)
-        elif kind == "type":
-            if duration > 0.05:
-                place(sfx, repeated(key_click, duration, 0.055, 0.04), at)
-        elif kind == "tick":
-            place(sfx, repeated(tick, duration, 0.07, 0), at)
-        elif kind == "pop":
-            place(sfx, pop(), at)
-        elif kind == "ding":
-            place(sfx, ding(), at)
-        elif kind == "stamp":
-            place(sfx, stamp(), at)
-        elif kind == "error":
-            place(sfx, error(), at)
-        else:
+        if kind not in REFERENCE:
             unknown.add(kind)
+            continue
+        if sounds.muted(kind):
+            continue
+        gain = sounds.gain(kind)
+        if kind in ("type", "tick"):
+            if kind == "type" and duration <= 0.05:
+                continue
+            unit = (lambda: sounds.recorded(kind)) if kind in sounds.files else (key_click if kind == "type" else tick)
+            interval, jitter = (0.055, 0.04) if kind == "type" else (0.07, 0)
+            place(sfx, repeated(unit, duration, interval, jitter) * gain, at)
+            continue
+        recorded = sounds.recorded(kind)
+        if recorded is not None:
+            if kind == "riser":
+                recorded = fit(recorded, duration, end_aligned=True)
+                at += max(0.0, duration - len(recorded) / SR)
+            elif kind == "down":
+                recorded = fit(recorded, duration, end_aligned=False)
+            sound = recorded * (cue.get("power", 1) if kind == "hit" else 1)
+        elif kind == "hit":
+            sound = hit(cue.get("power", 1))
+        elif kind in ("riser", "down"):
+            sound = riser(duration) if kind == "riser" else down(duration)
+        else:
+            sound = REFERENCE[kind]()
+        place(sfx, sound * gain, at)
     return sfx, unknown
+
 
 
 def pulse_note(midi, seconds):
@@ -194,6 +275,10 @@ def build_music(duration, samples, drums_from, drop, quiet, profile, music_rng):
                 hat = rng.standard_normal(len(hat_t))
                 place(music, (hat - smooth(hat, 4)) * np.exp(-hat_t * 90) * 0.03, start + i * beat + beat / 2)
 
+    return music * music_gain(duration, samples, quiet, drop)
+
+
+def music_gain(duration, samples, quiet, drop):
     t = np.arange(samples) / SR
     gain = np.clip(t / 1.5, 0, 1) * np.clip((duration - t) / 1.2, 0, 1)
     for a, b in quiet:
@@ -202,7 +287,25 @@ def build_music(duration, samples, drums_from, drop, quiet, profile, music_rng):
         # Silence right before the final slam makes the punchline land harder
         gain[(t > drop - 0.3) & (t < drop)] = 0.0
         gain[t >= drop] *= 1.25
-    return music * gain
+    return gain
+
+
+def track_music(path, duration, samples, quiet, drop):
+    """The kit's own music track, looped to the video's length, under the same fades and drop."""
+    track = decode(path)
+    if not len(track):
+        raise SystemExit(f"{path} decoded to no audio\nNext: check the file plays, or set audio.music to synth")
+    music = np.tile(track, samples // len(track) + 1)[:samples]
+    return music * music_gain(duration, samples, quiet, drop)
+
+
+def kit_audio(work):
+    """The audio block fill_template.py installed with the kit, or the defaults for a work dir without one."""
+    try:
+        audio = json.loads((work / "kit" / "kit.json").read_text(encoding="utf-8")).get("audio")
+    except (OSError, json.JSONDecodeError):
+        audio = None
+    return audio or {"music": "synth", "levels": {"music": 0.22, "sfx": 0.5}, "sfx": {}}
 
 
 def write_wav(path, data):
@@ -242,11 +345,13 @@ def main() -> int:
 
     samples = int(SR * args.duration)
     cues = json.loads(args.cues.read_text())
-    sfx, unknown = build_sfx(cues, samples)
+    audio = kit_audio(args.work)
+    sfx, unknown = build_sfx(cues, samples, Sounds(audio["sfx"], args.work))
     write_wav(args.work / "sfx.wav", sfx)
     written = ["sfx.wav"]
+    music_source = "none" if args.no_music else audio["music"]
 
-    if not args.no_music:
+    if music_source != "none":
         quiet = []
         for q in args.quiet:
             parts = q.split(":")
@@ -261,14 +366,24 @@ def main() -> int:
                 print("Next: pass a numeric range like --quiet 2.5:4.0", file=sys.stderr)
                 return 1
             quiet.append((a, b))
-        resolved_work = args.work.resolve()
-        seed_key = f"{resolved_work.parent.name}/{resolved_work.name}"
-        seed = int.from_bytes(hashlib.sha256(seed_key.encode()).digest()[:8], "big")
-        music = build_music(args.duration, samples, args.drums_from, args.drop, quiet, profile, np.random.default_rng(seed))
+        if music_source == "synth":
+            resolved_work = args.work.resolve()
+            seed_key = f"{resolved_work.parent.name}/{resolved_work.name}"
+            seed = int.from_bytes(hashlib.sha256(seed_key.encode()).digest()[:8], "big")
+            music = build_music(args.duration, samples, args.drums_from, args.drop, quiet, profile, np.random.default_rng(seed))
+        else:
+            music = track_music(args.work / music_source, args.duration, samples, quiet, args.drop)
         write_wav(args.work / "music.wav", music)
         written.append("music.wav")
 
-    tempo = f" · {args.template} {profile['bpm']} bpm" if not args.no_music else ""
+    # The mix scripts read this, so a stale music.wav from an earlier run never sneaks into a --no-music mix
+    mix = {**audio["levels"], "music_file": "music.wav" if music_source != "none" else None}
+    (args.work / "mix.json").write_text(json.dumps(mix, indent=2) + "\n", encoding="utf-8")
+
+    tempo = {"none": "", "synth": f" · {args.template} {profile['bpm']} bpm"}.get(music_source, f" · kit track {Path(music_source).name}")
+    tuned = sorted(cue for cue, setting in audio["sfx"].items() if setting.get("files") or setting.get("mute") or setting.get("gain", 1) != 1)
+    if tuned:
+        tempo += f" · kit sounds: {', '.join(tuned)}"
     print(f"{len(cues)} cues · {args.duration:.1f}s{tempo} → {' + '.join(written)}")
     if unknown:
         print(f"  ignored unknown cue types: {', '.join(sorted(unknown))}")

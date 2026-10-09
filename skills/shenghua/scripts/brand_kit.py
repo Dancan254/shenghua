@@ -10,6 +10,8 @@ asset folder.
   brand_kit.py resolve <name-or-path>                print the kit a name or path resolves to
 
 A kit is a folder holding brand.json (version 2) plus the files it names, or a brand.json path.
+An optional "audio" block sets the music, the mix levels and each sound effect (see brand-kits.md);
+a sound pack it names is downloaded from templates/sounds.json into assets/sounds/<pack>/ on install.
 Named kits live in ~/.config/shenghua/kits/<name>/ (init_kit.py --name writes there); the
 single-kit ~/.config/shenghua/brand.json keeps working as the user's own kit.
 """
@@ -25,6 +27,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+import zipfile
 import zlib
 from pathlib import Path
 
@@ -37,6 +40,11 @@ HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
 FONT_EXTENSIONS = {".woff2": "woff2", ".woff": "woff", ".ttf": "truetype", ".otf": "opentype"}
 LOGO_EXTENSIONS = {".svg", ".png", ".webp"}
 BACKGROUND_STYLES = {"theme", "solid", "glow", "gradient", "grid", "image"}
+# Every cue type synth_audio.py renders; a kit can tune or replace each one
+CUE_TYPES = ("hit", "whoosh", "riser", "down", "type", "tick", "pop", "ding", "stamp", "error")
+AUDIO_EXTENSIONS = {".wav", ".ogg", ".mp3", ".flac", ".m4a"}
+MIX_LEVELS = {"music": 0.22, "sfx": 0.5}
+SOUNDS_JSON = SKILL_DIR / "templates" / "sounds.json"
 # A desktop UA makes Google Fonts serve woff2
 USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36"
 DEFAULT_SUCCESS = "#3ddc84"
@@ -218,6 +226,116 @@ def validate(kit, root):
         raise KitError(f"background.style {background.get('style')!r} is unknown", f"use one of {', '.join(sorted(BACKGROUND_STYLES))}")
     if background.get("style") == "image" and not (root / background.get("image", "")).is_file():
         raise KitError("background.style is image but background.image is missing", "add background.image pointing at a file in the kit")
+    validate_audio(kit.get("audio", {}), root)
+
+
+def validate_audio(audio, root):
+    def audio_file(name, field):
+        path = root / name
+        if not path.is_file():
+            raise KitError(f"{field} file {path} does not exist", "add the file to the kit or remove the entry")
+        if path.suffix.lower() not in AUDIO_EXTENSIONS:
+            raise KitError(f"{field} is {path.suffix}, not audio", f"use one of {', '.join(sorted(AUDIO_EXTENSIONS))}")
+
+    unknown = set(audio) - {"pack", "music", "levels", "sfx"}
+    if unknown:
+        raise KitError(f"audio has unknown field(s) {', '.join(sorted(unknown))}", "use pack, music, levels and sfx")
+    if "pack" in audio and audio["pack"] not in sound_packs():
+        raise KitError(f"audio.pack {audio['pack']!r} is unknown", f"use one of {', '.join(sound_packs())}, or remove it")
+    music = audio.get("music", "synth")
+    if music not in ("synth", "none"):
+        audio_file(str(music), "audio.music")
+    for name, level in audio.get("levels", {}).items():
+        if name not in MIX_LEVELS:
+            raise KitError(f"audio.levels.{name} is unknown", "use audio.levels.music and audio.levels.sfx")
+        if not isinstance(level, (int, float)) or not 0 <= level <= 2:
+            raise KitError(f"audio.levels.{name} must be a number from 0 to 2, got {level!r}", f"the default is {MIX_LEVELS[name]}")
+    for cue, setting in audio.get("sfx", {}).items():
+        if cue not in CUE_TYPES:
+            raise KitError(f"audio.sfx.{cue} is not a cue type", f"use one of {', '.join(CUE_TYPES)}")
+        unknown = set(setting) - {"gain", "file", "mute"}
+        if unknown:
+            raise KitError(f"audio.sfx.{cue} has unknown field(s) {', '.join(sorted(unknown))}", "use gain, file and mute")
+        gain = setting.get("gain", 1)
+        if not isinstance(gain, (int, float)) or not 0 <= gain <= 4:
+            raise KitError(f"audio.sfx.{cue}.gain must be a number from 0 to 4, got {gain!r}", "1 keeps the default level")
+        files = setting.get("file", [])
+        for name in [files] if isinstance(files, str) else files:
+            audio_file(name, f"audio.sfx.{cue}.file")
+
+
+def sound_packs():
+    return json.loads(SOUNDS_JSON.read_text(encoding="utf-8"))["packs"]
+
+
+def audio_files(kit):
+    """Every audio file brand.json names, relative to the kit root."""
+    audio = kit.get("audio", {})
+    files = [audio["music"]] if audio.get("music", "synth") not in ("synth", "none") else []
+    for setting in audio.get("sfx", {}).values():
+        named = setting.get("file", [])
+        files += [named] if isinstance(named, str) else named
+    return files
+
+
+def fetch_pack(name, assets):
+    """Download a sound pack's archives once, check them against sounds.json, keep only the cue files."""
+    pack = sound_packs()[name]
+    folder = assets / "sounds" / name
+    wanted = {}
+    for files in pack["cues"].values():
+        for entry in files:
+            archive, _, file = entry.partition("/")
+            wanted.setdefault(archive, set()).add(file)
+    for archive, files in wanted.items():
+        if all((folder / archive / file).is_file() for file in files):
+            continue
+        source = pack["archives"][archive]
+        (folder / archive).mkdir(parents=True, exist_ok=True)
+        zip_path = folder / f"{archive}.zip.part"
+        download(source["url"], zip_path)
+        if hashlib.sha256(zip_path.read_bytes()).hexdigest() != source["sha256"]:
+            zip_path.unlink()
+            raise KitError(f"sound pack {name}: {source['url']} does not match its sha256",
+                           "the download changed upstream; update templates/sounds.json or remove audio.pack")
+        with zipfile.ZipFile(zip_path) as bundle:
+            members = {Path(member).name: member for member in bundle.namelist()}
+            for file in files:
+                if file not in members:
+                    raise KitError(f"sound pack {name}: {file} is not in {source['url']}", "fix the cue list in templates/sounds.json")
+                (folder / archive / file).write_bytes(bundle.read(members[file]))
+        zip_path.unlink()
+    return folder
+
+
+def install_audio(kit, root, assets, target):
+    """Copy the kit's sounds (and its pack's) into the kit assets; return the manifest's audio block.
+
+    Paths in the block are relative to the work dir, where fill_template.py installs the kit as kit/."""
+    audio = kit.get("audio", {})
+    sounds = target / "sounds"
+    manifest = {"music": "synth", "levels": {**MIX_LEVELS, **audio.get("levels", {})}, "sfx": {}}
+
+    def copy(source, name):
+        sounds.mkdir(exist_ok=True)
+        shutil.copy2(source, sounds / name)
+        return f"kit/sounds/{name}"
+
+    music = audio.get("music", "synth")
+    manifest["music"] = music if music in ("synth", "none") else copy(root / music, "music" + Path(music).suffix.lower())
+    if "pack" in audio:
+        folder = fetch_pack(audio["pack"], assets)
+        for cue, files in sound_packs()[audio["pack"]]["cues"].items():
+            manifest["sfx"][cue] = {"files": [copy(folder / entry, entry.replace("/", "-")) for entry in files]}
+    for cue, setting in audio.get("sfx", {}).items():
+        entry = manifest["sfx"].setdefault(cue, {})
+        named = setting.get("file", [])
+        if named:
+            entry["files"] = [copy(root / name, f"{cue}-{index}{Path(name).suffix.lower()}")
+                              for index, name in enumerate([named] if isinstance(named, str) else named)]
+        entry["gain"] = setting.get("gain", 1)
+        entry["mute"] = bool(setting.get("mute", False))
+    return manifest
 
 
 def flatten_logos(logos, prefix=""):
@@ -359,8 +477,8 @@ def install(kit, root, assets):
         shutil.copy2(source, target / source.name)
         background["image"] = f"kit/{source.name}"
     manifest = {"id": target.name, "name": kit.get("name", ""), "handle": kit.get("handle", ""),
-                "families": families, "logos": logos, "background": background, "root": str(root),
-                "digest": fingerprint}
+                "families": families, "logos": logos, "background": background,
+                "audio": install_audio(kit, root, assets, target), "root": str(root), "digest": fingerprint}
     (target / "kit.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     return target
 
@@ -371,6 +489,9 @@ def digest(kit, root):
     files = [font["file"] for font in kit["fonts"].values() if "file" in font]
     files += [logo for _, logo in flatten_logos(kit.get("logos", {}))]
     files += [kit["background"]["image"]] if kit.get("background", {}).get("style") == "image" else []
+    files += audio_files(kit)
+    if "pack" in kit.get("audio", {}):
+        sha.update(json.dumps(sound_packs()[kit["audio"]["pack"]], sort_keys=True).encode())
     for name in sorted(files):
         sha.update((root / name).read_bytes())
     return sha.hexdigest()
@@ -602,6 +723,18 @@ def logo_summary(kit):
     return ", ".join(names) if names else "none"
 
 
+def audio_summary(audio):
+    levels = {**MIX_LEVELS, **audio.get("levels", {})}
+    parts = [f"pack {audio['pack']}" if "pack" in audio else "synth sounds",
+             f"music {audio.get('music', 'synth')} at {levels['music']}", f"sfx at {levels['sfx']}"]
+    for cue, setting in audio.get("sfx", {}).items():
+        change = "muted" if setting.get("mute") else ", ".join(
+            ([f"gain {setting['gain']}"] if "gain" in setting else []) + (["own file"] if setting.get("file") else []))
+        if change:
+            parts.append(f"{cue} {change}")
+    return " · ".join(parts)
+
+
 def command_list() -> int:
     entries = []
     if KITS_DIR.is_dir():
@@ -687,6 +820,8 @@ def main() -> int:
         print(f"{kit.get('name', 'kit')} · {colors['scheme']} · primary {colors['primary']} on {colors['bg']}")
         for warning in logo_warnings(kit, colors):
             print(f"  warning: {warning}")
+        if kit.get("audio"):
+            print(f"  audio: {audio_summary(kit['audio'])}")
         for label, ratio, minimum in contrast_report(colors):
             verdict = "ok" if ratio >= minimum else f"BELOW {minimum}:1"
             failing += ratio < minimum

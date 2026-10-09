@@ -43,8 +43,9 @@ your machine.
   lower third, a picture-in-picture clip or a portrait quote, and hands you the credits for the description
 - **Clip audio**: a speaking clip can carry its own sound, ducked under your narration
 - **Camera moves**: whips, punch-in zooms, micro-shake on hits
-- **Sound design**: 10 synthesized cue types (hits, whooshes, typing, ticks, risers…) placed by the
-  timeline itself
+- **Sound design**: 10 cue types (hits, whooshes, typing, ticks, risers…) placed by the timeline
+  itself, synthesized by default; a brand kit can swap in a CC0 sound pack or its own files, mute or
+  re-level any of them, and bring its own music track
 - **A music bed** that ducks automatically under the voice and drops out before the final line
 - **Film finish**: grain, vignette, loudness normalised to −14 LUFS
 - **High-quality output**: frames rendered at 2x and saved lossless, encoded at CRF 16 with correct

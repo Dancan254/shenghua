@@ -92,6 +92,50 @@ the contrast report. A wrong colour costs seconds here and a full render later. 
 Step 4 first if the user hasn't — the board renders one theme. To compare themes, render one board
 per theme and show them side by side.
 
+## Sound: the `audio` block
+
+Optional. Without it every sound is synthesized and the mix uses the default levels. With it, a kit
+carries the creator's sound everywhere it is used:
+
+```json
+"audio": {
+  "pack": "kenney-tech",
+  "music": "music/bed.mp3",
+  "levels": { "music": 0.15, "sfx": 0.4 },
+  "sfx": {
+    "whoosh": { "gain": 0.4 },
+    "hit":    { "file": ["sounds/boom-1.wav", "sounds/boom-2.wav"] },
+    "type":   { "mute": true }
+  }
+}
+```
+
+| Field | Default | What it does |
+|---|---|---|
+| `pack` | none (all synth) | a CC0 sound pack from `templates/sounds.json`; it replaces every cue it maps with recorded sounds, downloaded once on install |
+| `music` | `synth` | `synth` (the theme's generated bed), `none`, or a track in the kit, looped to the video's length with the same fades and `--drop` |
+| `levels.music` / `levels.sfx` | `0.22` / `0.5` | mix levels, 0 to 2; the music still ducks under the voice |
+| `sfx.<cue>.gain` | `1` | 0 to 4, on top of `levels.sfx` |
+| `sfx.<cue>.file` | the pack's, else synth | one file or a list, played in turn; overrides the pack for that cue |
+| `sfx.<cue>.mute` | `false` | drop that cue type entirely |
+
+Cue types: `hit` `whoosh` `riser` `down` `type` `tick` `pop` `ding` `stamp` `error`. A recorded file
+plays at the synth sound's peak level, so swapping one in keeps the mix balanced before any `gain`. A
+recorded `riser` ends on its cue and a `down` stops with it; `type` and `tick` repeat the file as
+each click. Files are `.wav`, `.ogg`, `.mp3`, `.flac` or `.m4a`; anything but 16-bit 48 kHz WAV is
+decoded with ffmpeg.
+
+**Packs.** `kenney-tech` (CC0, [Kenney](https://kenney.nl)): interface clicks, ticks, pops, a
+confirmation ding and an error blip; a digital power-up riser and power-down; punchy impacts for
+hits and stamps. It maps no whoosh, so whooshes stay synthesized; tune them with `sfx.whoosh.gain`.
+`brand_kit.py install` (and `setup.sh <kit>`) downloads the archives, checks each against its sha256
+and keeps only the mapped files in `assets/sounds/<pack>/`.
+
+`brand_kit.py check` prints an `audio:` line summarising the block. The kit's sounds travel into the
+project with `kit/`, `synth_audio.py` applies them, and it writes `mix.json`, which `mix-encode.sh`
+and `render-chunks.sh` read for the levels and the music file. Nobody can hear the result but the
+user: after changing a kit's sound, ask them to listen.
+
 ## Glyph coverage: `check --text` and `fonts.fallback`
 
 Kit fonts that lack a character render it silently in a fallback face. Two tools catch that:
@@ -118,3 +162,5 @@ Otherwise swap the characters, or give the kit a fallback family that covers the
 | Logo invisible on the end card | a dark logo on a dark canvas, or an SVG with no size | add `wordmark.onDark`; give the `<img>` a height (see *Logo end card*) |
 | `font X lacks glyphs for: …` from `render.js check` | characters the kit's fonts don't cover | swap the characters, or set `fonts.fallback` in brand.json |
 | Contrast report shows `BELOW` | a derived shade fails WCAG AA | adjust the kit's colours; check the other `--scheme` |
+| `audio.sfx.<x> is not a cue type` | a misspelled cue name | use one of the ten cue types above |
+| `sound pack …: … does not match its sha256` | the pack's archive changed upstream | update its entry in `templates/sounds.json`, or remove `audio.pack` |
