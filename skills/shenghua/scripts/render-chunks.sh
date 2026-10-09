@@ -45,7 +45,6 @@ WORK="$2"
 DURATION="$3"
 VOICE="$4"
 OUT="$5"
-MUSIC="${MUSIC:-$WORK/music.wav}"
 FPS=30
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -74,7 +73,6 @@ EXT=png
 CHUNKS_DIR="$WORK/chunks"
 mkdir -p "$CHUNKS_DIR"
 (( PNG )) && mkdir -p "$WORK/frames"
-trap 'rm -f "$WORK/premix.wav"' EXIT
 
 # A finished chunk has exactly its frames in the container; a killed encode leaves fewer and is redone
 chunk_ok() {
@@ -188,69 +186,7 @@ for (( c = 0; c < CHUNK_COUNT; c++ )); do
 done
 ffmpeg -v error -y -f concat -safe 0 -i "$CONCAT" -c copy "$CHUNKS_DIR/video.mp4"
 
-# The audio half of mix-encode.sh, unchanged: keep the two in sync when one changes
-shopt -s nullglob
-CLIP_WAVS=("$WORK"/clips/*.wav)
-shopt -u nullglob
-
-INPUTS=(-i "$VOICE")
-FILTER="[0:a]aresample=48000,apad=whole_dur=${DURATION},highpass=f=80,afftdn=nr=12:nf=-40:tn=1,deesser=i=0.4,equalizer=f=3500:t=q:w=1.2:g=2,acompressor=threshold=-18dB:ratio=3:attack=5:release=120,loudnorm=I=-16:TP=-2,aresample=48000,asplit=3[voice][vkey][ckey];"
-LAYERS="[voice]"
-COUNT=1
-NEXT=1
-
-if (( ${#CLIP_WAVS[@]} > 0 )); then
-  CLIP_LABELS=""
-  for wav in "${CLIP_WAVS[@]}"; do
-    INPUTS+=(-i "$wav")
-    FILTER+="[${NEXT}:a]aresample=48000[c${NEXT}];"
-    CLIP_LABELS+="[c${NEXT}]"
-    NEXT=$(( NEXT + 1 ))
-  done
-  FILTER+="${CLIP_LABELS}amix=inputs=${#CLIP_WAVS[@]}:normalize=0:duration=longest,apad=whole_dur=${DURATION},asplit=2[craw][cclip];"
-  FILTER+="[craw][ckey]sidechaincompress=threshold=0.03:ratio=6:attack=15:release=250[clips];"
-  FILTER+="[vkey][cclip]amix=inputs=2:normalize=0:duration=first[key];"
-  LAYERS+="[clips]"
-  COUNT=$(( COUNT + 1 ))
-else
-  FILTER+="[ckey]anullsink;[vkey]anull[key];"
-fi
-
-if [[ -f "$MUSIC" ]]; then
-  INPUTS+=(-i "$MUSIC")
-  FILTER+="[${NEXT}:a]aresample=48000,volume=0.22[mus];[mus][key]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=400[duck];"
-  LAYERS+="[duck]"
-  COUNT=$(( COUNT + 1 ))
-  NEXT=$(( NEXT + 1 ))
-else
-  FILTER+="[key]anullsink;"
-fi
-
-INPUTS+=(-i "$WORK/sfx.wav")
-FILTER+="[${NEXT}:a]aresample=48000,volume=0.5[fx];"
-LAYERS+="[fx]"
-COUNT=$(( COUNT + 1 ))
-
-ffmpeg -v error -y "${INPUTS[@]}" -filter_complex "\
-${FILTER}\
-${LAYERS}amix=inputs=${COUNT}:normalize=0:duration=longest,alimiter=limit=0.95,aresample=48000,atrim=0:${DURATION}[out]" \
-  -map "[out]" -c:a pcm_f32le "$WORK/premix.wav"
-
-# Measuring first lets pass 2 apply one static gain; loudnorm linear=true falls back to dynamic when the limited premix can't take the gain within TP
-MEASURED=$(ffmpeg -hide_banner -nostats -i "$WORK/premix.wav" -af loudnorm=I=-14:TP=-1.5:LRA=11:print_format=json -f null - 2>&1) || {
-  printf '%s\n' "$MEASURED" | tail -n 15 >&2
-  echo "loudnorm measurement failed on $WORK/premix.wav"; echo "Next: fix the ffmpeg error above and check that the voice file is valid audio"; exit 1; }
-GAIN_DB=$(printf '%s\n' "$MEASURED" | python3 -c '
-import json, re, sys
-match = re.search(r"\{[^{}]*\"input_i\"[^{}]*\}", sys.stdin.read(), re.S)
-if not match:
-    sys.exit(1)
-print("{:.2f}".format(-14 - float(json.loads(match.group(0))["input_i"])))
-') || { echo "Could not parse loudnorm measurement JSON for $WORK/premix.wav"; echo "Next: run ffmpeg -i premix.wav -af loudnorm=print_format=json -f null - and check its output"; exit 1; }
-
-# 0.8414 = -1.5 dBFS ceiling; the limiter catches peaks the gain pushes over it
-ffmpeg -v error -y -i "$WORK/premix.wav" \
-  -af "volume=${GAIN_DB}dB,alimiter=limit=0.8414:level=disabled,aresample=48000,apad=whole_dur=${DURATION},atrim=0:${DURATION}" "$WORK/mix.wav"
+bash "$SCRIPTS_DIR/mix-audio.sh" "$WORK" "$VOICE" "$DURATION" ${MUSIC:+"$MUSIC"}
 
 ffmpeg -v error -y -i "$CHUNKS_DIR/video.mp4" -i "$WORK/mix.wav" \
   -map 0:v -map 1:a -c:v copy \

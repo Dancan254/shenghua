@@ -25,6 +25,7 @@ skills/shenghua/
 ├── templates/                   visual theme engine + themes
 │   ├── kinetic.html             the shared HTML/JS engine + demo shots
 │   ├── board.html               the brand board: one kit shown in one theme, for approval
+│   ├── sounds.json              CC0 sound packs a kit's audio.pack can name: archive URLs, sha256, cue → files
 │   ├── templates.json           theme catalogue: canvas (dark/light), mood, extra fonts, motion profile
 │   └── themes/                  shared.css (kit tokens, backgrounds, people/footage blocks) + one CSS per theme
 ├── tests/                       unittest suite (numpy only), run from the repo root
@@ -47,8 +48,9 @@ skills/shenghua/
     ├── render-chunks.sh         default for finals: streams frames into the encoder in chunks, resumable, no frames directory
     ├── preview.py               serve a work dir with a browser shell: play/scrub/click-to-seek around renderAt; --check self-tests headless
     ├── contact-sheet.sh         stills → one review image
-    ├── synth_audio.py           cues.json → sfx.wav + music.wav
-    ├── mix-encode.sh            voice + ducked clip audio + ducked music + SFX → mp4; --10bit, --embed
+    ├── synth_audio.py           cues.json + the kit's audio block → sfx.wav + music.wav + mix.json
+    ├── mix-audio.sh             the soundtrack both encoders share: voice + ducked clip audio + ducked music + SFX → mix.wav
+    ├── mix-encode.sh            frames + mix-audio.sh → mp4; --10bit, --embed
     └── deliver.sh               master + web copy + captions + cover + credits.txt → delivery/
 ```
 
@@ -80,10 +82,10 @@ names, breaks this.
    the composition itself never auto-plays.
 2. **Every sound comes from a cue.** Helpers that make noise push into `window.SFX`;
    `synth_audio.py` must handle every cue `type` the template or `scene-blocks.md` documents. Adding a
-   cue type means changing both.
+   cue type means changing both, plus `brand_kit.CUE_TYPES` (a unit test holds the two in step).
 3. **Frame ranges are two arguments.** `render.js frames <html> <out> <from> <to>`. A single quoted
    `"from to"` renders zero frames; `render.js` rejects it — keep that check.
-4. **The mix pads to the full duration.** `mix-encode.sh` uses `apad` + `atrim`; without it `loudnorm`
+4. **The mix pads to the full duration.** `mix-audio.sh` (shared by `mix-encode.sh` and `render-chunks.sh`) uses `apad` + `atrim`; without it `loudnorm`
    trims the tail and the video comes out short.
 5. **The encoder caps bitrate.** Film grain defeats CRF alone; removing `-maxrate` produces 800 MB files.
    The encode also converts RGB frames with the BT.709 matrix and tags the stream BT.709; without both,

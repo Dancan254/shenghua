@@ -231,6 +231,8 @@ python3 SKILL_DIR/scripts/synth_audio.py "$work"/cues.json <duration> "$work" --
 
 Writes `sfx.wav` and `music.wav`. Pass the same `<template-id>` as Step 6: the music follows the theme's tempo, key and layers, and varies per video (the slug folder). Omit `--drop` if the video has no final slam; otherwise use the time of the last big hit. Optional pacing flags: `--drums-from <t>` brings the drums in at `<t>`; `--quiet <a>:<b>` ducks the music between `a` and `b` (repeatable). With `music` set to a file, pass `--no-music` and give that file to Step 10; with `none`, pass `--no-music` and nothing else.
 
+The kit's `audio` block (`references/brand-kits.md` → *Sound*) applies here without flags: a sound pack or the kit's own files replace synth cues, any cue can be quieter, louder or muted, the kit can bring its own music track, and its mix levels go into `mix.json` for Step 9 or 10. When the user asks for a different whoosh, quieter hits or their own music, change the kit, not the scripts; for one video only, pass the track to Step 10 instead.
+
 You cannot hear the result. Say so in the report and ask the user to listen.
 
 ## Step 9 — Render frames
