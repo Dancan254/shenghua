@@ -8,8 +8,9 @@ scene as kinetic typography and motion graphics timed to your words in your bran
 logos, adds sound design and a music bed that ducks under your voice, and renders a 1080×1920 Short, a
 1920×1080 landscape, a 1080×1080 square or a 1080×1350 portrait video.
 
-This repo ships one skill, `shenghua`. It is model-agnostic: it works in Claude Code, Kimi Code
-CLI, OpenCode, or any agent that can run shell commands. **New here? Start with the
+This repo ships one skill, `shenghua`. It is model-agnostic, built on the open
+[Agent Skills](https://agentskills.io) standard: it works in Claude Code, Kimi Code CLI, Codex CLI,
+Cursor, Gemini CLI, OpenCode, or any agent that can run shell commands. **New here? Start with the
 [step-by-step workflow](docs/workflow.md).**
 
 ![A 42-second Kafka vs RabbitMQ explainer made with this skill: word-synced captions, a message-queue diagram, stamps and kinetic type on the blueprint theme](docs/demo.gif)
@@ -26,8 +27,12 @@ your machine.
 
 ## What you get
 
-- **Word-level captions** with a highlight box that follows the word being spoken
+- **Word-level captions** with a highlight box that follows the word being spoken — word-by-word pop,
+  rise or fade motion depending on the theme, with keyword words landing in the accent colour
 - **A new shot every 1–4 seconds**, cut on the word, not the sentence
+- **Spring-physics motion**: `slam`/`pop`/`rise` take a `"spring"` ease, and `punchIn()`/`punchPulse()`
+  add Submagic-style push-ins and snap-zooms on emphasis beats — all deterministic, all pure functions of
+  the timeline
 - **Long-form YouTube videos too**: record and build a 30-minute explainer chapter by chapter, each one
   its own small project, then `assemble.py` joins them with one loudness pass, merged captions and
   ready-to-paste YouTube chapter timestamps. Diagrams hold and evolve instead of cutting every few
@@ -45,6 +50,10 @@ your machine.
 - **Real people, real footage**: mention a founder and the agent finds their photos and talks (Wikimedia
   Commons, Openverse, Internet Archive, web image search, YouTube, optional Pexels), shows them with a
   lower third, a picture-in-picture clip or a portrait quote, and hands you the credits for the description
+- **Quote the source**: name a paper or article passage and `excerpt.js` captures it from the URL or PDF
+  into a *document card* — the excerpt on screen in a framed card, a highlight box sweeping the exact
+  quoted lines as they're spoken, the source credited in the description
+- **Logo chips**: drop a small brand chip on screen when the video names a company or product
 - **Clip audio**: a speaking clip can carry its own sound, ducked under your narration
 - **Camera moves**: whips, punch-in zooms, micro-shake on hits
 - **Sound design**: 10 cue types (hits, whooshes, typing, ticks, risers…) placed by the timeline
@@ -55,7 +64,13 @@ your machine.
 - **Film finish**: grain, vignette, loudness normalised to −14 LUFS
 - **High-quality output**: frames rendered at 2x and saved lossless, encoded at CRF 16 with correct
   BT.709 colour, so edges stay crisp and brand colours stay true after the platform re-encodes it.
-  `VV_QUALITY=draft` gives a fast preview cut; `--resolution 4k` renders a 4K master
+  `VV_QUALITY=draft` gives a fast preview cut; `--resolution 4k` renders a 4K master — or
+  `--resolution source` matches whatever the recording was, with the bitrate cap scaling to the canvas
+  (16 Mbps at 1080p, up to 68 Mbps at 4K) and `check_quality.py` grading the master against the source
+  with a VMAF score
+- **A voice that stays clean**: `setup.sh --enhance` adds optional DeepFilterNet cleanup for noisy phone
+  recordings, and the music bed now breathes — it swells back up in the voice's pauses instead of staying
+  flat-ducked
 - **Ready to post**: `captions.srt`/`.vtt` subtitle files with every video, and an optional delivery
   step (`deliver.sh`) that assembles a `delivery/` folder — the master, a web-sized copy, the captions,
   a cover frame and a `credits.txt`
@@ -114,7 +129,7 @@ always produces the same video, however slow the machine.
 
 | | |
 |---|---|
-| A coding agent: [Claude Code](https://claude.com/claude-code), [Kimi Code CLI](https://www.kimi.com/code), or any agent that runs shell commands | runs the skill |
+| A coding agent: [Claude Code](https://claude.com/claude-code), [Kimi Code CLI](https://www.kimi.com/code), Codex CLI, Cursor, Gemini CLI, [OpenCode](https://opencode.ai), or any agent that runs shell commands | runs the skill |
 | Node 18+ | frame rendering |
 | Python 3.10+ with `faster-whisper` and `numpy` | transcription and sound synthesis |
 | FFmpeg | mixing and encoding |
@@ -153,7 +168,8 @@ Inside Kimi Code CLI:
 
 Then start a fresh session (`/new` in Kimi Code, or `/restart` in Claude Code).
 
-**Or copy it** into your personal skills:
+**Or copy it** into your personal skills — the skill follows the [Agent Skills](https://agentskills.io)
+standard, so the same folder works in every agent that reads `SKILL.md`:
 
 ```bash
 git clone https://github.com/Dancan254/shenghua
@@ -161,7 +177,20 @@ git clone https://github.com/Dancan254/shenghua
 cp -r shenghua/skills/shenghua ~/.claude/skills/
 # Kimi Code CLI
 cp -r shenghua/skills/shenghua ~/.kimi-code/skills/
+# Codex CLI (also read by OpenCode and Gemini CLI)
+cp -r shenghua/skills/shenghua ~/.agents/skills/
+# Cursor (2.4+)
+cp -r shenghua/skills/shenghua ~/.cursor/skills/
+# Gemini CLI
+cp -r shenghua/skills/shenghua ~/.gemini/skills/
+# OpenCode
+cp -r shenghua/skills/shenghua ~/.config/opencode/skills/
 ```
+
+One copy can serve several agents: OpenCode also reads `~/.claude/skills/` and `~/.agents/skills/`, so a
+skill installed for Claude Code or Codex shows up in OpenCode too. Any other agent that supports Agent
+Skills picks it up from its own skills directory the same way. Start a fresh session after copying —
+agents read skill metadata at session start.
 
 ### One-time setup
 

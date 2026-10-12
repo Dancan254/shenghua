@@ -49,3 +49,6 @@ html,body{width:var(--W);height:var(--H);overflow:hidden;background:var(--bg);fo
 #prog{position:absolute;left:0;bottom:0;height:6px;background:var(--accent);z-index:95}
 #sig{position:absolute;left:0;right:0;top:92px;text-align:center;font-family:"{{brand.fonts.mono}}",monospace;font-size:26px;color:rgba(0,0,0,.4);z-index:95}
 #sig b{color:var(--ink)}
+.logo-chip{background:var(--paper);border:1px solid var(--border);border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.08)}
+.doc-frame{background:var(--paper);border:1px solid var(--border);border-radius:8px;box-shadow:0 12px 40px rgba(0,0,0,.08)}
+.doc-src{color:var(--muted)}

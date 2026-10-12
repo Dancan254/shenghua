@@ -51,6 +51,18 @@ if [[ "$FRAME_EXT" == jpg ]]; then
 fi
 PRESET="${VV_PRESET:-$PRESET}"
 
+# The fill scales the bitrate cap with the canvas in render.json's encode block; 16M when absent
+MAXRATE_KBPS=$(python3 - "$WORK/render.json" <<'PY'
+import json, sys
+try:
+    print(int(json.load(open(sys.argv[1]))["encode"]["maxrate_kbps"]))
+except (OSError, ValueError, KeyError, TypeError):
+    print(16000)
+PY
+)
+[[ "$MAXRATE_KBPS" =~ ^[1-9][0-9]*$ ]] || MAXRATE_KBPS=16000
+BUFSIZE_KBPS=$(( MAXRATE_KBPS * 2 ))
+
 PIX_FMT=yuv420p
 X264_PROFILE=()
 if (( TEN_BIT )); then
@@ -78,7 +90,8 @@ ffmpeg -v error -nostats -progress pipe:1 -y \
   ${EMBED_ARGS[@]+"${EMBED_ARGS[@]}"} \
   -map 0:v -map 1:a \
   -vf "scale=out_color_matrix=bt709:out_range=tv:flags=lanczos+accurate_rnd+full_chroma_int,format=$PIX_FMT" \
-  -c:v libx264 -preset "$PRESET" -crf "$CRF" ${X264_PROFILE[@]+"${X264_PROFILE[@]}"} -maxrate 16M -bufsize 32M -x264-params aq-mode=3 \
+  -c:v libx264 -preset "$PRESET" -crf "$CRF" ${X264_PROFILE[@]+"${X264_PROFILE[@]}"} \
+  -maxrate "${MAXRATE_KBPS}k" -bufsize "${BUFSIZE_KBPS}k" -x264-params aq-mode=3 \
   -colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv \
   -c:a aac -b:a 256k -t "$DURATION" -movflags +faststart "$OUT" \
   | python3 -c '
@@ -118,6 +131,7 @@ LOUDNESS=$(ffmpeg -hide_banner -i "$WORK/mix.wav" -af ebur128 -f null - 2>&1 | a
 INFO=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of default=nw=1 "$OUT" | tr '\n' ' ')$(ffprobe -v error -show_entries format=duration,size -of default=nw=1 "$OUT" | tr '\n' ' ')
 NOTE=" · preset $PRESET"
 (( TEN_BIT )) && NOTE+=" · 10-bit"
+(( MAXRATE_KBPS != 16000 )) && NOTE+=" · maxrate $(( MAXRATE_KBPS / 1000 ))M"
 [[ -n "$CAPTIONS" ]] && NOTE+=" · captions: ${CAPTIONS% }"
 echo "$(basename "$OUT") · ${LOUDNESS} LUFS · ${INFO}${NOTE}"
 # The frames dir outlives its usefulness after a verified encode; say what it costs

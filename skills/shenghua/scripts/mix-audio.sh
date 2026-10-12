@@ -4,7 +4,9 @@
 # The audio half of mix-encode.sh and render-chunks.sh, so the two can never drift apart. Writes
 # <work-dir>/mix.wav. Voice is denoised, de-essed, compressed and normalised; clip audio and music duck
 # under it via sidechain, SFX sit on top, and the mix is padded/trimmed to the exact duration, then
-# measured, then given one linear gain to −14 LUFS with a −1.5 dBFS peak limiter.
+# measured, then given one linear gain to −14 LUFS with a −1.5 dBFS peak limiter. When mix.json carries
+# a duck array (synth_audio.py found pauses in words.js), the music also swells toward full level inside
+# each pause, on 150 ms ramps.
 # Music and SFX levels come from <work-dir>/mix.json (synth_audio.py writes it from the kit's
 # audio.levels); the music is the explicit music-file, else mix.json's music_file, else none.
 set -euo pipefail
@@ -83,7 +85,46 @@ fi
 
 if [[ -n "$MUSIC" ]]; then
   INPUTS+=(-i "$MUSIC")
-  FILTER+="[${NEXT}:a]aresample=48000,volume=${MUSIC_LEVEL}[mus];[mus][key]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=400[duck];"
+  # mix.json's duck array (synth_audio.py, from words.js pauses): swell the bed toward full level in
+  # each gap, 150 ms ramps in and out; the sidechain below still ducks it under the voice
+  DUCK_EXPR=$(python3 - "$WORK/mix.json" "$MUSIC_LEVEL" <<'PY'
+import json, sys
+try:
+    mix = json.load(open(sys.argv[1], encoding="utf-8"))
+except (FileNotFoundError, json.JSONDecodeError, OSError):
+    sys.exit(0)
+gaps = mix.get("duck") or []
+try:
+    music = float(sys.argv[2])
+except ValueError:
+    sys.exit(0)
+if not gaps or not 0 < music < 1:
+    sys.exit(0)
+boost = min(1.0 / music, 2.0)
+ramp = 0.15
+expr, built = "1", False
+for pair in reversed(gaps):
+    try:
+        a, b = float(pair[0]), float(pair[1])
+    except (TypeError, ValueError, IndexError):
+        continue
+    if b - a < 2 * ramp:
+        continue
+    expr = (f"if(lt(t,{a:.3f}),{expr},"
+            f"if(lt(t,{a + ramp:.3f}),1+{boost - 1:.4f}*(t-{a:.3f})/{ramp},"
+            f"if(lt(t,{b - ramp:.3f}),{boost:.4f},"
+            f"if(lt(t,{b:.3f}),1+{boost - 1:.4f}*({b:.3f}-t)/{ramp},{expr}))))")
+    built = True
+if built:
+    print(expr)
+PY
+  )
+  if [[ -n "$DUCK_EXPR" ]]; then
+    FILTER+="[${NEXT}:a]aresample=48000,volume=${MUSIC_LEVEL},volume='${DUCK_EXPR}':eval=frame[mus];"
+  else
+    FILTER+="[${NEXT}:a]aresample=48000,volume=${MUSIC_LEVEL}[mus];"
+  fi
+  FILTER+="[mus][key]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=400[duck];"
   LAYERS+="[duck]"
   COUNT=$(( COUNT + 1 ))
   NEXT=$(( NEXT + 1 ))
@@ -119,4 +160,5 @@ ffmpeg -v error -y -i "$WORK/premix.wav" \
 
 MUSIC_NOTE="none"
 [[ -n "$MUSIC" ]] && MUSIC_NOTE="$(basename "$MUSIC") at $MUSIC_LEVEL"
+[[ -n "${DUCK_EXPR:-}" ]] && MUSIC_NOTE+=" · swells in pauses"
 echo "mix.wav · music $MUSIC_NOTE · sfx at $SFX_LEVEL"

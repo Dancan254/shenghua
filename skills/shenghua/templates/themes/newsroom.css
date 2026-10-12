@@ -51,3 +51,6 @@ html,body{width:var(--W);height:var(--H);overflow:hidden;background:var(--bg);fo
 #prog{position:absolute;left:0;bottom:0;height:10px;background:var(--accent);z-index:95}
 #sig{position:absolute;left:0;right:0;top:92px;text-align:center;font-family:var(--display);font-size:30px;letter-spacing:.14em;text-transform:uppercase;color:color-mix(in srgb,var(--body) 60%,transparent);z-index:95}
 #sig b{color:var(--ink)}
+.logo-chip{background:var(--s1);border:none;border-top:8px solid var(--accent);border-radius:0;box-shadow:0 24px 60px rgba(0,0,0,.5)}
+.doc-frame{background:var(--s1);border:2px solid var(--border);border-top:10px solid var(--accent);border-radius:0;box-shadow:0 30px 80px rgba(0,0,0,.55)}
+.doc-src{color:var(--muted)}

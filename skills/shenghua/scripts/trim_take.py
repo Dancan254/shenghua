@@ -9,6 +9,10 @@ Run after transcribe.py. Writes a lossless trimmed voice.wav, shifts words.json 
 the first kept moment is t=0 (the originals stay as words.raw.json and transcript.raw.txt), and
 records the cut in take.json for key_greenscreen.py and extract_face.sh. The source video is never
 re-encoded. Re-running trims from the raw transcript again, so the cut can be adjusted freely.
+
+A video source is also probed once and recorded as take.json's "probe" block (dimensions, fps,
+codec, bitrate, HDR flag), so fill_template.py can scale the render to the source instead of
+assuming 1080p. Pure-audio sources get no probe block.
 """
 
 import argparse
@@ -22,6 +26,52 @@ from pathlib import Path
 from transcribe import probe_duration, split_phrases
 
 FPS = 30
+HDR_TRANSFERS = {"smpte2084", "pq", "hlg", "arib-std-b67"}
+
+
+def is_hdr(stream: dict) -> bool:
+    """An HDR transfer function or a BT.2020 gamut marks the stream as HDR."""
+    if (stream.get("color_transfer") or "").lower() in HDR_TRANSFERS:
+        return True
+    return any((stream.get(key) or "").lower().startswith("bt2020")
+               for key in ("color_primaries", "color_space"))
+
+
+def source_from_probe(probe: dict) -> dict | None:
+    """The take.json probe block from ffprobe -show_streams -show_format JSON; None for pure audio."""
+    video = next((s for s in probe.get("streams", []) if s.get("codec_type") == "video"), None)
+    if video is None:
+        return None
+    rate = video.get("avg_frame_rate") or video.get("r_frame_rate") or "0/1"
+    num, _, den = rate.partition("/")
+    try:
+        fps = float(num) / float(den or 1)
+    except ValueError:
+        fps = 0.0
+    bitrate = video.get("bit_rate") or probe.get("format", {}).get("bit_rate")
+    duration = video.get("duration") or probe.get("format", {}).get("duration")
+    return {
+        "width": int(video.get("width") or 0),
+        "height": int(video.get("height") or 0),
+        "fps": round(fps, 3),
+        "codec": video.get("codec_name") or "unknown",
+        "bitrate_kbps": round(int(bitrate) / 1000) if bitrate else None,
+        "hdr": is_hdr(video),
+        "duration": round(float(duration), 6) if duration else None,
+    }
+
+
+def probe_source(path: Path) -> dict | None:
+    """Best-effort probe of the recording; None when ffprobe fails or the source is pure audio."""
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_streams", "-show_format", "-of", "json", str(path)],
+        capture_output=True, text=True)
+    if out.returncode != 0:
+        return None
+    try:
+        return source_from_probe(json.loads(out.stdout))
+    except (ValueError, TypeError, AttributeError):
+        return None
 
 
 def edge(value, default):
@@ -68,6 +118,11 @@ def main() -> int:
     words = kept
     duration = cut_out - cut_in
 
+    probe = probe_source(args.source)
+    if probe and probe["hdr"]:
+        print(f"WARNING: the source video is HDR ({probe['codec']}); the render is SDR and HDR face "
+              "shots wash out — re-record in SDR if you can", file=sys.stderr)
+
     # The tail fades so a reach for the stop button never ends the video on a thump
     fade = min(1.0, max(0.0, duration - words[-1]["e"] + cut_in - 0.2))
     voice = args.work / "voice.wav"
@@ -88,8 +143,13 @@ def main() -> int:
             handle.write(f"[{phrase[0]['s']:.2f}] " + " ".join(f"{w['t']}@{w['s']:.2f}" for w in phrase) + "\n")
     take = {"source": str(args.source.resolve()), "in": round(cut_in, 6), "out": round(cut_out, 6),
             "duration": round(duration, 6), "firstFrame": first_frame, "fps": FPS}
+    if probe:
+        take["probe"] = probe
     (args.work / "take.json").write_text(json.dumps(take, indent=2) + "\n", encoding="utf-8")
 
+    if probe and abs(probe["fps"] - FPS) > 0.5:
+        print(f"source is {probe['fps']:g} fps; the edit renders at {FPS} fps "
+              "(motion cadence preserved, frames resampled)")
     excerpt = f" · excerpt: {dropped} words outside the cut dropped" if dropped else ""
     print(f"trimmed {cut_in:.2f}–{cut_out:.2f}s of {length:.2f}s → {duration:.2f}s · first word at "
           f"{shifted[0]['s']:.2f}s, last ends {shifted[-1]['e']:.2f}s{excerpt} · {voice}")

@@ -31,10 +31,11 @@ skills/shenghua/
 │   └── themes/                  shared.css (kit tokens, backgrounds, people/footage blocks) + one CSS per theme
 ├── tests/                       unittest suite (numpy only), run from the repo root
 └── scripts/
-    ├── setup.sh                 dependency check, playwright-core + Chromium, GSAP, fonts; --voices, --vision
+    ├── setup.sh                 dependency check, playwright-core + Chromium, GSAP, fonts; --voices, --vision, --enhance
     ├── speak.py                 script mode: script → voice.wav + speech.json/js + aligned words.json
     ├── transcribe.py            faster-whisper, word-level timestamps; config.json for model/device defaults
-    ├── trim_take.py             cut dead air: lossless voice.wav, word times shifted to 0, take.json
+    ├── trim_take.py             cut dead air: lossless voice.wav, word times shifted to 0, take.json (+ probe block for video)
+    ├── enhance_voice.py         optional DeepFilterNet cleanup: voice.wav → voice-clean.wav (setup.sh --enhance)
     ├── key_greenscreen.py       green-screen take → presenter/fNNNNN.webp with alpha, resumable; 30 fps edit frames
     ├── retime.py                re-time an edit onto a retake of the same script
     ├── build_captions.py        applies fixes.json → words.js + captions.srt/vtt
@@ -43,15 +44,17 @@ skills/shenghua/
     ├── fill_template.py         kit + theme + geometry + duration → work/index.html (or board.html); keeps authored shots
     ├── extract_face.sh          to-camera video → face/fNNNNN.jpg, numbered by edit frame
     ├── find_media.py            photo/video search (Commons, Openverse, Archive, Pexels, web, YouTube) + credits.json
+    ├── excerpt.js               article/PDF passage → excerpts/<name>.png + highlight box in excerpts.js + credits.json
     ├── extract_clip.sh          fetched clip → clips/<name>/fNNNNN.jpg (+ clips/<name>.wav)
     ├── render.js                stills | frames | stream | cues | check | board, driven by window.renderAt(t)
     ├── render-frames.sh         parallel frame rendering, resumable; --resolution 4k, --blur, --force
     ├── render-chunks.sh         default for finals: streams frames into the encoder in chunks, resumable, no frames directory
     ├── preview.py               serve a work dir with a browser shell: play/scrub/click-to-seek around renderAt; --check self-tests headless
     ├── contact-sheet.sh         stills → one review image
-    ├── synth_audio.py           cues.json + the kit's audio block → sfx.wav + music.wav + mix.json
+    ├── synth_audio.py           cues.json + the kit's audio block → sfx.wav + music.wav + mix.json (+ duck envelope from words.js)
     ├── mix-audio.sh             the soundtrack both encoders share: voice + ducked clip audio + ducked music + SFX → mix.wav
-    ├── mix-encode.sh            frames + mix-audio.sh → mp4; --10bit, --embed
+    ├── mix-encode.sh            frames + mix-audio.sh → mp4; --10bit, --embed; bitrate cap scales with the canvas
+    ├── check_quality.py         VMAF gate: encoded output vs source video, skips cleanly without libvmaf
     ├── deliver.sh               master + web copy + captions + cover + credits.txt → delivery/
     └── assemble.py              long form: chapters.json → one master, one loudness pass, merged captions, YouTube chapters
 ```
@@ -110,9 +113,10 @@ names, breaks this.
    other. A theme declares its canvas (`scheme`: dark or light) in `templates.json`; the kit's display font
    always wins, and a theme's own typeface (`templates.json` → `fonts`) is only its fallback.
 11. **Hosts are pure functions of `t`.** `renderHosts(t)` derives every mouth, blink and bob from `t` and
-   `speech.js`; a host never keeps state between frames. `speech.js` and `faces.js` always exist
-   (`fill_template.py` writes an empty one of each), so a recording without speakers or face
-   measurements renders hosts idle and photos unshifted rather than failing.
+   `speech.js`; a host never keeps state between frames. `speech.js`, `faces.js` and `excerpts.js` always
+   exist (`fill_template.py` writes an empty one of each), so a recording without speakers, face
+   measurements or captured excerpts renders hosts idle, photos unshifted and no document cards rather
+   than failing.
 12. **Characters are original.** The shipped hosts are original designs. Never add a host that imitates an
    existing cartoon, film or game character.
 13. **Scripts fail loud.** Every script prints a one-line result and a `Next:` line, and on failure names
@@ -133,9 +137,11 @@ names, breaks this.
   are called from zsh too — never rely on word splitting.
 - **Python:** 3.10+, standard library plus `numpy` and `faster-whisper` only (`find_media.py` uses `urllib`;
   `speak.py` alone also needs `kokoro-onnx`, installed by `setup.sh --voices`; `key_greenscreen.py` and
-  `find_media.py` use `opencv` only when `setup.sh --vision` installed it). `argparse`, a `main()`
+  `find_media.py` use `opencv` only when `setup.sh --vision` installed it; `enhance_voice.py` needs
+  `deepfilternet`, installed by `setup.sh --enhance`). `argparse`, a `main()`
   returning an exit code, errors to stderr.
-- **JavaScript:** `render.js` depends on `playwright-core` only; the template on GSAP only.
+- **JavaScript:** `render.js` and `excerpt.js` depend on `playwright-core` only; the template on GSAP
+  only. `excerpt.js --pdf` also needs `pdftoppm` (poppler) on PATH, an external binary like ffmpeg.
 - **Comments** explain *why*, never *what*. One line.
 - **No new dependency** without a reason in the PR description and an entry in `THIRD_PARTY.md`.
 

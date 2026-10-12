@@ -25,6 +25,7 @@ machine, and each stays under its own licence.
 | [ONNX Runtime](https://github.com/microsoft/onnxruntime) *(installed with kokoro-onnx)* | running the voice model on CPU | MIT |
 | [opencv-python-headless](https://github.com/opencv/opencv-python) *(optional, pip, `setup.sh --vision`)* | face detection for presenter framing and photo cropping | Apache 2.0 |
 | [YuNet face detector](https://github.com/opencv/opencv_zoo/tree/master/models/face_detection_yunet) `face_detection_yunet_2023mar.onnx` *(optional, downloaded by `setup.sh --vision`)* | the face detection model | Apache 2.0 |
+| [DeepFilterNet](https://github.com/Rikorose/DeepFilterNet) *(optional, pip, `setup.sh --enhance`)* | voice cleanup (noise reduction) for enhance_voice.py; downloads its own model on first run | MIT |
 | [yt-dlp](https://github.com/yt-dlp/yt-dlp) *(optional, not installed by setup.sh)* | YouTube search and downloads; fetches its own [EJS](https://github.com/yt-dlp/yt-dlp/wiki/EJS) challenge solver on first use | Unlicense |
 
 ## Photos, clips and logos in your videos
