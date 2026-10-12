@@ -52,3 +52,6 @@ html,body{width:var(--W);height:var(--H);overflow:hidden;background:var(--bg);fo
 #sig{position:absolute;left:0;right:0;top:92px;text-align:center;font-family:"{{brand.fonts.mono}}",monospace;font-size:28px;color:color-mix(in srgb,var(--brand-text) 60%,transparent);z-index:95}
 #sig b{color:var(--ink)}
 .quote cite{color:var(--body);opacity:.8}
+.logo-chip{background:color-mix(in srgb,var(--brand-text) 10%,transparent);border:1px solid color-mix(in srgb,var(--brand-text) 30%,transparent);border-radius:99px;backdrop-filter:blur(20px);box-shadow:0 24px 60px rgba(0,0,0,.35)}
+.doc-frame{background:color-mix(in srgb,var(--brand-text) 8%,transparent);border:1px solid color-mix(in srgb,var(--brand-text) 25%,transparent);border-radius:28px;box-shadow:0 30px 80px rgba(0,0,0,.45)}
+.doc-src{color:var(--muted)}

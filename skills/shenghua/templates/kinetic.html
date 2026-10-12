@@ -41,14 +41,28 @@
 <script src="speech.js"></script>
 <!-- face positions measured by key_greenscreen.py and find_media.py (only with setup.sh --vision); window.FACES={} otherwise -->
 <script src="faces.js"></script>
+<!-- excerpt.js (docCard captures) writes this; fill_template.py writes window.EXCERPTS={} otherwise -->
+<script src="excerpts.js"></script>
 <script>
 const D = {{duration}}, E = "power2.out", EI = "power2.inOut", EX = "expo.out";
 const tl = gsap.timeline({paused:true});
-// Per-theme motion profile from templates.json: default entry, shake and flash strength, caption pulse
+// Per-theme motion profile from templates.json: default entry, shake and flash strength, caption pulse, caption style
 const BRAND = {{brand.json}};
-const THEME = Object.assign({enter:null, shake:1, flash:1, pulse:1}, {{theme.motion}});
+const THEME = Object.assign({enter:null, shake:1, flash:1, pulse:1, captions:null}, {{theme.motion}});
 const SFX = [];
 const q = s => document.querySelector(s);
+
+// An analytic damped spring as a pure function of progress: stiffness sets the speed, damping the
+// overshoot. Anywhere a GSAP ease string goes, springEase() fits; pop/slam/rise also take "spring"
+function springEase(stiffness=170, damping=12){
+  const w0 = Math.sqrt(stiffness), z = damping/(2*w0);
+  let f;
+  if(z >= 1){ f = p => 1 - (1 + w0*p)*Math.exp(-w0*p); }   // critical damping or stiffer: no overshoot
+  else { const wd = w0*Math.sqrt(1-z*z); f = p => 1 - Math.exp(-z*w0*p)*(Math.cos(wd*p) + z*w0/wd*Math.sin(wd*p)); }
+  const end = f(1);
+  return p => p<=0 ? 0 : p>=1 ? 1 : f(p)/end;
+}
+const asEase = (ease, fallback) => ease == null ? fallback : ease === "spring" ? springEase() : ease;
 
 // Every shot registers its window so `render.js check` can seek to each one without the shot list
 const SHOTS = [];
@@ -76,12 +90,15 @@ function hit(t, power=1){
   tl.fromTo("#cam",{x:-18*power,y:10*power},{keyframes:[{x:14*power,y:-8*power,duration:.04},{x:-8*power,y:6*power,duration:.04},{x:0,y:0,duration:.08}],immediateRender:false},t);
   tl.fromTo("#flash",{opacity:.35*flash},{opacity:0,duration:.3,ease:E,immediateRender:false},t);
 }
-function slam(sel, t, power=1){
-  tl.fromTo(sel,{scale:2.4,opacity:0,filter:"blur(20px)"},{scale:1,opacity:1,filter:"blur(0px)",duration:.22,ease:EX},t-.08);
+function slam(sel, t, power=1, ease){
+  tl.fromTo(sel,{scale:2.4,opacity:0,filter:"blur(20px)"},{scale:1,opacity:1,filter:"blur(0px)",duration:.22,ease:asEase(ease,EX)},t-.08);
   hit(t, power);
 }
-function rise(sel, t, d=.45){ tl.fromTo(sel,{y:70,opacity:0},{y:0,opacity:1,duration:d,ease:EX},t); }
-function pop(sel, t){ tl.fromTo(sel,{scale:.4,opacity:0},{scale:1,opacity:1,duration:.4,ease:"back.out(2)"},t); SFX.push({t,type:"pop"}); }
+function rise(sel, t, d=.45, ease){ tl.fromTo(sel,{y:70,opacity:0},{y:0,opacity:1,duration:d,ease:asEase(ease,EX)},t); }
+function pop(sel, t, d=.4, ease){
+  if(typeof d !== "number"){ ease = d; d = .4; }   // pop(sel, t, "spring")
+  tl.fromTo(sel,{scale:.4,opacity:0},{scale:1,opacity:1,duration:d,ease:asEase(ease,"back.out(2)")},t); SFX.push({t,type:"pop"});
+}
 // One pop per matched element, gap seconds apart: a list, a grid of cards, a row of chips
 function stagger(sel, t, gap=.09){
   document.querySelectorAll(sel).forEach((el,i)=>{
@@ -95,6 +112,15 @@ function drift(sel, s, e, from, to){ tl.fromTo(sel,from,{...to,duration:e-s,ease
 function kenBurns(sel, s, e, dir="in"){
   const wide = {scale:1, xPercent:0}, close = {scale:1.18, xPercent:dir==="left"?-4:dir==="right"?4:0};
   tl.fromTo(sel, dir==="out"?close:wide, {...(dir==="out"?wide:close), duration:e-s, ease:"none"}, s);
+}
+// A smooth ease-in-out push on a held frame (a face shot, a photo, a clip) between two times;
+// replaces kenBurns, never stacks with it — one scale tween per element
+function punchIn(sel, t0, t1, scale=1.08){
+  tl.fromTo(sel,{scale:1},{scale,duration:t1-t0,ease:"sine.inOut"},t0);
+}
+// A ~0.3s snap zoom and settle on one emphasis word; silent — pair with hit() if it needs a sound
+function punchPulse(sel, t, amount=.08){
+  tl.fromTo(sel,{scale:1},{keyframes:[{scale:1+amount,duration:.08,ease:"power3.out"},{scale:1,duration:.22,ease:"power2.inOut"}],immediateRender:false},t);
 }
 function lowerThird(sel, s, e){
   tl.fromTo(sel,{clipPath:"inset(0% 100% 0% 0%)"},{clipPath:"inset(0% 0% 0% 0%)",duration:.45,ease:EX},s);
@@ -224,6 +250,28 @@ function check(sel, t){ tl.fromTo(sel,{scale:.4,opacity:0},{scale:1,opacity:1,du
 function cross(sel, t){ tl.fromTo(sel,{scale:.4,opacity:0},{scale:1,opacity:1,duration:.35,ease:"back.out(2)"},t); SFX.push({t, type:"error"}); }
 function fadeOut(sel, t, d=.3){ tl.fromTo(sel,{opacity:1},{opacity:0,duration:d,ease:E,immediateRender:false},t); }
 function slide(sel, x0, x1, t, d=.9){ tl.fromTo(sel,{left:x0},{left:x1,duration:d,ease:"power2.inOut"},t); SFX.push({t, type:"whoosh"}); }
+// A quoted excerpt from a paper or article (excerpt.js captures the image and the highlight box):
+// the passage in a framed card, the source title below, the accent box drawing over the quoted lines
+const EXCERPTS = window.EXCERPTS || {};
+function docCard(containerSel, name, t0, t1){
+  const ex = EXCERPTS[name];
+  if(!ex) throw new Error(`excerpts.js has no excerpt "${name}" — run: node scripts/excerpt.js <work> <url> --text "the quoted passage" --name ${name}`);
+  const card = document.createElement("div");
+  card.className = "doc-card";
+  card.innerHTML = `<div class="doc-frame"><img alt=""><i class="doc-hl"></i></div><div class="doc-src"></div>`;
+  card.querySelector("img").src = ex.image;
+  card.querySelector(".doc-src").textContent = (ex.source && ex.source.title) || "";
+  q(containerSel).appendChild(card);
+  tl.set(card,{visibility:"visible"},t0);
+  tl.fromTo(card,{y:60,opacity:0},{y:0,opacity:1,duration:.45,ease:EX},t0);
+  const hl = card.querySelector(".doc-hl");
+  if(ex.highlight){
+    const {x, y, w, h} = ex.highlight;
+    hl.style.left = x*100+"%"; hl.style.top = y*100+"%"; hl.style.width = w*100+"%"; hl.style.height = h*100+"%";
+    tl.fromTo(hl,{scaleX:0},{scaleX:1,duration:.4,ease:"power2.inOut"},t0+.3);
+  } else hl.style.display = "none";
+  tl.set(card,{visibility:"hidden"},t1);
+}
 // A chapter card is its own shot; the speaker steps out for it
 function chapter(id, s, e, number, title){
   const el = document.createElement("section");
@@ -406,30 +454,51 @@ const NOCAP = [[0,2.7],[4.1,5.6]];
 
 // "phrase": the whole phrase shows dimmed, one pulse, the theme marks the spoken word.
 // "pop": each word pops in on its own timestamp, the theme still marks the spoken word.
+// "rise": each word rises in on its own timestamp — pop's pacing without the scale.
+// "fade": the whole phrase fades in once; the calmest style.
 // "off": no burned-in captions (long-form: upload captions.srt instead).
-const CAP_STYLE = "phrase";
+// null: the theme's pick (templates.json → motion.captions), falling back to "phrase".
+const CAP_STYLE = null;
+const CAP = CAP_STYLE || THEME.captions || "phrase";
+// Pop captions tick once per keyword at the word's own timestamp — quiet by default: keywords only,
+// and never inside a NOCAP window where the captions are hidden
+if(CAP === "pop") (window.PHRASES || []).forEach(p => p.forEach(w => {
+  if(w.k && !NOCAP.concat(SAID).some(([a,b]) => w.s >= a && w.s < b)) SFX.push({t:w.s, type:"tick", dur:.07});
+}));
 
 const capbox = q("#capbox"); let lastPhrase = -1;
 function renderCaptions(t){
   // words.js may still be the empty placeholder on a preview render, before transcription
   const PH = window.PHRASES || [];
-  const hidden = CAP_STYLE === "off" || NOCAP.concat(SAID).some(([a,b])=>t>=a&&t<b);
+  const hidden = CAP === "off" || NOCAP.concat(SAID).some(([a,b])=>t>=a&&t<b);
   const idx = PH.findIndex((p,i)=>{const n=PH[i+1];return t>=p[0].s-.05 && t<(n?Math.min(n[0].s-.05,p[p.length-1].e+.6):p[p.length-1].e+.6);});
   if(hidden || idx<0){ capbox.style.visibility="hidden"; return; }
   capbox.style.visibility="visible";
   if(idx!==lastPhrase){ capbox.innerHTML = PH[idx].map(w=>`<span>${w.t}</span>`).join(""); lastPhrase = idx; }
   const state = w => (t>=w.e?"on":(t>=w.s?"now":"")) + (w.k?" kw":"");
-  if(CAP_STYLE === "pop"){
+  if(CAP === "pop" || CAP === "rise"){
     capbox.style.transform = "none";
     // A pure function of t, like everything else, so any frame can be rendered alone
     [...capbox.children].forEach((el,i)=>{
       const w = PH[idx][i];
       el.className = state(w);
-      if(t < w.s){ el.style.opacity = 0; el.style.transform = "scale(.6)"; return; }
-      const k = Math.min(1,(t-w.s)/.14), overshoot = 1+.45*(1-k)*(1-k)*THEME.pulse;
-      el.style.opacity = 1;
-      el.style.transform = `scale(${overshoot.toFixed(3)})`;
+      if(t < w.s){ el.style.opacity = 0; el.style.transform = CAP === "pop" ? "scale(.6)" : "translateY(26px)"; return; }
+      if(CAP === "pop"){
+        const k = Math.min(1,(t-w.s)/.14), overshoot = 1+.45*(1-k)*(1-k)*THEME.pulse;
+        el.style.opacity = 1;
+        el.style.transform = `scale(${overshoot.toFixed(3)})`;
+      } else {
+        const k = Math.min(1,(t-w.s)/.18);
+        el.style.opacity = k.toFixed(3);
+        el.style.transform = `translateY(${((1-k)*26).toFixed(1)}px)`;
+      }
     });
+    return;
+  }
+  if(CAP === "fade"){
+    capbox.style.transform = "none";
+    capbox.style.opacity = Math.min(1,(t-PH[idx][0].s)/.3).toFixed(3);
+    [...capbox.children].forEach((el,i)=>{ el.className = state(PH[idx][i]); });
     return;
   }
   const pulse = Math.max(0,1-(t-PH[idx][0].s)/.15);

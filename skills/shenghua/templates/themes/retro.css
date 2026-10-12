@@ -52,3 +52,7 @@ html,body{width:var(--W);height:var(--H);overflow:hidden;background:var(--crt);f
 #prog{position:absolute;left:0;bottom:0;height:8px;background:var(--phosphor);z-index:95;box-shadow:0 0 12px var(--phosphor)}
 #sig{position:absolute;left:0;right:0;top:92px;text-align:center;font-family:"{{brand.fonts.mono}}","Courier New",monospace;font-size:26px;color:color-mix(in srgb,var(--phosphor) 45%,transparent);z-index:95}
 #sig b{color:var(--phosphor)}
+.logo-chip{background:var(--crt-panel);border:2px solid var(--crt-frame);border-radius:4px;box-shadow:0 0 24px color-mix(in srgb,var(--phosphor) 15%,transparent)}
+.doc-frame{background:var(--crt-panel);border:2px solid var(--crt-frame);border-radius:4px;box-shadow:0 0 40px color-mix(in srgb,var(--phosphor) 12%,transparent)}
+.doc-hl{background:color-mix(in srgb,var(--phosphor) 20%,transparent);border-color:var(--phosphor);border-radius:2px;box-shadow:0 0 14px color-mix(in srgb,var(--phosphor) 40%,transparent)}
+.doc-src{color:var(--crt-dim)}

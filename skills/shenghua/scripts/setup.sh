@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# setup.sh [--voices] [--vision] [kit] — one-time setup for shenghua. Safe to re-run.
+# setup.sh [--voices] [--vision] [--enhance] [kit] — one-time setup for shenghua. Safe to re-run.
 # --voices also fetches script mode's voice model (~350 MB) and the configured whisper
 # word-alignment model (base by default, ~145 MB), once.
 # --vision sets up the optional face detector: opencv-python-headless (pip) plus the YuNet model
 # (~300 KB), recorded in config.json; without it every step works exactly as before.
+# --enhance pip-installs deepfilternet (user-level) for enhance_voice.py's voice cleanup; never
+# installed by default.
 set -euo pipefail
 
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -18,11 +20,13 @@ YUNET_URL="https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_y
 CONFIG_FILE="${VV_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/shenghua/config.json}"
 VOICES=0
 VISION=0
+ENHANCE=0
 while [[ "${1:-}" == --* ]]; do
   case "$1" in
     --voices) VOICES=1 ;;
     --vision) VISION=1 ;;
-    *) echo "unknown option $1 (usage: setup.sh [--voices] [--vision] [kit])" >&2; exit 1 ;;
+    --enhance) ENHANCE=1 ;;
+    *) echo "unknown option $1 (usage: setup.sh [--voices] [--vision] [--enhance] [kit])" >&2; exit 1 ;;
   esac
   shift
 done
@@ -198,6 +202,22 @@ PY
   echo "vision ready · $YUNET_DIR/$YUNET_MODEL (recorded in $CONFIG_FILE)"
 fi
 
+if (( ENHANCE )); then
+  if command -v deepFilter >/dev/null; then
+    echo "enhance ready · $(command -v deepFilter)"
+  else
+    echo "installing deepfilternet (pip --user) for voice cleanup"
+    if ! python3 -m pip install --user deepfilternet; then
+      echo "could not install deepfilternet"
+      echo "Next: pip install deepfilternet by hand, then re-run setup.sh --enhance"
+      exit 1
+    fi
+    command -v deepFilter >/dev/null \
+      || echo "note: deepFilter installed but not on PATH — add $(python3 -m site --user-base)/bin to it"
+    echo "enhance ready · deepfilternet (user-level pip)"
+  fi
+fi
+
 # YouTube clips are optional; everything else works without them
 if ! command -v yt-dlp >/dev/null; then
   echo "optional: yt-dlp not found — YouTube clips disabled (pipx install yt-dlp)"
@@ -205,6 +225,10 @@ fi
 # Face detection is optional too; without it framing and crops behave as they always have
 if ! python3 -c "import cv2" 2>/dev/null; then
   echo "optional: opencv not found — face detection disabled (pip install opencv-python-headless, then setup.sh --vision)"
+fi
+# Voice cleanup is optional as well; enhance_voice.py reports it missing until then
+if ! command -v deepFilter >/dev/null; then
+  echo "optional: deepFilter not found — voice cleanup disabled (setup.sh --enhance)"
 fi
 
 echo "ready · kit $KIT_NAME"

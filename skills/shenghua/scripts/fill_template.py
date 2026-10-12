@@ -2,7 +2,7 @@
 """Copy the composition template into a work directory with every placeholder filled.
 
   fill_template.py <work-dir> <duration> [--format vertical|landscape|square|portrait]
-                   [--resolution 1080p|4k] [--brand kit] [--template id] [--board] [--force]
+                   [--resolution 1080p|4k|source] [--brand kit] [--template id] [--board] [--force]
 
 Brand kit resolution order: --brand (a kit folder or its brand.json), ./brand.json,
 ~/.config/shenghua/brand.json, then the bundled brand.example.json. setup.sh must have
@@ -24,7 +24,10 @@ format or duration change keeps the edit; --force replaces the composition with 
 
 vendor/ and kit/ are copies, not symlinks, so a project survives skill updates and being moved
 to another machine. --resolution 4k writes render.json with scale 2: render-frames.sh renders
-at 2x device pixels and saves at 2x (no downscale) for a 2160x3840 master.
+at 2x device pixels and saves at 2x (no downscale) for a 2160x3840 master. --resolution source
+reads take.json's probe block (trim_take.py) and picks the scale whose canvas matches the source's
+pixel count. Every fill also records encode.maxrate_kbps in render.json — the encoders' bitrate
+cap, scaled to the canvas pixels.
 """
 
 import argparse
@@ -48,6 +51,21 @@ FORMATS = {
 }
 FPS = 30
 RESOLUTIONS = {"1080p": 1, "4k": 2}
+# Grain defeats CRF alone, so the bitrate cap scales with the canvas: 16 Mbps at 1080x1920
+MAXRATE_MIN, MAXRATE_MAX = 16000, 68000
+
+
+def source_scale(source_w, source_h, base_w, base_h):
+    """The render scale (1 or 2 — render.js's only values) whose canvas comes closest to the
+    source's pixel count."""
+    base, source = base_w * base_h, source_w * source_h
+    return min((1, 2), key=lambda s: abs(s * s * base - source))
+
+
+def maxrate_kbps(width, height, scale):
+    """Bitrate cap for the canvas: 16 Mbps per 1920x1080 of output pixels, clamped."""
+    pixels = width * height * scale * scale
+    return min(MAXRATE_MAX, max(MAXRATE_MIN, round(16000 * pixels / (1920 * 1080))))
 
 # The authored regions of a composition, carried over on a re-fill
 BLOCKS = {
@@ -148,8 +166,9 @@ def main() -> int:
     parser.add_argument("duration", type=float, nargs="?", default=None,
                         help="composition length in seconds; optional with --relink")
     parser.add_argument("--format", choices=FORMATS, default="vertical")
-    parser.add_argument("--resolution", choices=RESOLUTIONS, default="1080p",
-                        help="4k records render scale 2 in render.json for a 2x master")
+    parser.add_argument("--resolution", choices=[*RESOLUTIONS, "source"], default="1080p",
+                        help="4k records render scale 2 in render.json for a 2x master; "
+                             "source matches the probed recording's pixel count")
     parser.add_argument("--brand", type=Path, default=None, help="brand kit folder or its brand.json")
     parser.add_argument("--template", default=None, help="theme id from templates/templates.json")
     parser.add_argument("--board", action="store_true", help="write board.html, the kit shown in this theme")
@@ -192,6 +211,7 @@ def main() -> int:
         write_placeholder(args.work / "words.js", "window.PHRASES=[];")
         write_placeholder(args.work / "speech.js", "window.SPEECH=[];")
         write_placeholder(args.work / "faces.js", "window.FACES={};")
+        write_placeholder(args.work / "excerpts.js", "window.EXCERPTS={};")
         print(f"relinked {args.work}: vendor/ and kit/ re-installed (kit {manifest['name'] or root}); {index} untouched")
         print("Next: re-run the render that failed")
         return 0
@@ -212,6 +232,20 @@ def main() -> int:
     colors = brand_kit.palette(kit, template.get("scheme"))
     background = manifest["background"]
     geometry = FORMATS[args.format]
+    if args.resolution == "source":
+        take_path = args.work / "take.json"
+        try:
+            probe = json.loads(take_path.read_text(encoding="utf-8")).get("probe")
+        except (OSError, ValueError):
+            probe = None
+        if not probe or not probe.get("width") or not probe.get("height"):
+            print("no probed source — run trim_take.py on the video first, or pass --resolution 1080p or 4k",
+                  file=sys.stderr)
+            print("Next: trim_take.py records the source's pixels in take.json's probe block", file=sys.stderr)
+            return 1
+        scale = source_scale(probe["width"], probe["height"], geometry["width"], geometry["height"])
+    else:
+        scale = RESOLUTIONS[args.resolution]
     values = {
         "width": geometry["width"],
         "height": geometry["height"],
@@ -279,6 +313,8 @@ def main() -> int:
     write_placeholder(args.work / "speech.js", "window.SPEECH=[];")
     # key_greenscreen.py and find_media.py write faces.js when the vision detector ran
     write_placeholder(args.work / "faces.js", "window.FACES={};")
+    # excerpt.js rewrites this with real captures; empty means docCard() stays unused, not a page error
+    write_placeholder(args.work / "excerpts.js", "window.EXCERPTS={};")
     # kits/ and sounds/ stay out of vendor: each project gets only its own kit, sounds included, below
     install(args.work / "vendor", SKILL_DIR / "assets", ignore=shutil.ignore_patterns("kits", "sounds", "music"))
     # Re-copied every run, so switching kits in one work dir never renders the old brand
@@ -286,11 +322,12 @@ def main() -> int:
     # render-frames.sh reads scale: render at 2x device pixels, save at scale x CSS pixels
     (args.work / "render.json").write_text(json.dumps({
         "width": geometry["width"], "height": geometry["height"], "format": args.format,
-        "resolution": args.resolution, "scale": RESOLUTIONS[args.resolution], "duration": args.duration,
+        "resolution": args.resolution, "scale": scale, "duration": args.duration,
+        "encode": {"maxrate_kbps": maxrate_kbps(geometry["width"], geometry["height"], scale)},
     }, indent=2) + "\n", encoding="utf-8")
 
     kept = " · kept the existing shots" if carried else ""
-    size = f"{geometry['width'] * RESOLUTIONS[args.resolution]}x{geometry['height'] * RESOLUTIONS[args.resolution]}"
+    size = f"{geometry['width'] * scale}x{geometry['height'] * scale}"
     res = f" · {args.resolution} ({size})" if args.resolution != "1080p" else ""
     print(f"{out} · {geometry['width']}x{geometry['height']}{res} · {args.duration:g}s · template {template['id']} · kit {manifest['name'] or root}{kept}")
     if args.board:

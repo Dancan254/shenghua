@@ -51,3 +51,6 @@ html,body{width:var(--W);height:var(--H);overflow:hidden;background:var(--bg);fo
 #prog{position:absolute;left:0;bottom:0;height:5px;background:var(--body);z-index:95;opacity:.7}
 #sig{position:absolute;left:0;right:0;top:92px;text-align:center;font-family:"{{brand.fonts.mono}}",monospace;font-size:24px;letter-spacing:.2em;color:color-mix(in srgb,var(--body) 45%,transparent);z-index:95}
 #sig b{color:var(--ink)}
+.logo-chip{background:var(--s1);border:1px solid var(--border);border-radius:4px;box-shadow:0 24px 60px rgba(0,0,0,.6)}
+.doc-frame{border:1px solid var(--border);border-radius:4px;box-shadow:0 30px 90px rgba(0,0,0,.7)}
+.doc-src{color:var(--muted)}

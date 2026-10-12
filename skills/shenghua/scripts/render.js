@@ -16,6 +16,7 @@
  * edges, no JPEG chroma bleed on red text). VV_QUALITY=draft saves 1x JPEG instead, ~4x faster.
  * VV_SCALE=2 (render-frames.sh --resolution 4k, or a 4k fill's render.json) keeps the composition
  * at 1080p but saves the 2x device pixels at full size — a 2160x3840 master with no downscale.
+ * VV_BLUR_SAMPLES=N overrides the subframes count when blur is on, for a fast draft approximation.
  */
 const path = require('path');
 const fs = require('fs');
@@ -42,9 +43,16 @@ const isFrameMode = mode === 'frames' || mode === 'stream';
 if (isFrameMode && (Number.isNaN(Number(range.to)) || Number.isNaN(Number(range.from)) || range.to === undefined)) {
   usage(`${mode} needs <from-frame> <to-frame> as two separate numbers, got: ${range.from} ${range.to}`);
 }
-const subframes = Number(range.sub ?? 1);
+let subframes = Number(range.sub ?? 1);
 if (isFrameMode && !(/^\d+$/.test(String(range.sub ?? 1)) && subframes >= 1 && subframes <= 16)) {
   usage(`${mode} [subframes] must be an integer from 1 to 16, got: ${range.sub}`);
+}
+const blurSamplesEnv = process.env.VV_BLUR_SAMPLES;
+if (blurSamplesEnv !== undefined) {
+  if (!/^\d+$/.test(blurSamplesEnv) || Number(blurSamplesEnv) < 2 || Number(blurSamplesEnv) > 16) {
+    usage(`VV_BLUR_SAMPLES must be an integer from 2 to 16, got: ${blurSamplesEnv}`);
+  }
+  if (subframes > 1) subframes = Number(blurSamplesEnv);
 }
 
 // vendor/ and kit/ link into the skill's install dir; an update moves that dir and the links
@@ -421,6 +429,7 @@ if (dangling.length) {
     }, { width: size.width * clip.scale, height: size.height * clip.scale });
     for (let f = Number(range.from); f < Number(range.to); f++) {
       await blend.evaluate(() => window.blendSum.fill(0));
+      // VV_BLUR_SAMPLES may have lowered `subframes` so a draft approximates the blur cheaply
       for (let k = 0; k < subframes; k++) {
         // 180° shutter: sub-frames span half a frame, so renderAt's Math.round keeps frame f's grain and footage
         await page.evaluate(x => window.renderAt(x), f / FPS + k / (2 * subframes * FPS));

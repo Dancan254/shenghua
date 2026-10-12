@@ -50,3 +50,6 @@ html,body{width:var(--W);height:var(--H);overflow:hidden;background:var(--bg);fo
 #prog{position:absolute;left:0;bottom:0;height:10px;background:var(--accent);z-index:95;box-shadow:0 0 20px var(--accent)}
 #sig{position:absolute;left:0;right:0;top:92px;text-align:center;font-family:"{{brand.fonts.mono}}",monospace;font-size:30px;color:rgba(255,255,255,.55);z-index:95}
 #sig b{color:var(--ink)}
+.logo-chip{background:linear-gradient(160deg,var(--s2),var(--s1));border:2px solid var(--border);border-radius:34px;box-shadow:0 24px 60px rgba(0,0,0,.5),0 0 44px color-mix(in srgb,var(--accent) 20%,transparent)}
+.doc-frame{border-color:var(--border);border-radius:24px;box-shadow:0 30px 80px rgba(0,0,0,.55)}
+.doc-src{color:var(--muted)}

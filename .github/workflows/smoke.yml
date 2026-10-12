@@ -43,6 +43,32 @@ jobs:
             python3 -m json.tool "$file" > /dev/null || { echo "::error file=$file::invalid JSON"; exit 1; }
           done
 
+      # Strict hosts (Codex, Cursor, Gemini CLI) load SKILL.md by the agentskills.io spec;
+      # an over-limit description gets the skill rejected or truncated at load time
+      - name: SKILL.md frontmatter follows the Agent Skills spec
+        run: |
+          python3 - "$SKILL/SKILL.md" <<'PY'
+          import re, sys
+          text = open(sys.argv[1]).read()
+          m = re.match(r"^---\n(.*?)\n---\n", text, re.S)
+          if not m:
+              sys.exit("::error::SKILL.md has no YAML frontmatter")
+          fm = m.group(1)
+          errors = []
+          name = re.search(r"^name: (.*)$", fm, re.M)
+          if not name or not re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", name.group(1)) or len(name.group(1)) > 64:
+              errors.append("name must be ≤64 chars of lowercase letters, numbers, single hyphens")
+          for field, limit in (("description", 1024), ("compatibility", 500)):
+              f = re.search(rf'^{field}: "(.*)"$', fm, re.M)
+              if field == "description" and not f:
+                  errors.append("description is required")
+              elif f and not 1 <= len(f.group(1)) <= limit:
+                  errors.append(f"{field} is {len(f.group(1))} chars; the spec allows 1-{limit}")
+          if errors:
+              sys.exit("::error::" + "; ".join(errors))
+          print("frontmatter within the Agent Skills spec limits")
+          PY
+
       # /plugin update reads marketplace.json, so a manifest left behind ships the old version silently
       - name: Check the three manifests agree
         run: |
@@ -340,7 +366,7 @@ jobs:
           // END TIMELINE"""
           html = re.sub(r"<!-- BEGIN SHOTS -->.*<!-- END SHOTS -->", lambda _: shots, html, flags=re.S)
           html = re.sub(r"// BEGIN TIMELINE.*// END TIMELINE", lambda _: timeline, html, flags=re.S)
-          html = re.sub(r'const CAP_STYLE = "phrase";', 'const CAP_STYLE = "off";', html, count=1)
+          html = re.sub(r'const CAP_STYLE = null;', 'const CAP_STYLE = "off";', html, count=1)
           open(path, "w").write(html)
           PY
           node "$S/render.js" check "$L/index.html"

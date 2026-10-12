@@ -1,6 +1,8 @@
 ---
 name: shenghua
-description: "Turn a voice recording (voice note, narration, podcast snippet) into a fully animated, brand-styled video — local word-level transcription, a timed shot list, kinetic typography, camera moves, real photos and licensed video clips of the people and products it mentions, synthesized sound design and a voice-ducked music bed, rendered as a 1080x1920 Short (or 1920x1080, 1080x1080, 1080x1350). Long-form YouTube videos are built in chapters, one recording and one render each, then joined with YouTube chapter timestamps and merged captions. Also takes a to-camera phone recording: the opening line and sign-off stay on camera as face shots and everything between is animated. With no recording at all, writes an explainer script, voices each cartoon character offline, and animates talking hosts that teach the concept through an analogy. Use when asked to 'make an animated explainer about X', 'explain Kafka with cartoon characters', 'make a video with characters teaching this', or to 'make a video out of this audio', 'animate this voice note', 'turn this narration into a Short', 'edit this like a pro', 'create a video from my voiceover', or 'make a reel from this recording', or 'make a YouTube video from these chapters'."
+description: "Turn a voice recording (voice note, narration, podcast snippet) into a fully animated, brand-styled video — local word-level transcription, a timed shot list, kinetic typography, camera moves, licensed photos and clips of the people and products it mentions, synthesized sound design and a voice-ducked music bed, rendered as a 1080x1920 Short (or 1920x1080, 1080x1080, 1080x1350), with long-form YouTube videos built chapter by chapter. Also takes a to-camera video (opening and sign-off stay on camera), a green-screen talk (keyed presenter stays on screen), or a bare topic: it writes an explainer script, voices one offline voice per cartoon character, and animates the hosts. Use when asked to make a video from audio or a voice note, animate a narration, edit a to-camera or green-screen talk, make a Short or reel, explain a topic with cartoon characters, or build a YouTube video from chapters."
+license: MIT
+compatibility: "Requires bash, Python 3.10+, Node 18+ and ffmpeg on macOS or Linux (WSL on Windows). First run downloads Chromium, GSAP and fonts; transcription, rendering and encoding then run fully local and offline."
 ---
 
 # Shenghua 声画
@@ -94,7 +96,7 @@ Run it in the background for anything over two minutes; never wait silently — 
 python3 SKILL_DIR/scripts/trim_take.py <audio-or-video> "$work" [--in auto] [--out auto]
 ```
 
-Cuts the dead air before the first word (keeps 0.5s) and after the last (keeps 2.5s for the outro), writes a lossless `voice.wav`, shifts `words.json` and `transcript.txt` so the first kept moment is 0, and records the cut in `take.json` — `key_greenscreen.py` and `extract_face.sh` apply it, so after trimming every time you handle is an edit time. Pass `--in`/`--out` in seconds to cut by hand; cut points inside the speech make an excerpt, such as a Short from a long talk, and drop the words outside them. Re-running trims from the raw transcript again. From here on, `<audio>` is `"$work"/voice.wav` and `<duration>` is the length it prints.
+Cuts the dead air before the first word (keeps 0.5s) and after the last (keeps 2.5s for the outro), writes a lossless `voice.wav`, shifts `words.json` and `transcript.txt` so the first kept moment is 0, and records the cut in `take.json` — `key_greenscreen.py` and `extract_face.sh` apply it, so after trimming every time you handle is an edit time. With a video input it also probes the source into `take.json`'s `probe` block (resolution, fps, codec, bitrate, HDR): an HDR take prints a warning (re-record in SDR — HDR face shots wash out), a non-30fps take an advisory that the edit renders at 30 fps, and Step 6's `--resolution source` reads the block. Pass `--in`/`--out` in seconds to cut by hand; cut points inside the speech make an excerpt, such as a Short from a long talk, and drop the words outside them. Re-running trims from the raw transcript again. From here on, `<audio>` is `"$work"/voice.wav` and `<duration>` is the length it prints.
 
 ## Step 2b — Key the speaker (presenter mode)
 
@@ -106,6 +108,16 @@ python3 SKILL_DIR/scripts/key_greenscreen.py "$work" [--mask x,y,w,h …] [--qua
 ```
 
 It measures the screen itself (a take with no usable screen fails with the reason — fall back to `bookends`), scales anything taller than `--max-height` (default 3840) before keying so a 4K take needs no manual downscale, and converts any frame rate to 30 fps edit frames. **Look at `presenter-preview.png` and wait for a yes** before the full run. The full run writes `presenter/fNNNNN.webp` (~4 frames/s on 6 cores, so a 6-minute take is about 45 minutes): tell the user, run it detached, and re-run the same command if it stops; it keys only what is missing.
+
+## Step 2c — Clean the voice (optional)
+
+For a noisy phone or room recording (first run: `setup.sh --enhance`):
+
+```bash
+python3 SKILL_DIR/scripts/enhance_voice.py "$work"
+```
+
+Runs DeepFilterNet on `voice.wav` and writes `voice-clean.wav` (the raw take is kept). You cannot hear the difference — ask the user to listen to both, and if they prefer it, use `voice-clean.wav` as `<audio>` from here on. Skip this step for studio-quiet recordings.
 
 ## Step 3 — Proofread the captions
 
@@ -168,12 +180,22 @@ Results without a licence are marked ⚠. When a licensed result is as good a sh
 
 Logos: `https://cdn.jsdelivr.net/npm/simple-icons@13/icons/<slug>.svg`. Every fetch is recorded in `<work>/credits.json`; log hand-sourced files yourself. The report lists every ⚠ file so the user knows which footage belongs to someone else before posting.
 
+Quoting a paper or an article? Capture the passage itself so it can appear on screen with the quoted lines highlighted:
+
+```bash
+node SKILL_DIR/scripts/excerpt.js "$work" <url> --text "the quoted passage" --name <slug>
+node SKILL_DIR/scripts/excerpt.js "$work" --pdf paper.pdf --page 3 --rect x,y,w,h --name <slug>
+```
+
+Writes `excerpts/<slug>.png` plus the highlight's position into `excerpts.js`, and credits the source in `credits.json` (marked ⚠ unlicensed — a quotation, so name it in the description). Place it with the *Document card* block (`docCard()`) in Step 6.
+
 ## Step 6 — Author the composition
 
 ```bash
 python3 SKILL_DIR/scripts/fill_template.py "$work" <duration> --format vertical --template <template-id> [--brand <kit>]
 # --format vertical|landscape|square|portrait · omit --template for the default kinetic theme
 # --resolution 4k records a 2x master in render.json; render-frames.sh then renders 4k by default
+# --resolution source matches the probed take (Step 2a): a 4K recording gets a 4K master without you computing anything
 ```
 
 Colours in shots come from the kit: write `var(--brand-primary)`, `var(--brand-primary-ink)` (the brand colour as readable text), `var(--brand-text)`, `var(--brand-muted)`, `var(--brand-surface2)`, `var(--brand-success)`, `var(--brand-error)`, never a hex value, so the same shots render in any client's colours. Logos are in `BRAND.logos` (`mark`, `wordmark.onDark`, `wordmark.onLight`); see *Logo end card* and *Corner mark* in `scene-blocks.md`.
@@ -191,7 +213,7 @@ bash SKILL_DIR/scripts/extract_clip.sh "$work"/clips/src/facepalm.mp4 "$work" 90
 
 Clip audio ducks under the narration automatically, so it only really plays over a pause in the voice. For the speaker's line to land, place the clip over a gap in the recording (a scripted `[CLIP]` beat) or leave it silent and put the quote on screen with a *Portrait quote*. **B-roll is the same mechanism** — a `clip()` (or the alias `broll()`) under narration; the *B-roll under narration* block in `scene-blocks.md` has the full-bleed + lower-third pattern.
 
-Replace the demo shots between `BEGIN SHOTS` / `END SHOTS` (markup) and `BEGIN TIMELINE` / `END TIMELINE` (GSAP) with your shot list, using the helpers the template already defines. Keep the outer `#world` and `#cam` containers intact: `shot()`, `slam()`, `hit()`, `rise()`, `pop()`, `stagger()`, `drift()`, `kenBurns()`, `lowerThird()`, `ticker()`, `typer()`, `counter()`, `swap()`, `terminal()`, `moveTo()`, `centerOf()`, `gantt()`, `faceCam()`, `clip()`, `broll()`, the `NOCAP` ranges, and the `CAP_STYLE` constant. Every helper that makes noise pushes its own sound cue.
+Replace the demo shots between `BEGIN SHOTS` / `END SHOTS` (markup) and `BEGIN TIMELINE` / `END TIMELINE` (GSAP) with your shot list, using the helpers the template already defines. Keep the outer `#world` and `#cam` containers intact: `shot()`, `slam()`, `hit()`, `rise()`, `pop()`, `stagger()`, `drift()`, `kenBurns()`, `lowerThird()`, `ticker()`, `typer()`, `counter()`, `swap()`, `terminal()`, `moveTo()`, `centerOf()`, `gantt()`, `faceCam()`, `clip()`, `broll()`, `punchIn()`, `punchPulse()`, `docCard()`, the `NOCAP` ranges, and the `CAP_STYLE` constant. Every helper that makes noise pushes its own sound cue. `slam()`/`pop()`/`rise()` take `"spring"` as a final argument for a spring-physics entry; `punchIn()` slow-pushes a face shot or photo, `punchPulse()` snap-zooms an emphasis beat — see *Punch-in* in `scene-blocks.md`. `CAP_STYLE` overrides the theme's caption motion (`pop` word-by-word, `rise`, `fade`, `phrase`, `off`); left `null`, each theme's own caption motion applies.
 
 The display style (`.xl`) is uppercase and width-expanded; captions are condensed. Size headlines for the expanded width — a vertical frame fits ~6 characters at 250px.
 
@@ -232,7 +254,7 @@ node SKILL_DIR/scripts/render.js cues "$work"/index.html "$work"/cues.json
 python3 SKILL_DIR/scripts/synth_audio.py "$work"/cues.json <duration> "$work" --template <template-id> --drop <time-of-final-slam>
 ```
 
-Writes `sfx.wav` and `music.wav`. Pass the same `<template-id>` as Step 6: the music follows the theme's tempo, key and layers, and varies per video (the slug folder). Omit `--drop` if the video has no final slam; otherwise use the time of the last big hit. Optional pacing flags: `--drums-from <t>` brings the drums in at `<t>`; `--quiet <a>:<b>` ducks the music between `a` and `b` (repeatable). Story moments make the music act out a line: `--stop <a>:<b>` (tape stop, silence, back at `b`), `--muffle <a>:<b>` (behind a wall, opening into `b`), `--stutter <a>:<b>` (a stuck one-beat loop until `b`); when to use each is in `scene-blocks.md` → *Sound cues*. With `music` set to a file, pass `--no-music` and give that file to Step 10; with `none`, pass `--no-music` and nothing else.
+Writes `sfx.wav` and `music.wav`. When `words.js` exists, it also writes a duck envelope into `mix.json`: pauses of 0.6s or more in the voice let the music swell back up between phrases instead of staying flat-ducked throughout — no flag needed. Pass the same `<template-id>` as Step 6: the music follows the theme's tempo, key and layers, and varies per video (the slug folder). Omit `--drop` if the video has no final slam; otherwise use the time of the last big hit. Optional pacing flags: `--drums-from <t>` brings the drums in at `<t>`; `--quiet <a>:<b>` ducks the music between `a` and `b` (repeatable). Story moments make the music act out a line: `--stop <a>:<b>` (tape stop, silence, back at `b`), `--muffle <a>:<b>` (behind a wall, opening into `b`), `--stutter <a>:<b>` (a stuck one-beat loop until `b`); when to use each is in `scene-blocks.md` → *Sound cues*. With `music` set to a file, pass `--no-music` and give that file to Step 10; with `none`, pass `--no-music` and nothing else.
 
 The kit's `audio` block (`references/brand-kits.md` → *Sound*) applies here without flags: a sound pack or the kit's own files replace synth cues, any cue can be quieter, louder or muted, the kit can bring its own music track, and its mix levels go into `mix.json` for Step 9 or 10. When the user asks for a different whoosh, quieter hits or their own music, change the kit, not the scripts; for one video only, pass the track to Step 10 instead.
 
@@ -247,7 +269,7 @@ bash SKILL_DIR/scripts/render-chunks.sh [--blur 4] [--resolution 4k] [--chunk 30
   "$work"/index.html "$work" <duration> <audio> "$out"
 ```
 
-`--resolution 4k` renders a 4K master; without it the fill's `render.json` decides. Pass `--blur 4` for the final render only: it adds motion blur and makes the render about 8× slower. A chunked render produces the mp4 directly — **skip Step 10** and go to Step 10a.
+`--resolution 4k` renders a 4K master; without it the fill's `render.json` decides. Pass `--blur 4` for the final render only: it adds motion blur and makes the render about 8× slower — `VV_BLUR_SAMPLES=2` gives a cheap approximation while you judge whether blur is worth the time. A chunked render produces the mp4 directly — **skip Step 10** and go to Step 10a.
 
 **Short videos, drafts and single-shot fixes** use `render-frames.sh`:
 
@@ -268,7 +290,7 @@ out="<brand.output.dir>/<slug>/<slug>.mp4"
 bash SKILL_DIR/scripts/mix-encode.sh [--10bit] [--embed] "$work" <audio> <duration> "$out" [music-file]
 ```
 
-Normalises the voice, ducks the music under it, lays the SFX on top, pads everything to the full duration, and targets −14 LUFS, with progress lines while it encodes. Video is H.264 at CRF 16 (slow preset, capped at 16 Mbps so film grain can't balloon the file), converted and tagged as BT.709 so phones show the brand colours as designed. A 108s vertical lands around 200 MB: high enough to survive the platform's own re-encode.
+Normalises the voice, ducks the music under it (letting it swell in the voice's pauses when `mix.json` has a duck envelope), lays the SFX on top, pads everything to the full duration, and targets −14 LUFS, with progress lines while it encodes. Video is H.264 at CRF 16 (slow preset, bitrate-capped so film grain can't balloon the file), converted and tagged as BT.709 so phones show the brand colours as designed. The cap scales with the canvas from `render.json`: 16 Mbps at 1080x1920, up to 68 Mbps for a 4K master. A 108s vertical lands around 200 MB: high enough to survive the platform's own re-encode.
 
 - Draft JPEG frames encode `veryfast`/CRF 20 — a preview cut, fast. `VV_PRESET` overrides the preset (e.g. `medium` on a slow machine).
 - `--10bit` encodes 10-bit H.264 against banding in dark gradients.
@@ -301,6 +323,14 @@ Before reporting, extract a frame from the **encoded file** at a shot you change
 ffmpeg -v error -y -ss <t> -i <out.mp4> -frames:v 1 -vf scale=360:-1 <work>/verify.jpg
 ffprobe -v error -show_entries format=duration,size -of compact <out.mp4>
 ```
+
+When the input was a video (bookends, presenter), also grade the output against the source:
+
+```bash
+python3 SKILL_DIR/scripts/check_quality.py <source-video> "$out"
+```
+
+Prints a VMAF score (95+ means the edit preserved the footage's quality; below, re-encode with a higher bitrate). Builds of ffmpeg without libvmaf skip cleanly — say so in the report rather than claiming a score.
 
 ```
 <slug>.mp4 · 1080x1920 · 108.2s · 112 MB · -14.7 LUFS
@@ -352,5 +382,9 @@ Next: preview it on a phone, then post it with the credits in the description
 | `missing frame face/… ` or `clips/…` stops the render | a `faceCam()` / `clip()` range is wider than the extracted one | re-run `extract_face.sh` / `extract_clip.sh` with that shot's in/out |
 | YouTube fetch crawls or fails with a challenge warning | no JS runtime, or yt-dlp is out of date | needs `node` or `deno` on PATH; `pipx upgrade yt-dlp` |
 | `kokoro-onnx is not installed` / `Voice model missing` / `Cannot load the 'base' alignment model` | script mode set up without voices, or offline before the models were fetched | `setup.sh --voices` (online, once) |
+| `deepfilternet not installed` from `enhance_voice.py` | Step 2c run without the optional install | `setup.sh --enhance` (online, once) |
+| `pdftoppm not found` from `excerpt.js` | PDF excerpt without poppler | `apt install poppler-utils` / `brew install poppler` |
+| `no probed source` from `fill_template.py --resolution source` | no `probe` block in `take.json` — audio-only input or trim never ran | run `trim_take.py` on the video first, or pass `--resolution 1080p`/`4k` |
+| `PAGE ERROR … excerpts.js` | work dir filled before excerpts.js existed | `fill_template.py "$work" <duration> --relink` writes the placeholder |
 
 Mode-specific failures are in each mode's reference: `references/presenter.md` (keying), `references/face-bookends.md` (face shots), `references/brand-kits.md` (kits and fonts).

@@ -42,6 +42,23 @@ Omitting `enter` uses the theme's default (`templates.json` → `motion.enter`):
 `aurora`, `glitch` for `retro`. The theme also scales every `hit()` shake and flash, so write the same
 powers in every theme and let the theme decide how loud they look.
 
+### Spring easing
+
+`springEase(stiffness, damping)` is an analytic damped spring — a pure function of progress, so it can
+stand in for a GSAP ease string anywhere: `stiffness` sets the speed (default 170), `damping` the
+overshoot (default 12 ≈ 20% overshoot; ≥ 2·√stiffness never overshoots). `pop()`, `slam()` and `rise()`
+take it as an optional last argument, with `"spring"` as the alias for the defaults:
+
+```js
+pop("#s05t", 12.4, "spring");                 // spring instead of back.out(2)
+pop("#s05t", 12.4, .5, springEase(220, 9));   // slower pop, bigger overshoot
+slam("#s01a", .44, 1.2, "spring");            // spring on the slam's entry (the hit is unchanged)
+rise("#s01b", 1.46, .35, "spring");
+```
+
+Omit the argument for the stock feel. Reach for a spring on soft/organic beats (mascots, hosts,
+product cards); keep the stock `expo.out`/`back.out` on hard hits and fast cuts.
+
 ---
 
 ## Blocks
@@ -117,6 +134,20 @@ Any photo held more than ~1.5s. Full-bleed or inside a `.photo` frame; the frame
 ```js
 kenBurns("#s02img", 2.8, 6.1, "in");   // "in" · "out" · "left" · "right"
 ```
+
+### Punch-in *(emphasis zoom)*
+Submagic-style emphasis on a held frame: a face shot, a photo, a clip, a card. `punchIn()` is a slow
+ease-in-out push between two times (keep `scale` ≤ ~1.12 — more reads as a reframe, not a nudge);
+`punchPulse()` is a ~0.3s snap zoom and settle on the one word that lands the point. Both are pure
+functions of `t` and silent — pair the pulse with `hit()` when the beat earns a sound.
+```js
+punchIn("#s07>img", 20.1, 23.4, 1.08);    // holds the face shot alive for its whole window
+punchPulse("#s11a", 54.44, .08);          // snap on the reveal word, once
+```
+Never stack them on one element (one scale tween per element — `punchIn` replaces `kenBurns`, it
+doesn't ride on it): to push *and* pulse the same frame, push the outer element and pulse its child —
+nested scales compose (`punchIn("#s07", …)` the section, `punchPulse("#s07>img", …)` the image). And
+never pulse the point itself more than once: one snap per shot, on the word the viewer must remember.
 
 ### Lower third
 Name and role the first time a person appears on screen. Keep it above the caption zone
@@ -198,6 +229,26 @@ The person's own words when their clip can't carry sound, or to repeat the line 
 rise("#s05q", 12.7, .5);
 ```
 
+### Document card
+Quoting a paper, article or docs page on screen: the captured passage in a framed card, the source
+title below, and an accent box that draws over the quoted lines. Capture the excerpt first — it lands
+in `excerpts/` and registers itself in `excerpts.js`:
+```bash
+node scripts/excerpt.js <work> <url> --text "the quoted passage" --name kafka-paper
+```
+```html
+<div id="s06d" style="position:absolute;left:90px;top:320px;width:900px"></div>
+```
+```js
+docCard("#s06d", "kafka-paper", 14.2, 18.6);
+```
+The card rises in at `t0`, the highlight box draws left-to-right at `t0 + .3` (0.4s), and the card
+leaves at `t1`. The container sets position and width; the frame hugs the image's aspect, so the
+highlight fractions always land on the quoted lines. An excerpt name missing from `excerpts.js` fails
+the render loudly with the capture command. Keep the whole card inside the shot area (vertical:
+y = 150…1450) and hold it long enough to read the passage aloud — 3–5s. The excerpt is a quote, not
+licensed media: excerpt.js records it in `credits.json` as unlicensed, and the report names it.
+
 ### Duo
 Two people, two products, before/after: two photos side by side.
 ```html
@@ -250,6 +301,20 @@ The emotional "it's everywhere" beat.
 ```js
 stagger("#s09 .logo", 20.4, .09);   // one pop and one pop cue per card, in DOM order
 ```
+
+### Logo chip
+Naming a company mid-video without a wall: one small rounded chip carrying its logo. Only ever the
+kit's own files (`kit/logos/…`) — never draw or approximate a logo the kit doesn't contain. Pick the
+variant for the canvas (`BRAND.scheme`), as with the end card.
+```html
+<div class="logo-chip" id="s07lc" style="left:360px;top:620px"><img id="s07lg" alt=""></div>
+```
+```js
+q("#s07lg").src = BRAND.logos.mark;
+pop("#s07lc", 16.8);
+```
+Keep it in the shot area (vertical: y = 150…1450), one chip on screen at a time, 1.5–3s. For several
+companies at once use the logo wall instead; for the closing brand beat use the logo end card.
 
 ### Path / journey
 An SVG curve drawing slowly through labelled milestones — for "found its purpose along the way".
@@ -561,16 +626,22 @@ const NOCAP = [[1.2, 2.4], [4.1, 5.6]];
 
 Never cover the element the viewer is meant to read; hide captions instead.
 
-Two caption styles, set with `CAP_STYLE` in the template:
+Caption styles, set with `CAP_STYLE` in the template:
 
 | `CAP_STYLE` | Feel | Use for |
 |---|---|---|
-| `"phrase"` *(default)* | whole phrase dimmed, one pulse, the spoken word marked | calm explainers, long sentences |
+| `null` *(stock default)* | the theme's pick (`templates.json` → `motion.captions`) | letting the theme decide |
+| `"phrase"` | whole phrase dimmed, one pulse, the spoken word marked | calm explainers, long sentences |
 | `"pop"` | each word pops in on its own timestamp | fast Shorts, listicles, hype |
+| `"rise"` | each word rises in on its own timestamp, no scale | news beats, precise explainers |
+| `"fade"` | the whole phrase fades in once | reflective lines, documentary pacing |
 | `"off"` | no burned-in captions; upload `captions.srt` instead | long form (`long-form.md` → *Captions*) |
 
-Both use the theme's mark for the spoken word. Words flagged in `keywords.json` stay in the accent
-colour after they are spoken.
+The theme defaults: `pop` for `kinetic`/`brutalist`/`retro`, `rise` for `newsroom`/`blueprint`, `fade` for
+`documentary`/`minimal`/`aurora`; anything without a pick falls back to `"phrase"`. All styles use the
+theme's mark for the spoken word. Words flagged in `keywords.json` stay in the accent colour after they
+are spoken, and in `pop` each flagged word lands with a single quiet `tick` cue — the only per-word
+sound; ordinary words stay silent.
 
 ---
 

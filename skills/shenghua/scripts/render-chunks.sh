@@ -65,6 +65,18 @@ read -r TOTAL CHUNK_FRAMES <<< "$(python3 -c "
 import math
 print(math.ceil($DURATION * $FPS), max(1, round($CHUNK * $FPS)))")"
 
+# The fill scales the bitrate cap with the canvas in render.json's encode block; 16M when absent
+MAXRATE_KBPS=$(python3 - "$(dirname "$HTML")/render.json" <<'PY'
+import json, sys
+try:
+    print(int(json.load(open(sys.argv[1]))["encode"]["maxrate_kbps"]))
+except (OSError, ValueError, KeyError, TypeError):
+    print(16000)
+PY
+)
+[[ "$MAXRATE_KBPS" =~ ^[1-9][0-9]*$ ]] || MAXRATE_KBPS=16000
+BUFSIZE_KBPS=$(( MAXRATE_KBPS * 2 ))
+
 [[ "$PNG" == "1" ]] || PNG=0
 
 EXT=png
@@ -102,7 +114,7 @@ for (( c = 0; c < CHUNK_COUNT; c++ )); do
   ffmpeg -v error -y -framerate "$FPS" -start_number "$FIRST" -i "$WORK/frames/f%05d.$EXT" \
     -frames:v "$WANT" -an \
     -vf "scale=out_color_matrix=bt709:out_range=tv:flags=lanczos+accurate_rnd+full_chroma_int,format=yuv420p" \
-    -c:v libx264 -preset slow -crf 16 -maxrate 16M -bufsize 32M -x264-params aq-mode=3 \
+    -c:v libx264 -preset slow -crf 16 -maxrate "${MAXRATE_KBPS}k" -bufsize "${BUFSIZE_KBPS}k" -x264-params aq-mode=3 \
     -colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv \
     "$CHUNK_MP4.tmp.mp4"
   mv "$CHUNK_MP4.tmp.mp4" "$CHUNK_MP4"
@@ -161,7 +173,7 @@ for (( c = 0; c < CHUNK_COUNT; c++ )); do
     ffmpeg -v error -y -f image2pipe -vcodec "$VCODEC" -framerate "$FPS" -i - \
       -frames:v "$WANT" -an \
       -vf "scale=out_color_matrix=bt709:out_range=tv:flags=lanczos+accurate_rnd+full_chroma_int,format=yuv420p" \
-      -c:v libx264 -preset slow -crf 16 -maxrate 16M -bufsize 32M -x264-params aq-mode=3 \
+      -c:v libx264 -preset slow -crf 16 -maxrate "${MAXRATE_KBPS}k" -bufsize "${BUFSIZE_KBPS}k" -x264-params aq-mode=3 \
       -colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv \
       "$CHUNK_MP4.tmp.mp4" && \
     mv "$CHUNK_MP4.tmp.mp4" "$CHUNK_MP4" && \

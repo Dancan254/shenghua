@@ -15,12 +15,15 @@ in the last, at one level across chapters, so the music runs on across every joi
 
 The kit's audio block (work/kit/kit.json, installed by fill_template.py) can swap any cue for recorded
 files, change its gain or mute it, replace the synth music with a track or none, and set the mix
-levels. mix.json records those levels and the music file for mix-encode.sh and render-chunks.sh.
+levels. mix.json records those levels and the music file for mix-encode.sh and render-chunks.sh;
+when work/words.js exists, pauses between words of DUCK_GAP_MIN or longer are recorded in its duck
+array, so mix-audio.sh can swell the music into them.
 """
 
 import argparse
 import hashlib
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -31,6 +34,8 @@ import numpy as np
 
 SR = 48000
 LOOP_FADE = 2.0
+# A pause this long between words is a breath the music can swell into (mix.json's duck array)
+DUCK_GAP_MIN = 0.6
 TEMPLATES_JSON = Path(__file__).resolve().parent.parent / "templates" / "templates.json"
 rng = np.random.default_rng(7)
 
@@ -393,6 +398,33 @@ def story_moments(music, stops, muffles, stutters, beat):
     return music
 
 
+def duck_gaps(words, duration, minimum=DUCK_GAP_MIN):
+    """[start, end] pauses of at least `minimum` seconds between consecutive words, clamped to [0, duration]."""
+    gaps = []
+    for (_, end), (start, _) in zip(words, words[1:]):
+        if start - end < minimum:
+            continue
+        a, b = max(0.0, min(duration, end)), max(0.0, min(duration, start))
+        if b > a:
+            gaps.append([round(a, 3), round(b, 3)])
+    return gaps
+
+
+def parse_words_js(text):
+    """Sorted (start, end) pairs from words.js — JS, not JSON, so the assignment wrapper is stripped first."""
+    match = re.search(r"=\s*(\[.*\])\s*;?\s*$", text, re.S)
+    if not match:
+        return None
+    try:
+        phrases = json.loads(match.group(1))
+    except json.JSONDecodeError:
+        return None
+    words = [word for phrase in phrases if isinstance(phrase, list) for word in phrase
+             if isinstance(word, dict)
+             and isinstance(word.get("s"), (int, float)) and isinstance(word.get("e"), (int, float))]
+    return sorted((float(word["s"]), float(word["e"])) for word in words)
+
+
 def parse_range(flag, value):
     """'A:B' → (A, B) seconds, or None after printing the problem and the fix."""
     parts = value.split(":")
@@ -530,6 +562,11 @@ def main() -> int:
     mix = {**audio["levels"], "music_file": "music.wav" if music_source != "none" else None}
     if chapter and music_source != "none":
         mix["music_offset"] = round(chapter["offset"], 4)
+    words_path = args.work / "words.js"
+    if words_path.is_file():
+        gaps = duck_gaps(parse_words_js(words_path.read_text(encoding="utf-8")) or [], args.duration)
+        if gaps:
+            mix["duck"] = gaps
     (args.work / "mix.json").write_text(json.dumps(mix, indent=2) + "\n", encoding="utf-8")
 
     tempo = {"none": "", "synth": f" · {args.template} {profile['bpm']} bpm"}.get(music_source, f" · kit track {Path(music_source).name}")
