@@ -309,6 +309,19 @@ class ResolveTest(unittest.TestCase):
         self.assertEqual(brand_kit.slug("Acme Health"), "acme-health")
         self.assertEqual(brand_kit.slug("!!!"), "kit")
 
+    def test_google_font_name_old_shape(self):
+        url = "https://fonts.gstatic.com/s/anton/v27-1Ptgg87LROyAm3K8-C8.woff2"
+        self.assertEqual(brand_kit.google_font_name(url), "s-anton-v27-1Ptgg87LROyAm3K8-C8.woff2")
+
+    def test_google_font_name_kit_shape_has_no_query_chars(self):
+        # /l/font?kit=… URLs kept ? and &, which become a query string inside CSS url() and 404 the file
+        url = "https://fonts.gstatic.com/l/font?kit=tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYXHKPx3cwg&skey=48ad01c60053c2ae&v=v24"
+        name = brand_kit.google_font_name(url)
+        self.assertNotIn("?", name)
+        self.assertNotIn("&", name)
+        self.assertTrue(name.endswith(".woff2"))
+        self.assertRegex(name, r"^[A-Za-z0-9._-]+$")
+
 
 if __name__ == "__main__":
     unittest.main()
