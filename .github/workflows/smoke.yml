@@ -115,6 +115,30 @@ jobs:
             bash -n "$file" || { echo "::error file=$file::bash syntax error"; exit 1; }
           done
 
+      # The installer is most users' first contact with the repo; break it and nobody gets further
+      - name: install.sh installs, updates and uninstalls in a clean HOME
+        run: |
+          set -euo pipefail
+          FAKE=$(mktemp -d)
+          HOME="$FAKE" bash install.sh --dir "$FAKE/skills"
+          test -f "$FAKE/skills/shenghua/SKILL.md"
+          # an update keeps the folders setup.sh downloads into
+          mkdir -p "$FAKE/skills/shenghua/assets" "$FAKE/skills/shenghua/scripts/node_modules"
+          touch "$FAKE/skills/shenghua/assets/marker" "$FAKE/skills/shenghua/scripts/node_modules/marker"
+          HOME="$FAKE" bash install.sh --dir "$FAKE/skills"
+          test -f "$FAKE/skills/shenghua/assets/marker"
+          test -f "$FAKE/skills/shenghua/scripts/node_modules/marker"
+          # auto-detect finds agents by their config dirs, each skills dir once
+          mkdir -p "$FAKE/.claude" "$FAKE/.codex" "$FAKE/.agents"
+          HOME="$FAKE" bash install.sh
+          test -f "$FAKE/.claude/skills/shenghua/SKILL.md"
+          test -f "$FAKE/.agents/skills/shenghua/SKILL.md"
+          # uninstall removes only the skill, and only where it is genuinely installed
+          HOME="$FAKE" bash install.sh --uninstall
+          test ! -e "$FAKE/.claude/skills/shenghua"
+          test ! -e "$FAKE/.agents/skills/shenghua"
+          echo "install.sh round-trip ok"
+
       - name: Syntax-check render.js
         run: node --check "$SKILL/scripts/render.js"
 

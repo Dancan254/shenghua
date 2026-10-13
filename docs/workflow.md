@@ -76,7 +76,14 @@ In the prompts below, start with *"Use the shenghua skill"*.
 git clone https://github.com/Dancan254/shenghua ~/skills/shenghua
 ```
 
-Update it later with:
+Or let the installer copy it into your agent's skills folder for you — it auto-detects Claude Code,
+Kimi Code, Codex, Cursor, Gemini CLI and OpenCode, and `--dir` covers anything else:
+
+```bash
+bash ~/skills/shenghua/install.sh          # add --list to see what it detects first
+```
+
+Update either later with:
 
 ```bash
 git -C ~/skills/shenghua pull
