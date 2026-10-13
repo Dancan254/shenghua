@@ -87,35 +87,16 @@ if [[ -n "$MUSIC" ]]; then
   INPUTS+=(-i "$MUSIC")
   # mix.json's duck array (synth_audio.py, from words.js pauses): swell the bed toward full level in
   # each gap, 150 ms ramps in and out; the sidechain below still ducks it under the voice
-  DUCK_EXPR=$(python3 - "$WORK/mix.json" "$MUSIC_LEVEL" <<'PY'
-import json, sys
+  DUCK_EXPR=$(python3 - "$WORK/mix.json" "$MUSIC_LEVEL" "$0" <<'PY'
+import json, os, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(sys.argv[3])))
+from synth_audio import build_duck_expr
 try:
     mix = json.load(open(sys.argv[1], encoding="utf-8"))
 except (FileNotFoundError, json.JSONDecodeError, OSError):
     sys.exit(0)
-gaps = mix.get("duck") or []
-try:
-    music = float(sys.argv[2])
-except ValueError:
-    sys.exit(0)
-if not gaps or not 0 < music < 1:
-    sys.exit(0)
-boost = min(1.0 / music, 2.0)
-ramp = 0.15
-expr, built = "1", False
-for pair in reversed(gaps):
-    try:
-        a, b = float(pair[0]), float(pair[1])
-    except (TypeError, ValueError, IndexError):
-        continue
-    if b - a < 2 * ramp:
-        continue
-    expr = (f"if(lt(t,{a:.3f}),{expr},"
-            f"if(lt(t,{a + ramp:.3f}),1+{boost - 1:.4f}*(t-{a:.3f})/{ramp},"
-            f"if(lt(t,{b - ramp:.3f}),{boost:.4f},"
-            f"if(lt(t,{b:.3f}),1+{boost - 1:.4f}*({b:.3f}-t)/{ramp},{expr}))))")
-    built = True
-if built:
+expr = build_duck_expr(mix.get("duck") or [], sys.argv[2])
+if expr:
     print(expr)
 PY
   )
