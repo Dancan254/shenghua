@@ -10,8 +10,7 @@ logos, adds sound design and a music bed that ducks under your voice, and render
 
 This repo ships one skill, `shenghua`. It is model-agnostic, built on the open
 [Agent Skills](https://agentskills.io) standard: it works in Claude Code, Kimi Code CLI, Codex CLI,
-Cursor, Gemini CLI, OpenCode, or any agent that can run shell commands. **New here? Start with the
-[step-by-step workflow](docs/workflow.md).**
+Cursor, Gemini CLI, OpenCode, or any agent that can run shell commands.
 
 ![A 42-second Kafka vs RabbitMQ explainer made with this skill: word-synced captions, a message-queue diagram, stamps and kinetic type on the blueprint theme](docs/demo.gif)
 
@@ -22,6 +21,24 @@ https://github.com/user-attachments/assets/ce171d59-121d-4193-b6d0-cd011345ef41
 
 No stock templates, no subscription editor, no uploads: transcription, rendering and audio all run on
 your machine.
+
+---
+
+## Quickstart
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Dancan254/shenghua/main/install.sh | bash
+```
+
+That one line installs the skill for every coding agent it finds on your machine. Start a fresh
+session and say:
+
+> make a video out of ~/Downloads/my-recording.mp4
+
+The agent checks its own tools on first run and names anything missing, asks for your brand colours
+once, and shows you a brand board and a shot list before anything renders. The full step-by-step is
+[docs/workflow.md](docs/workflow.md); plugin installs for Claude Code and Kimi Code are
+[below](#add-the-skill).
 
 ---
 
@@ -168,8 +185,25 @@ Inside Kimi Code CLI:
 
 Then start a fresh session (`/new` in Kimi Code, or `/restart` in Claude Code).
 
-**Or copy it** into your personal skills — the skill follows the [Agent Skills](https://agentskills.io)
-standard, so the same folder works in every agent that reads `SKILL.md`:
+**Or one command**, which finds every agent on your machine and installs the skill where each one reads
+it — Claude Code, Kimi Code CLI, Codex, Cursor, Gemini CLI, OpenCode, all at once:
+
+```bash
+git clone https://github.com/Dancan254/shenghua && bash shenghua/install.sh
+# or without cloning first:
+curl -fsSL https://raw.githubusercontent.com/Dancan254/shenghua/main/install.sh | bash
+```
+
+`install.sh --list` shows what it detects, `--dir <skills dir>` installs for any other harness, and
+`--uninstall` takes it back out. Re-running the same command **updates** the skill in place — the
+downloaded Chromium, fonts and voice models are kept, so an update re-downloads nothing. Start a fresh
+session afterwards: agents read skill metadata at session start.
+
+<details>
+<summary>Installing by hand instead</summary>
+
+The skill follows the [Agent Skills](https://agentskills.io) standard, so the same folder works in every
+agent that reads `SKILL.md`:
 
 ```bash
 git clone https://github.com/Dancan254/shenghua
@@ -188,9 +222,8 @@ cp -r shenghua/skills/shenghua ~/.config/opencode/skills/
 ```
 
 One copy can serve several agents: OpenCode also reads `~/.claude/skills/` and `~/.agents/skills/`, so a
-skill installed for Claude Code or Codex shows up in OpenCode too. Any other agent that supports Agent
-Skills picks it up from its own skills directory the same way. Start a fresh session after copying —
-agents read skill metadata at session start.
+skill installed for Claude Code or Codex shows up in OpenCode too.
+</details>
 
 ### One-time setup
 

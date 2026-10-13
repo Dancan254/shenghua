@@ -61,7 +61,10 @@ skills/shenghua/
 
 `.claude-plugin/marketplace.json` registers the skill for Claude Code's `/plugin install`, and
 `.kimi-plugin/plugin.json` registers it for Kimi Code CLI's `/plugins install`. Both are additive: other
-hosts ignore them and read `SKILL.md` directly.
+hosts ignore them and read `SKILL.md` directly. `install.sh` at the root is the install path for
+everyone else: it copies the skill into an agent's skills directory (auto-detect, or `--dir`), updates
+in place without losing setup.sh's downloads, and uninstalls. Keep it dependency-free, working on
+macOS's bash 3.2, and working when piped through `curl | bash`.
 
 ## What an agent needs to run this
 
