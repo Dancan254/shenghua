@@ -442,6 +442,15 @@ def logo_warnings(kit, colors):
     return []
 
 
+def google_font_name(url):
+    # Google serves two URL shapes: /s/<family>/<file>.woff2 and /l/font?kit=…; the second
+    # carries ? and &, which turn into a query string inside CSS url() and 404 the file
+    name = re.sub(r"[^A-Za-z0-9._-]+", "-", url.removeprefix("https://fonts.gstatic.com/")).strip("-")
+    if not name.endswith(".woff2"):
+        name += ".woff2"
+    return name
+
+
 def google_css(family, axes=None):
     """Fetch a family's CSS: the variable axes asked for, else the full weight range, else 400/700."""
     attempts = [axes] if axes else []
@@ -488,7 +497,7 @@ def install(kit, root, assets):
             family = font["google"]
             css = google_css(family, font.get("axes"))
             for url in sorted(set(re.findall(r"https://fonts\.gstatic\.com[^)]*", css))):
-                name = url.removeprefix("https://fonts.gstatic.com/s/").replace("/", "-")
+                name = google_font_name(url)
                 download(url, target / "fonts" / name)
                 css = css.replace(url, f"fonts/{name}")
             faces.append(css)
