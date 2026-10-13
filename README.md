@@ -17,7 +17,7 @@ Cursor, Gemini CLI, OpenCode, or any agent that can run shell commands.
 The full 42 s with sound, made from one voice note (shot list and composition in
 [`examples/kafka-vs-rabbitmq`](skills/shenghua/examples/kafka-vs-rabbitmq/)):
 
-https://github.com/user-attachments/assets/ce171d59-121d-4193-b6d0-cd011345ef41
+https://github.com/Dancan254/shenghua/releases/download/v2.11.0/demo.mp4
 
 No stock templates, no subscription editor, no uploads: transcription, rendering and audio all run on
 your machine.
