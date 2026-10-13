@@ -410,6 +410,38 @@ def duck_gaps(words, duration, minimum=DUCK_GAP_MIN):
     return gaps
 
 
+def build_duck_expr(gaps, music_level, ramp=0.15):
+    """ffmpeg volume expression swells the bed toward full level inside each gap.
+
+    Each gap is its own additive window — nesting the whole expression per gap
+    doubles it (2^N), which blew past ARG_MAX on a real 17-gap mix.
+    """
+    try:
+        music = float(music_level)
+    except (TypeError, ValueError):
+        return None
+    if not gaps or not 0 < music < 1:
+        return None
+    boost = min(1.0 / music, 2.0)
+    windows = []
+    for pair in gaps:
+        try:
+            a, b = float(pair[0]), float(pair[1])
+        except (TypeError, ValueError, IndexError):
+            continue
+        if b - a < 2 * ramp:
+            continue
+        windows.append(
+            f"if(lt(t,{a:.3f}),0,"
+            f"if(lt(t,{a + ramp:.3f}),(t-{a:.3f})/{ramp},"
+            f"if(lt(t,{b - ramp:.3f}),1,"
+            f"if(lt(t,{b:.3f}),({b:.3f}-t)/{ramp},0))))"
+        )
+    if not windows:
+        return None
+    return f"1+{boost - 1:.4f}*(" + "+".join(windows) + ")"
+
+
 def parse_words_js(text):
     """Sorted (start, end) pairs from words.js — JS, not JSON, so the assignment wrapper is stripped first."""
     match = re.search(r"=\s*(\[.*\])\s*;?\s*$", text, re.S)

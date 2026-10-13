@@ -70,5 +70,25 @@ class DuckGapsTest(unittest.TestCase):
         self.assertEqual(synth_audio.duck_gaps(words, 10.0), [[0.2, 1.0], [1.5, 3.0]])
 
 
+class BuildDuckExprTest(unittest.TestCase):
+    def test_expression_grows_linearly_with_gaps(self):
+        # the previous nested form doubled per gap: 17 real-world gaps blew past ARG_MAX mid-mix
+        expr = synth_audio.build_duck_expr([[i * 3.0, i * 3.0 + 1.0] for i in range(100)], 0.18)
+        self.assertLess(len(expr), 50_000)
+
+    def test_each_gap_appears_once(self):
+        expr = synth_audio.build_duck_expr([[1.0, 2.0], [5.0, 6.0]], 0.18)
+        self.assertEqual(expr.count("5.000"), 2)  # start and ramped edge of the second window only
+
+    def test_no_gaps_or_full_or_zero_level_gives_no_expression(self):
+        self.assertIsNone(synth_audio.build_duck_expr([], 0.18))
+        self.assertIsNone(synth_audio.build_duck_expr([[1.0, 2.0]], 1.0))
+        self.assertIsNone(synth_audio.build_duck_expr([[1.0, 2.0]], 0.0))
+        self.assertIsNone(synth_audio.build_duck_expr([[1.0, 2.0]], "loud"))
+
+    def test_gaps_shorter_than_two_ramps_are_skipped(self):
+        self.assertIsNone(synth_audio.build_duck_expr([[1.0, 1.2]], 0.18))
+
+
 if __name__ == "__main__":
     unittest.main()
