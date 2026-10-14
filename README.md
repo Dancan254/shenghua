@@ -1,8 +1,9 @@
 # Shenghua 声画
 
-*Voice in, picture out.* **An AI-agent skill that turns a recording into a fully edited, animated, on-brand video.**
+*Voice in, picture out.* **An AI-agent skill that turns a voice note, a talking-head take, a green-screen
+talk or a written topic into a fully edited, animated, on-brand video.**
 
-Drop in a voice note, a to-camera take or a green-screen talk. Your agent transcribes it word by word,
+Drop in a recording — or just name a topic. Your agent transcribes it word by word,
 designs a shot list, finds licensed photos and video of the people and products you mention, builds every
 scene as kinetic typography and motion graphics timed to your words in your brand's colours, fonts and
 logos, adds sound design and a music bed that ducks under your voice, and renders a 1080×1920 Short, a
@@ -17,7 +18,10 @@ Cursor, Gemini CLI, OpenCode, or any agent that can run shell commands.
 The full 42 s with sound, made from one voice note (shot list and composition in
 [`examples/kafka-vs-rabbitmq`](skills/shenghua/examples/kafka-vs-rabbitmq/)):
 
-https://github.com/Dancan254/shenghua/releases/download/v2.11.0/demo.mp4
+https://cdn.jsdelivr.net/gh/Dancan254/shenghua@v2.11.1/docs/demo.mp4
+
+(plays in the browser; the same file is attached to the
+[v2.11.1 release](https://github.com/Dancan254/shenghua/releases/tag/v2.11.1) if you want to download it)
 
 No stock templates, no subscription editor, no uploads: transcription, rendering and audio all run on
 your machine.

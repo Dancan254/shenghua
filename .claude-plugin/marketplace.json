@@ -5,8 +5,8 @@
     "url": "https://github.com/Dancan254"
   },
   "metadata": {
-    "description": "Turn a voice recording into a fully animated, captioned, sound-designed video: a Short, or a long-form YouTube video built chapter by chapter.",
-    "version": "2.11.0",
+    "description": "Turn a voice note, a talking-head or green-screen video, or a written topic into a fully animated, captioned, sound-designed video: a Short, or a long-form YouTube video built chapter by chapter.",
+    "version": "2.11.1",
     "repository": "https://github.com/Dancan254/shenghua"
   },
   "plugins": [
@@ -14,7 +14,7 @@
       "name": "shenghua",
       "source": "./",
       "strict": true,
-      "description": "Voice note in, animated vertical Short out: word-level captions, kinetic typography, camera moves, synthesized sound design and a voice-ducked music bed.",
+      "description": "Voice note, talking-head video or written topic in \u2014 animated, captioned, sound-designed video out: word-level captions, kinetic typography, camera moves, synthesized sound design and a voice-ducked music bed.",
       "skills": [
         "./skills/shenghua"
       ]
