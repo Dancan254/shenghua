@@ -1,8 +1,8 @@
 {
   "$schema": "https://kimi.com/schemas/kimi.plugin.schema.json",
   "name": "shenghua",
-  "version": "2.11.0",
-  "description": "Turn a voice recording into a fully animated, captioned, sound-designed video: a Short, or a long-form YouTube video built chapter by chapter.",
+  "version": "2.11.1",
+  "description": "Turn a voice note, a talking-head or green-screen video, or a written topic into a fully animated, captioned, sound-designed video: a Short, or a long-form YouTube video built chapter by chapter.",
   "keywords": [
     "video",
     "voiceover",
@@ -15,7 +15,7 @@
   "license": "MIT",
   "skills": "./skills/",
   "interface": {
-    "displayName": "Shenghua 声画",
+    "displayName": "Shenghua \u58f0\u753b",
     "shortDescription": "Turn a voice recording into an animated vertical Short",
     "longDescription": "Voice note in, animated vertical Short out: word-level captions, kinetic typography, camera moves, synthesized sound design and a voice-ducked music bed. The workflow runs entirely on your machine using local transcription, headless Chromium rendering, and FFmpeg encoding.",
     "developerName": "Dancan254",

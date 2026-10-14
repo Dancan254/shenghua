@@ -5,6 +5,8 @@ work/
 *.mp4
 *.mov
 *.wav
+# The README's demo video ships in the repo (linked through jsDelivr for inline playback)
+!docs/demo.mp4
 brand.json
 # Example kits are fictional brands that ship with the skill
 !skills/shenghua/examples/kits/*/brand.json
