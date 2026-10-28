@@ -91,6 +91,10 @@ chunk_ok() {
   [[ -f "$1" ]] || return 1
   local n
   n=$(ffprobe -v error -select_streams v:0 -show_entries stream=nb_frames -of csv=p=0 "$1" 2>/dev/null)
+  # Some ffprobe builds report no nb_frames for these mp4s (seen on ubuntu-26.04); count by decode instead
+  if ! [[ "$n" =~ ^[0-9]+$ ]]; then
+    n=$(ffprobe -v error -select_streams v:0 -count_frames -show_entries stream=nb_read_frames -of csv=p=0 "$1" 2>/dev/null)
+  fi
   [[ "$n" =~ ^[0-9]+$ && "$n" == "$2" ]]
 }
 
