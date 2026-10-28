@@ -93,7 +93,7 @@ ffmpeg -v error -nostats -progress pipe:1 -y \
   -c:v libx264 -preset "$PRESET" -crf "$CRF" ${X264_PROFILE[@]+"${X264_PROFILE[@]}"} \
   -maxrate "${MAXRATE_KBPS}k" -bufsize "${BUFSIZE_KBPS}k" -x264-params aq-mode=3 \
   -colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv \
-  -c:a aac -b:a 256k -t "$DURATION" -movflags +faststart "$OUT" \
+  -c:a aac -b:a 256k -ac 2 -t "$DURATION" -movflags +faststart "$OUT" \
   | python3 -c '
 import sys, time
 total = int(sys.argv[1])

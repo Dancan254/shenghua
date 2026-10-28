@@ -51,6 +51,17 @@ work="<output dir>/<slug>/work"
 
 Pick the defaults and proceed. Don't interrogate — the kit question above is the one exception. In script mode there is no file to check; go to Step 1b after setup. If the audio or video path is missing or not a file, say so and stop. With a `video`, pass it wherever a step takes `<audio>`; ffmpeg reads the voice from its audio track.
 
+**Fast path.** Two commands wrap the mechanical ends of the workflow, leaving the creative middle (shot list, media, composition) to you:
+
+```bash
+bash SKILL_DIR/scripts/make.sh prepare <audio-or-video> "$work" [--model small] [--vocab "…"] [--mode bookends|presenter|audio] [--topic "…"]
+bash SKILL_DIR/scripts/make.sh finish "$work" <duration> "$work"/voice.wav "$out" [--blur 4] [--source <video>]
+```
+
+`prepare` = doctor + transcribe + trim (Steps 1–2a), then prints the duration and three ranked theme suggestions; `finish` = render-chunks + deliver + verify frame (Steps 9–11). Run `finish` detached for long videos; re-running resumes. `python3 SKILL_DIR/scripts/suggest_theme.py --mode <mode> --topic "…"` gives the same theme ranking on its own (Step 4).
+
+**A series of episodes:** `python3 SKILL_DIR/scripts/episodes.py split script.txt --episodes 3 --outdir <series dir>` splits a long script or transcript into balanced `epN-…/script.txt` projects at sentence boundaries — no mid-sentence cuts, no invented hooks (you write those per episode). Each episode then runs the normal workflow in its own folder; `episodes.py status <series dir>` shows which episodes have a delivery yet.
+
 ## Step 1 — Setup (first run, and whenever the kit changes)
 
 ```bash
@@ -58,6 +69,10 @@ bash SKILL_DIR/scripts/setup.sh [--voices] [--vision] [<kit>]
 ```
 
 Checks `ffmpeg`, `node`, `faster_whisper` and `numpy`; installs `playwright-core` and its Chromium build; downloads GSAP and the themes' fonts into `SKILL_DIR/assets/` and the kit's fonts and logos into `SKILL_DIR/assets/kits/<id>/` (the kit argument is a path or a kit name), so several clients' kits live side by side. Prints `ready` or names the missing piece; re-running is a no-op for an unchanged kit. `--voices` fetches the script-mode voice models (~500 MB, online once); `--vision` installs the optional face detector (keying frames an off-centre speaker, sourced photos keep the face in frame) — everything works without it.
+
+`bash SKILL_DIR/scripts/doctor.sh [kit]` re-checks the whole install any time — required pieces, kit fonts, and the optional voices/vision/enhance extras — and names the fix for anything missing. Run it when a render fails in a way setup doesn't explain, or before a long render on a fresh machine.
+
+**Updates.** `bash install.sh --check` reports whether each install is behind the latest main; `bash install.sh --update` (or the curl one-liner again) updates in place, keeping downloaded assets. Mention this when the user's skill predates a feature they ask for.
 
 ## Step 1a — Approve the look (first run, and every new kit)
 
@@ -98,6 +113,8 @@ python3 SKILL_DIR/scripts/trim_take.py <audio-or-video> "$work" [--in auto] [--o
 
 Cuts the dead air before the first word (keeps 0.5s) and after the last (keeps 2.5s for the outro), writes a lossless `voice.wav`, shifts `words.json` and `transcript.txt` so the first kept moment is 0, and records the cut in `take.json` — `key_greenscreen.py` and `extract_face.sh` apply it, so after trimming every time you handle is an edit time. With a video input it also probes the source into `take.json`'s `probe` block (resolution, fps, codec, bitrate, HDR): an HDR take prints a warning (re-record in SDR — HDR face shots wash out), a non-30fps take an advisory that the edit renders at 30 fps, and Step 6's `--resolution source` reads the block. Pass `--in`/`--out` in seconds to cut by hand; cut points inside the speech make an excerpt, such as a Short from a long talk, and drop the words outside them. Re-running trims from the raw transcript again. From here on, `<audio>` is `"$work"/voice.wav` and `<duration>` is the length it prints.
 
+**Audio-only takes:** `--remove-fillers` also cuts standalone um/uh/erm/er/ah/mmm and "you know" (never lexical words like "like" or "well"), with clean lossless cuts and every word time shifted onto the continuous edit; `take.json`'s `fillers` array records what was removed. It refuses video inputs — mid-take cuts would break the face/presenter frame mapping; there, cut by hand with `--in`/`--out`.
+
 ## Step 2b — Key the speaker (presenter mode)
 
 **Load `references/presenter.md` first** — the keying detail and the layout rules. Then:
@@ -134,6 +151,8 @@ python3 SKILL_DIR/scripts/build_captions.py "$work"
 ```
 
 Writes `<work>/words.js`, plus `captions.srt` and `captions.vtt` from the same phrases — subtitle files for platforms that index uploaded captions, muxed or copied by the later steps. Never change timestamps. Tell the user about any token you could not resolve instead of guessing. With a `script`, it is the reference for spelling: a token that differs from it goes in `fixes.json`; an ad-libbed line stays — tell the user where the take left the script.
+
+Captions edited elsewhere (a subtitle editor, YouTube's editor) come back with `python3 SKILL_DIR/scripts/build_captions.py "$work" --from-srt edited.srt`: the SRT's text replaces the matched phrases — unchanged words keep their exact times, replacements interpolate — and `words.js`/SRT/VTT are rewritten. SRT text wins over `fixes.json` for matched phrases.
 
 ## Step 4 — Shot list (confirm before building)
 
@@ -196,6 +215,9 @@ python3 SKILL_DIR/scripts/fill_template.py "$work" <duration> --format vertical 
 # --format vertical|landscape|square|portrait · omit --template for the default kinetic theme
 # --resolution 4k records a 2x master in render.json; render-frames.sh then renders 4k by default
 # --resolution source matches the probed take (Step 2a): a 4K recording gets a 4K master without you computing anything
+# --energy calm|standard|hype scales shake/flash/caption pulse/punch zooms (default: config.json's energy, else standard)
+# --captions pop|rise|fade|phrase|karaoke|boxed|lower|off picks a caption preset, overriding the theme's pick
+# --platform tiktok|instagram|shorts|linkedin|youtube lifts captions clear of the platform's UI
 ```
 
 Colours in shots come from the kit: write `var(--brand-primary)`, `var(--brand-primary-ink)` (the brand colour as readable text), `var(--brand-text)`, `var(--brand-muted)`, `var(--brand-surface2)`, `var(--brand-success)`, `var(--brand-error)`, never a hex value, so the same shots render in any client's colours. Logos are in `BRAND.logos` (`mark`, `wordmark.onDark`, `wordmark.onLight`); see *Logo end card* and *Corner mark* in `scene-blocks.md`.
@@ -213,7 +235,7 @@ bash SKILL_DIR/scripts/extract_clip.sh "$work"/clips/src/facepalm.mp4 "$work" 90
 
 Clip audio ducks under the narration automatically, so it only really plays over a pause in the voice. For the speaker's line to land, place the clip over a gap in the recording (a scripted `[CLIP]` beat) or leave it silent and put the quote on screen with a *Portrait quote*. **B-roll is the same mechanism** — a `clip()` (or the alias `broll()`) under narration; the *B-roll under narration* block in `scene-blocks.md` has the full-bleed + lower-third pattern.
 
-Replace the demo shots between `BEGIN SHOTS` / `END SHOTS` (markup) and `BEGIN TIMELINE` / `END TIMELINE` (GSAP) with your shot list, using the helpers the template already defines. Keep the outer `#world` and `#cam` containers intact: `shot()`, `slam()`, `hit()`, `rise()`, `pop()`, `stagger()`, `drift()`, `kenBurns()`, `lowerThird()`, `ticker()`, `typer()`, `counter()`, `swap()`, `terminal()`, `moveTo()`, `centerOf()`, `gantt()`, `faceCam()`, `clip()`, `broll()`, `punchIn()`, `punchPulse()`, `docCard()`, the `NOCAP` ranges, and the `CAP_STYLE` constant. Every helper that makes noise pushes its own sound cue. `slam()`/`pop()`/`rise()` take `"spring"` as a final argument for a spring-physics entry; `punchIn()` slow-pushes a face shot or photo, `punchPulse()` snap-zooms an emphasis beat — see *Punch-in* in `scene-blocks.md`. `CAP_STYLE` overrides the theme's caption motion (`pop` word-by-word, `rise`, `fade`, `phrase`, `off`); left `null`, each theme's own caption motion applies.
+Replace the demo shots between `BEGIN SHOTS` / `END SHOTS` (markup) and `BEGIN TIMELINE` / `END TIMELINE` (GSAP) with your shot list, using the helpers the template already defines. Keep the outer `#world` and `#cam` containers intact: `shot()`, `slam()`, `hit()`, `rise()`, `pop()`, `stagger()`, `drift()`, `kenBurns()`, `lowerThird()`, `ticker()`, `typer()`, `counter()`, `swap()`, `terminal()`, `moveTo()`, `centerOf()`, `gantt()`, `faceCam()`, `clip()`, `broll()`, `punchIn()`, `punchPulse()`, `docCard()`, the `NOCAP` ranges, and the `CAP_STYLE` constant. Every helper that makes noise pushes its own sound cue. `slam()`/`pop()`/`rise()` take `"spring"` as a final argument for a spring-physics entry; `punchIn()` slow-pushes a face shot or photo, `punchPulse()` snap-zooms an emphasis beat, and `autoPunch(sel, t0, t1)` zooms on every keyword in the range (slow push when none) with no hand-cut times — see *Punch-in* in `scene-blocks.md`. `CAP_STYLE` overrides the theme's caption motion (`pop` word-by-word, `rise`, `fade`, `phrase`, `karaoke`, `boxed`, `lower`, `off`); left `null`, each theme's own caption motion applies.
 
 The display style (`.xl`) is uppercase and width-expanded; captions are condensed. Size headlines for the expanded width — a vertical frame fits ~6 characters at 250px.
 
@@ -232,7 +254,7 @@ Measure first — this needs no eyes and runs in seconds:
 node SKILL_DIR/scripts/render.js check "$work"/index.html ["$work"/check.json]
 ```
 
-It seeks to each shot at 25%, 50% and 85% of its window and reports text past the frame edge, text under the caption box, text over the speaker's face (presenter mode), characters the kit's fonts lack (naming the characters; a kit `fonts.fallback` marks deliberate coverage), shots that render nothing at all three moments, dangling `vendor/`/`kit/` links from before the copy layout (fix: `fill_template.py … --relink`), and `PAGE ERROR` lines. Exit 1 means findings. Fix and re-run until it is clean; it catches clipped headlines that a full render would waste minutes on.
+It seeks to each shot at 25%, 50% and 85% of its window and reports text past the frame edge, text under the caption box, text over the speaker's face (presenter mode; bookends face shots too once `face_zones.py "$work"` has run after `extract_face.sh` — needs `setup.sh --vision`), characters the kit's fonts lack (naming the characters; a kit `fonts.fallback` marks deliberate coverage), shots that render nothing at all three moments, dangling `vendor/`/`kit/` links from before the copy layout (fix: `fill_template.py … --relink`), and `PAGE ERROR` lines. Exit 1 means findings. Fix and re-run until it is clean; it catches clipped headlines that a full render would waste minutes on.
 
 Then, **if you can view images**, read `contact.jpg` for what measurement cannot judge: crops that cut off a face or subject, an image that does not match the line, and layouts that fit the frame but read badly. Fix, re-render only the affected stills, and look again. If you cannot view images, say so in the report and ask the user to look at `contact.jpg` before Step 9. Do not start Step 9 with a known defect — a full render costs minutes.
 
@@ -269,7 +291,7 @@ bash SKILL_DIR/scripts/render-chunks.sh [--blur 4] [--resolution 4k] [--chunk 30
   "$work"/index.html "$work" <duration> <audio> "$out"
 ```
 
-`--resolution 4k` renders a 4K master; without it the fill's `render.json` decides. Pass `--blur 4` for the final render only: it adds motion blur and makes the render about 8× slower — `VV_BLUR_SAMPLES=2` gives a cheap approximation while you judge whether blur is worth the time. A chunked render produces the mp4 directly — **skip Step 10** and go to Step 10a.
+`--resolution 4k` renders a 4K master; without it the fill's `render.json` decides. Pass `--blur 4` for the final render only: it adds motion blur and makes the render about 8× slower — `VV_BLUR_SAMPLES=2` gives a cheap approximation while you judge whether blur is worth the time. A chunked render produces the mp4 directly — **skip Step 10** and go to Step 10a. **To pause: Ctrl+C (or kill) and re-run the same command later — it resumes at the first missing chunk. Never SIGSTOP the process group: Chromium does not survive being resumed.**
 
 **Short videos, drafts and single-shot fixes** use `render-frames.sh`:
 
@@ -299,10 +321,12 @@ Normalises the voice, ducks the music under it (letting it swell in the voice's 
 ## Step 10a — Deliver (optional, recommended)
 
 ```bash
-bash SKILL_DIR/scripts/deliver.sh [--cover <seconds>] "$work" "$out"
+bash SKILL_DIR/scripts/deliver.sh [--cover <seconds>] [--source <video>] [--skip-quality] "$work" "$out"
 ```
 
-Assembles `<work>/delivery/`: the master mp4, a web copy (~8 Mbps, under half the master's size), the `captions.srt`/`.vtt`, a cover frame (default 1.0s in, where the title card sits), `credits.txt` from `credits.json`, and a `README.txt` listing the folder. Hand the folder — or the web copy — to whoever posts the video.
+Assembles `<work>/delivery/`: the master mp4, a web copy (~8 Mbps, under half the master's size, stereo audio — mono uploads break some platforms), the `captions.srt`/`.vtt`, a cover frame (default 1.0s in, where the title card sits), `credits.txt` from `credits.json`, and a `README.txt` listing the folder. Hand the folder — or the web copy — to whoever posts the video.
+
+**Quality gate (video inputs):** before packaging, the master must not be a lower resolution than the source (from `--source`, or `take.json`'s probed recording), and `check_quality.py` must score it 95+ VMAF against that source. A smaller master fails with the fix (`fill_template.py --resolution source`, re-render); `--skip-quality` ships without the gate when a downscale is deliberate. Pure-audio projects skip it automatically.
 
 ## Step 10b — Assemble the chapters (long form)
 
@@ -385,6 +409,7 @@ Next: preview it on a phone, then post it with the credits in the description
 | `deepfilternet not installed` from `enhance_voice.py` | Step 2c run without the optional install | `setup.sh --enhance` (online, once) |
 | `pdftoppm not found` from `excerpt.js` | PDF excerpt without poppler | `apt install poppler-utils` / `brew install poppler` |
 | `no probed source` from `fill_template.py --resolution source` | no `probe` block in `take.json` — audio-only input or trim never ran | run `trim_take.py` on the video first, or pass `--resolution 1080p`/`4k` |
+| `Quality gate: the master is … but the source is …` from `deliver.sh` | the master came out below the recording's resolution | re-fill with `--resolution source` and re-render, or `--skip-quality` for a deliberate downscale |
 | `PAGE ERROR … excerpts.js` | work dir filled before excerpts.js existed | `fill_template.py "$work" <duration> --relink` writes the placeholder |
 
 Mode-specific failures are in each mode's reference: `references/presenter.md` (keying), `references/face-bookends.md` (face shots), `references/brand-kits.md` (kits and fonts).

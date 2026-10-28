@@ -202,7 +202,7 @@ bash "$SCRIPTS_DIR/mix-audio.sh" "$WORK" "$VOICE" "$DURATION" ${MUSIC:+"$MUSIC"}
 
 ffmpeg -v error -y -i "$CHUNKS_DIR/video.mp4" -i "$WORK/mix.wav" \
   -map 0:v -map 1:a -c:v copy \
-  -c:a aac -b:a 256k -t "$DURATION" -movflags +faststart "$OUT"
+  -c:a aac -b:a 256k -ac 2 -t "$DURATION" -movflags +faststart "$OUT"
 
 LOUDNESS=$(ffmpeg -hide_banner -i "$WORK/mix.wav" -af ebur128 -f null - 2>&1 | awk '/I:/{v=$2} END{print v}')
 INFO=$(ffprobe -v error -show_entries stream=width,height:format=duration,size -of default=nw=1 "$OUT" | tr '\n' ' ')

@@ -12,11 +12,17 @@ instead: `long-form.md` → *Pacing*.
 
 - **Cut every 1–4 seconds.** A shot held longer than ~5s needs internal motion (a push-in, a
   line drawing, a counter) or the viewer scrolls.
+- **Retention beats.** Every ~3–5 seconds the frame must *change state* — a cut, a zoom, a b-roll
+  insert, a graphic pop — even inside one idea. When a shot has to hold longer, schedule the beat
+  explicitly (`autoPunch`, a `swap`, a counter) rather than hoping the footage carries it.
 - **Cut on the word, not the sentence.** The shot starts at the first word of its idea.
 - **Hits are punctuation.** Use `hit()` / `slam()` on the one word per shot that lands the
   point: a year, a name, a reveal, a punchline. More than ~2 hits per shot reads as noise.
 - **Contrast beats intensity.** Slow down for reflective lines (fade entries, no hits, music
   down); speed up for montages (one word per cut).
+- **Match the energy dial.** `--energy calm` wants 3–6s shots, fade entries, sparse hits;
+  `standard` is the pacing above; `hype` wants 1–2s cuts, one retention beat every ~2s, and a
+  punch zoom on most emphasis words. The dial scales the motion; you scale the cadence.
 - **End on a slam, then hold.** The last ~2.5s after the final word is the outro: handle, mascot,
   call to action.
 
@@ -143,7 +149,11 @@ functions of `t` and silent — pair the pulse with `hit()` when the beat earns 
 ```js
 punchIn("#s07>img", 20.1, 23.4, 1.08);    // holds the face shot alive for its whole window
 punchPulse("#s11a", 54.44, .08);          // snap on the reveal word, once
+autoPunch("#s12>img", 60.0, 64.5);        // a snap on every keyword in the range, a slow push if none
 ```
+`autoPunch(sel, t0, t1, amount)` is the no-hand-cut-times option: it reads `words.js`, snap-zooms on
+each `keywords.json` word spoken in the range, and falls back to one slow push when nothing is
+keyword-marked. All three scale with the `--energy` dial.
 Never stack them on one element (one scale tween per element — `punchIn` replaces `kenBurns`, it
 doesn't ride on it): to push *and* pulse the same frame, push the outer element and pulse its child —
 nested scales compose (`punchIn("#s07", …)` the section, `punchPulse("#s07>img", …)` the image). And
@@ -635,7 +645,14 @@ Caption styles, set with `CAP_STYLE` in the template:
 | `"pop"` | each word pops in on its own timestamp | fast Shorts, listicles, hype |
 | `"rise"` | each word rises in on its own timestamp, no scale | news beats, precise explainers |
 | `"fade"` | the whole phrase fades in once | reflective lines, documentary pacing |
+| `"karaoke"` | the phrase stays put, the spoken word lights up in sequence, no pulse | karaoke-style emphasis without motion |
+| `"boxed"` | karaoke on a high-contrast brand box | busy footage, b-roll, screen recordings |
+| `"lower"` | karaoke as a minimal lower-third: small type, quiet backing | editorial looks, talking-head interviews |
 | `"off"` | no burned-in captions; upload `captions.srt` instead | long form (`long-form.md` → *Captions*) |
+
+`fill_template.py --captions <style>` sets the preset at fill time (overriding a carried `CAP_STYLE`);
+`--platform tiktok|instagram|shorts|linkedin|youtube` also lifts the caption box clear of that
+platform's bottom UI.
 
 The theme defaults: `pop` for `kinetic`/`brutalist`/`retro`, `rise` for `newsroom`/`blueprint`, `fade` for
 `documentary`/`minimal`/`aurora`; anything without a pick falls back to `"phrase"`. All styles use the

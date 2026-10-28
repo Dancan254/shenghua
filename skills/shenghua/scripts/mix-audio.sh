@@ -4,9 +4,10 @@
 # The audio half of mix-encode.sh and render-chunks.sh, so the two can never drift apart. Writes
 # <work-dir>/mix.wav. Voice is denoised, de-essed, compressed and normalised; clip audio and music duck
 # under it via sidechain, SFX sit on top, and the mix is padded/trimmed to the exact duration, then
-# measured, then given one linear gain to −14 LUFS with a −1.5 dBFS peak limiter. When mix.json carries
-# a duck array (synth_audio.py found pauses in words.js), the music also swells toward full level inside
-# each pause, on 150 ms ramps.
+# measured, then given one linear gain to −14 LUFS with a −1.5 dBFS peak limiter. The output is stereo:
+# a mono voice is centred, because some platforms (Instagram web) reject mono uploads. When mix.json
+# carries a duck array (synth_audio.py found pauses in words.js), the music also swells toward full
+# level inside each pause, on 150 ms ramps.
 # Music and SFX levels come from <work-dir>/mix.json (synth_audio.py writes it from the kit's
 # audio.levels); the music is the explicit music-file, else mix.json's music_file, else none.
 set -euo pipefail
@@ -120,7 +121,7 @@ COUNT=$(( COUNT + 1 ))
 
 ffmpeg -v error -y "${INPUTS[@]}" -filter_complex "\
 ${FILTER}\
-${LAYERS}amix=inputs=${COUNT}:normalize=0:duration=longest,alimiter=limit=0.95,aresample=48000,atrim=0:${DURATION}[out]" \
+${LAYERS}amix=inputs=${COUNT}:normalize=0:duration=longest,alimiter=limit=0.95,aresample=48000,atrim=0:${DURATION},aformat=channel_layouts=stereo[out]" \
   -map "[out]" -c:a pcm_f32le "$WORK/premix.wav"
 
 # Measuring first lets pass 2 apply one static gain; loudnorm linear=true falls back to dynamic when the limited premix can't take the gain within TP

@@ -78,6 +78,11 @@ svg.full{position:absolute;left:0;top:0;width:100%;height:100%;overflow:visible}
 .duo .photo{position:relative;flex:1;border-radius:var(--radius,18px);border:4px solid var(--frame,var(--border))}
 #capbox span.kw:not(.now){color:var(--accent)}
 #capbox span{display:inline-block;transform-origin:50% 80%}
+/* Caption presets (CAP_STYLE): boxed = high contrast over busy footage; lower = minimal lower-third */
+#capbox.cap-boxed{background:var(--brand-primary);color:var(--brand-on-primary);padding:18px 30px;border-radius:var(--radius,18px)}
+#capbox.cap-boxed span.kw:not(.now){color:var(--brand-on-primary);text-decoration:underline}
+#capbox.cap-lower{font-size:44px;line-height:1.3;background:rgba(0,0,0,.45);color:#fff;padding:12px 22px;border-radius:12px}
+#capbox.cap-lower span.kw:not(.now){color:#fff;text-decoration:underline}
 /* Character hosts and explainer blocks (script mode): flat cartoon, bold ink outline, theme accent */
 :root{--host-ink:#06080d;--host-alt:#ffb020;--host-skin:#8b5a3c;--host-hair:#d9dee7;--token:#fff1dc}
 .host{position:absolute;z-index:4}

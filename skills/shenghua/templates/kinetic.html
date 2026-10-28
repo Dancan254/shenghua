@@ -41,6 +41,8 @@
 <script src="speech.js"></script>
 <!-- face positions measured by key_greenscreen.py and find_media.py (only with setup.sh --vision); window.FACES={} otherwise -->
 <script src="faces.js"></script>
+<!-- face_zones.py measures bookend faces for overlap checks; fill_template.py writes window.FACE_ZONES={} otherwise -->
+<script src="facezones.js"></script>
 <!-- excerpt.js (docCard captures) writes this; fill_template.py writes window.EXCERPTS={} otherwise -->
 <script src="excerpts.js"></script>
 <script>
@@ -49,6 +51,11 @@ const tl = gsap.timeline({paused:true});
 // Per-theme motion profile from templates.json: default entry, shake and flash strength, caption pulse, caption style
 const BRAND = {{brand.json}};
 const THEME = Object.assign({enter:null, shake:1, flash:1, pulse:1, captions:null}, {{theme.motion}});
+// One energy knob scales the theme's motion (calm halves it, hype amplifies it); the shot list's
+// pacing and hit density should match — see scene-blocks.md → Pacing
+const ENERGY = {{energy}};
+const ENERGY_SCALE = {calm:.5, standard:1, hype:1.5}[ENERGY] || 1;
+THEME.shake *= ENERGY_SCALE; THEME.flash *= ENERGY_SCALE; THEME.pulse *= ENERGY_SCALE;
 const SFX = [];
 const q = s => document.querySelector(s);
 
@@ -116,11 +123,20 @@ function kenBurns(sel, s, e, dir="in"){
 // A smooth ease-in-out push on a held frame (a face shot, a photo, a clip) between two times;
 // replaces kenBurns, never stacks with it — one scale tween per element
 function punchIn(sel, t0, t1, scale=1.08){
+  scale = 1 + (scale - 1) * ENERGY_SCALE;
   tl.fromTo(sel,{scale:1},{scale,duration:t1-t0,ease:"sine.inOut"},t0);
 }
 // A ~0.3s snap zoom and settle on one emphasis word; silent — pair with hit() if it needs a sound
 function punchPulse(sel, t, amount=.08){
+  amount *= ENERGY_SCALE;
   tl.fromTo(sel,{scale:1},{keyframes:[{scale:1+amount,duration:.08,ease:"power3.out"},{scale:1,duration:.22,ease:"power2.inOut"}],immediateRender:false},t);
+}
+// Emphasis zooms without hand-cut times: a snap zoom on every keyword spoken in [t0,t1), a slow
+// push when nothing is keyword-marked. Times come from words.js, so the zoom lands on the word
+function autoPunch(sel, t0, t1, amount=.08){
+  const hits = (window.PHRASES || []).flat().filter(w => w.k && w.s >= t0 && w.s < t1);
+  if(hits.length) hits.forEach(w => punchPulse(sel, w.s, amount));
+  else punchIn(sel, t0, t1, 1 + amount);
 }
 function lowerThird(sel, s, e){
   tl.fromTo(sel,{clipPath:"inset(0% 100% 0% 0%)"},{clipPath:"inset(0% 0% 0% 0%)",duration:.45,ease:EX},s);
@@ -456,9 +472,12 @@ const NOCAP = [[0,2.7],[4.1,5.6]];
 // "pop": each word pops in on its own timestamp, the theme still marks the spoken word.
 // "rise": each word rises in on its own timestamp — pop's pacing without the scale.
 // "fade": the whole phrase fades in once; the calmest style.
+// "karaoke": the whole phrase stays put, the spoken word lights up in sequence — no pulse.
+// "boxed": karaoke on a high-contrast brand box, for busy footage.
+// "lower": karaoke as a minimal lower-third: small type, quiet backing.
 // "off": no burned-in captions (long-form: upload captions.srt instead).
 // null: the theme's pick (templates.json → motion.captions), falling back to "phrase".
-const CAP_STYLE = null;
+const CAP_STYLE = {{cap_style}};
 const CAP = CAP_STYLE || THEME.captions || "phrase";
 // Pop captions tick once per keyword at the word's own timestamp — quiet by default: keywords only,
 // and never inside a NOCAP window where the captions are hidden
@@ -467,6 +486,8 @@ if(CAP === "pop") (window.PHRASES || []).forEach(p => p.forEach(w => {
 }));
 
 const capbox = q("#capbox"); let lastPhrase = -1;
+// Class names are cap-prefixed: .lower already styles the lower-third block, not captions
+if(CAP === "boxed" || CAP === "lower") capbox.classList.add("cap-" + CAP);
 function renderCaptions(t){
   // words.js may still be the empty placeholder on a preview render, before transcription
   const PH = window.PHRASES || [];
@@ -495,7 +516,7 @@ function renderCaptions(t){
     });
     return;
   }
-  if(CAP === "fade"){
+  if(CAP === "fade" || CAP === "karaoke" || CAP === "boxed" || CAP === "lower"){
     capbox.style.transform = "none";
     capbox.style.opacity = Math.min(1,(t-PH[idx][0].s)/.3).toFixed(3);
     [...capbox.children].forEach((el,i)=>{ el.className = state(PH[idx][i]); });
@@ -533,8 +554,10 @@ function renderText(t){
     if(el.innerHTML !== html) el.innerHTML = html;
   });
   GANTTS.forEach(({blocks,s,e})=>blocks.forEach(({node,t:from,e:to})=>{
-    node.style.visibility = t>=from ? "visible" : "hidden";
-    node.style.width = t>=from ? ((Math.min(t,to)-from)/(e-s)*100).toFixed(3)+"%" : "0";
+    // the axis spans its shot window; outside it an inline "visible" would override the hidden shot
+    const live = t>=from && t<e;
+    node.style.visibility = live ? "visible" : "hidden";
+    node.style.width = live ? ((Math.min(t,to)-from)/(e-s)*100).toFixed(3)+"%" : "0";
   }));
   TERMINALS.forEach(({el,lines})=>{
     let html = "";

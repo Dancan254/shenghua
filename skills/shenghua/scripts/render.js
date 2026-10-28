@@ -148,7 +148,7 @@ if (dangling.length) {
       const measured = [];
       const measureAt = async time => {
         await page.evaluate(x => window.renderAt(x), time);
-        return page.evaluate(({ id, W, H }) => {
+        return page.evaluate(({ id, W, H, time }) => {
           const section = document.getElementById(id);
           if (!section) return { missing: true, overflow: [], collide: [], visible: 0 };
           const decorative = /gridbg|glow|scan|track|pkt|bars|strike|vhs|ticker/;
@@ -158,44 +158,67 @@ if (dangling.length) {
             ? capbox.getBoundingClientRect()
             : null;
           const out = { missing: false, overflow: [], collide: [], face: [], visible: 0, head: null };
+          const presenter = document.body.classList.contains('has-presenter');
+          const faceImage = presenter ? null : [...section.children].find(el =>
+            el.tagName === 'IMG' && (el.getAttribute('src') || '').includes('face/'));
           // Presenter mode: read the keyed frame's alpha (it is already decoded) to find the speaker,
           // so text over the head is flagged but panels beside the speaker in a split layout are not
           const headBox = (() => {
-            if (!document.body.classList.contains('has-presenter')) return null;
-            const layer = document.getElementById('presenter');
-            const img = document.getElementById('prImg');
-            if (!layer || !img || !img.complete || !img.naturalWidth) return null;
-            if (parseFloat(getComputedStyle(layer).opacity) < 0.5) return null;
-            const sw = 96, sh = Math.max(1, Math.round(sw * img.naturalHeight / img.naturalWidth));
-            const canvas = document.createElement('canvas');
-            canvas.width = sw; canvas.height = sh;
-            const ctx = canvas.getContext('2d', { willReadFrequently: true });
-            let pixels;
-            try {
-              ctx.drawImage(img, 0, 0, sw, sh);
-              pixels = ctx.getImageData(0, 0, sw, sh).data;
-            } catch { out.head = 'unreadable'; return null; }
-            let minX = sw, minY = sh, maxX = -1, maxY = -1;
-            for (let y = 0; y < sh; y++) for (let x = 0; x < sw; x++) {
-              if (pixels[(y * sw + x) * 4 + 3] > 40) {
-                if (x < minX) minX = x; if (x > maxX) maxX = x;
-                if (y < minY) minY = y; if (y > maxY) maxY = y;
+            if (presenter) {
+              const layer = document.getElementById('presenter');
+              const img = document.getElementById('prImg');
+              if (!layer || !img || !img.complete || !img.naturalWidth) return null;
+              if (parseFloat(getComputedStyle(layer).opacity) < 0.5) return null;
+              const sw = 96, sh = Math.max(1, Math.round(sw * img.naturalHeight / img.naturalWidth));
+              const canvas = document.createElement('canvas');
+              canvas.width = sw; canvas.height = sh;
+              const ctx = canvas.getContext('2d', { willReadFrequently: true });
+              let pixels;
+              try {
+                ctx.drawImage(img, 0, 0, sw, sh);
+                pixels = ctx.getImageData(0, 0, sw, sh).data;
+              } catch { out.head = 'unreadable'; return null; }
+              let minX = sw, minY = sh, maxX = -1, maxY = -1;
+              for (let y = 0; y < sh; y++) for (let x = 0; x < sw; x++) {
+                if (pixels[(y * sw + x) * 4 + 3] > 40) {
+                  if (x < minX) minX = x; if (x > maxX) maxX = x;
+                  if (y < minY) minY = y; if (y > maxY) maxY = y;
+                }
               }
+              if (maxX < 0) return null;   // a fully transparent frame: no speaker on screen
+              out.head = 'ok';
+              const rect = img.getBoundingClientRect();
+              const pos = getComputedStyle(img).objectPosition.split(' ').map(parseFloat);
+              const scale = Math.max(rect.width / img.naturalWidth, rect.height / img.naturalHeight);
+              const offX = (rect.width - img.naturalWidth * scale) * (Number.isNaN(pos[0]) ? 0.5 : pos[0] / 100);
+              const offY = (rect.height - img.naturalHeight * scale) * (Number.isNaN(pos[1]) ? 0.5 : pos[1] / 100);
+              const mx = fx => rect.left + offX + (fx / sw) * img.naturalWidth * scale;
+              const my = fy => rect.top + offY + (fy / sh) * img.naturalHeight * scale;
+              // The head is roughly the top 35% of the silhouette, middle 60% across: shoulders and
+              // outstretched arms stay fair game for type
+              return {
+                left: mx(minX + 0.2 * (maxX - minX)), right: mx(maxX - 0.2 * (maxX - minX)),
+                top: my(minY), bottom: my(minY + 0.35 * (maxY - minY)),
+              };
             }
-            if (maxX < 0) return null;   // a fully transparent frame: no speaker on screen
+            if (!faceImage) return null;
+            const imageStyle = getComputedStyle(faceImage);
+            if (imageStyle.visibility === 'hidden' || imageStyle.display === 'none' || parseFloat(imageStyle.opacity) < 0.05) return null;
+            const frame = Math.round(time * 30);
+            let nearest = null;
+            for (const [key, zone] of Object.entries(window.FACE_ZONES || {})) {
+              if (!/^f\d{5}$/.test(key) || !Array.isArray(zone) || zone.length !== 4) continue;
+              const distance = Math.abs(Number(key.slice(1)) - frame);
+              if (distance <= 5 && (!nearest || distance < nearest.distance)) nearest = { zone, distance };
+            }
+            if (!nearest) return null;
+            const [cx, cy, w, h] = nearest.zone.map(Number);
+            if (![cx, cy, w, h].every(Number.isFinite)) return null;
             out.head = 'ok';
-            const rect = img.getBoundingClientRect();
-            const pos = getComputedStyle(img).objectPosition.split(' ').map(parseFloat);
-            const scale = Math.max(rect.width / img.naturalWidth, rect.height / img.naturalHeight);
-            const offX = (rect.width - img.naturalWidth * scale) * (Number.isNaN(pos[0]) ? 0.5 : pos[0] / 100);
-            const offY = (rect.height - img.naturalHeight * scale) * (Number.isNaN(pos[1]) ? 0.5 : pos[1] / 100);
-            const mx = fx => rect.left + offX + (fx / sw) * img.naturalWidth * scale;
-            const my = fy => rect.top + offY + (fy / sh) * img.naturalHeight * scale;
-            // The head is roughly the top 35% of the silhouette, middle 60% across: shoulders and
-            // outstretched arms stay fair game for type
+            // YuNet's box is tight; grow it by 10% on every side before testing overlays
             return {
-              left: mx(minX + 0.2 * (maxX - minX)), right: mx(maxX - 0.2 * (maxX - minX)),
-              top: my(minY), bottom: my(minY + 0.35 * (maxY - minY)),
+              left: (cx - 0.6 * w) * W, right: (cx + 0.6 * w) * W,
+              top: (cy - 0.6 * h) * H, bottom: (cy + 0.6 * h) * H,
             };
           })();
           // Opacity multiplies down the tree: text inside a parent waiting at opacity 0 to animate in is not on screen yet
@@ -225,7 +248,7 @@ if (dangling.length) {
             let box = rect;
             // A pushed-in photo overflows its frame by design; the frame clips it, so measure the frame
             const frame = el.tagName === 'IMG' ? el.parentElement : null;
-            if (frame && frame !== section && getComputedStyle(frame).overflow === 'hidden') box = frame.getBoundingClientRect();
+            if (frame && getComputedStyle(frame).overflow === 'hidden') box = frame.getBoundingClientRect();
             if (isText) {
               const range = document.createRange();
               range.selectNodeContents(el);
@@ -238,12 +261,12 @@ if (dangling.length) {
             if (capRect && isText && box.left < capRect.right && box.right > capRect.left && box.top < capRect.bottom && box.bottom > capRect.top) {
               out.collide.push({ nth, item: label });
             }
-            if (headBox && box.left < headBox.right && box.right > headBox.left && box.top < headBox.bottom && box.bottom > headBox.top) {
+            if (headBox && el !== faceImage && box.left < headBox.right && box.right > headBox.left && box.top < headBox.bottom && box.bottom > headBox.top) {
               out.face.push({ nth, item: label });
             }
           }
           return out;
-        }, { id: shotWindow.id, W: size.width, H: size.height });
+        }, { id: shotWindow.id, W: size.width, H: size.height, time });
       };
       for (const sampleTime of samples) {
         const found = await measureAt(sampleTime);

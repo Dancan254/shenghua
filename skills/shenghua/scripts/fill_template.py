@@ -34,6 +34,7 @@ import argparse
 import html as markup
 import json
 import math
+import os
 import re
 import shutil
 import sys
@@ -49,6 +50,11 @@ FORMATS = {
     "square": {"width": 1080, "height": 1080, "captionTop": 850},
     "portrait": {"width": 1080, "height": 1350, "captionTop": 1050},
 }
+# Platform UI covers the bottom of the frame differently; --platform lifts captions clear of it
+# (pixels at 1920 tall, scaled to the canvas). Safe-zone values are conservative estimates.
+PLATFORM_LIFT = {"tiktok": 180, "instagram": 180, "shorts": 120, "linkedin": 60, "youtube": 0}
+ENERGIES = ("calm", "standard", "hype")
+CAPTION_STYLES = ("pop", "rise", "fade", "phrase", "karaoke", "boxed", "lower", "off")
 FPS = 30
 RESOLUTIONS = {"1080p": 1, "4k": 2}
 # Grain defeats CRF alone, so the bitrate cap scales with the canvas: 16 Mbps at 1080x1920
@@ -107,7 +113,7 @@ def signature(manifest):
     return f"<b>&lt;/&gt;</b> {handle}" if handle else ""
 
 
-def carry_authored(html, existing):
+def carry_authored(html, existing, skip_consts=()):
     """Splice the authored blocks of an existing index.html into a fresh fill."""
     carried = []
     for name, pattern in BLOCKS.items():
@@ -116,6 +122,8 @@ def carry_authored(html, existing):
             html = pattern.sub(lambda _: old.group(0), html, count=1)
             carried.append(name)
     for name in CONSTS:
+        if name in skip_consts:
+            continue
         pattern = re.compile(rf"^const {name} = .*$", re.M)
         old = pattern.search(existing)
         if old and pattern.search(html):
@@ -171,6 +179,13 @@ def main() -> int:
                              "source matches the probed recording's pixel count")
     parser.add_argument("--brand", type=Path, default=None, help="brand kit folder or its brand.json")
     parser.add_argument("--template", default=None, help="theme id from templates/templates.json")
+    parser.add_argument("--energy", choices=ENERGIES, default=None,
+                        help="motion intensity: calm halves shake/flash/pulse/zooms, hype amplifies them "
+                             "(default: config.json's energy, else standard)")
+    parser.add_argument("--captions", choices=CAPTION_STYLES, default=None,
+                        help="caption style preset; overrides the theme's pick and any carried CAP_STYLE")
+    parser.add_argument("--platform", choices=sorted(PLATFORM_LIFT), default=None,
+                        help="target platform: lifts captions clear of its UI and records render.json's platform")
     parser.add_argument("--board", action="store_true", help="write board.html, the kit shown in this theme")
     parser.add_argument("--force", action="store_true",
                         help="replace an existing composition with the stock demo instead of keeping it")
@@ -211,6 +226,7 @@ def main() -> int:
         write_placeholder(args.work / "words.js", "window.PHRASES=[];")
         write_placeholder(args.work / "speech.js", "window.SPEECH=[];")
         write_placeholder(args.work / "faces.js", "window.FACES={};")
+        write_placeholder(args.work / "facezones.js", "window.FACE_ZONES={};")
         write_placeholder(args.work / "excerpts.js", "window.EXCERPTS={};")
         print(f"relinked {args.work}: vendor/ and kit/ re-installed (kit {manifest['name'] or root}); {index} untouched")
         print("Next: re-run the render that failed")
@@ -231,7 +247,18 @@ def main() -> int:
 
     colors = brand_kit.palette(kit, template.get("scheme"))
     background = manifest["background"]
-    geometry = FORMATS[args.format]
+    geometry = dict(FORMATS[args.format])
+    if args.platform:
+        geometry["captionTop"] -= round(PLATFORM_LIFT[args.platform] * geometry["height"] / 1920)
+    energy = args.energy
+    if energy is None:
+        config_path = Path(os.environ.get("VV_CONFIG", str(Path.home() / ".config" / "shenghua" / "config.json")))
+        try:
+            energy = json.loads(config_path.read_text(encoding="utf-8")).get("energy", "standard")
+        except (OSError, ValueError):
+            energy = "standard"
+        if energy not in ENERGIES:
+            energy = "standard"
     if args.resolution == "source":
         take_path = args.work / "take.json"
         try:
@@ -253,6 +280,8 @@ def main() -> int:
         "grainWidth": geometry["width"] // 2,
         "grainHeight": geometry["height"] // 2,
         "duration": f"{args.duration:g}",
+        "energy": json.dumps(energy),
+        "cap_style": json.dumps(args.captions) if args.captions else "null",
         "brand.tokens": brand_kit.css_tokens(colors),
         "brand.fonts.display": manifest["families"]["display"],
         "brand.fonts.mono": manifest["families"].get("mono", "ui-monospace"),
@@ -305,7 +334,7 @@ def main() -> int:
                 print(f"{out} exists but its {missing[0]} block markers are gone; refusing to guess", file=sys.stderr)
                 print("Next: pass --force to replace the composition with the stock demo", file=sys.stderr)
                 return 1
-            html, carried = carry_authored(html, existing)
+            html, carried = carry_authored(html, existing, skip_consts={"CAP_STYLE"} if args.captions else ())
     out.write_text(html, encoding="utf-8")
     # The page loads words.js; without a placeholder a preview render fails before captions exist
     write_placeholder(args.work / "words.js", "window.PHRASES=[];")
@@ -313,6 +342,7 @@ def main() -> int:
     write_placeholder(args.work / "speech.js", "window.SPEECH=[];")
     # key_greenscreen.py and find_media.py write faces.js when the vision detector ran
     write_placeholder(args.work / "faces.js", "window.FACES={};")
+    write_placeholder(args.work / "facezones.js", "window.FACE_ZONES={};")
     # excerpt.js rewrites this with real captures; empty means docCard() stays unused, not a page error
     write_placeholder(args.work / "excerpts.js", "window.EXCERPTS={};")
     # kits/ and sounds/ stay out of vendor: each project gets only its own kit, sounds included, below
@@ -323,13 +353,17 @@ def main() -> int:
     (args.work / "render.json").write_text(json.dumps({
         "width": geometry["width"], "height": geometry["height"], "format": args.format,
         "resolution": args.resolution, "scale": scale, "duration": args.duration,
+        "energy": energy, "platform": args.platform,
         "encode": {"maxrate_kbps": maxrate_kbps(geometry["width"], geometry["height"], scale)},
     }, indent=2) + "\n", encoding="utf-8")
 
     kept = " · kept the existing shots" if carried else ""
     size = f"{geometry['width'] * scale}x{geometry['height'] * scale}"
     res = f" · {args.resolution} ({size})" if args.resolution != "1080p" else ""
-    print(f"{out} · {geometry['width']}x{geometry['height']}{res} · {args.duration:g}s · template {template['id']} · kit {manifest['name'] or root}{kept}")
+    notes = (f" · energy {energy}" if energy != "standard" else "") + \
+        (f" · captions {args.captions}" if args.captions else "") + \
+        (f" · platform {args.platform} (captions lifted for its UI)" if args.platform else "")
+    print(f"{out} · {geometry['width']}x{geometry['height']}{res} · {args.duration:g}s · template {template['id']} · kit {manifest['name'] or root}{kept}{notes}")
     if args.board:
         print(f"Next: node {SKILL_DIR / 'scripts' / 'render.js'} board {out} {args.work / 'board.png'}")
     elif carried:
