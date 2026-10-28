@@ -2,8 +2,11 @@
 """Trim a take to its speech: cut the dead air before the first word and after the last.
 
   trim_take.py <source> <work> [--in auto|<s>] [--out auto|<s>] [--lead 0.5] [--tail 2.5]
+               [--remove-fillers]
 
 Cut points inside the speech make an excerpt: the words outside them are dropped.
+--remove-fillers also cuts standalone um/uh/erm/er/ah/mmm and "you know" from audio-only takes,
+recording their source spans in take.json.
 
 Run after transcribe.py. Writes a lossless trimmed voice.wav, shifts words.json and transcript.txt so
 the first kept moment is t=0 (the originals stay as words.raw.json and transcript.raw.txt), and
@@ -27,6 +30,9 @@ from transcribe import probe_duration, split_phrases
 
 FPS = 30
 HDR_TRANSFERS = {"smpte2084", "pq", "hlg", "arib-std-b67"}
+FILLER_WORDS = {"um", "uh", "erm", "er", "ah", "mmm"}
+FILLER_BOUNDARY = 0.15
+FILLER_MERGE_GAP = 0.05
 
 
 def is_hdr(stream: dict) -> bool:
@@ -78,6 +84,80 @@ def edge(value, default):
     return default if value == "auto" else float(value)
 
 
+def filler_token(text: str) -> str:
+    return "".join(char for char in text.casefold() if char.isalnum())
+
+
+def find_fillers(words: list[dict], cut_in: float, cut_out: float) -> list[dict]:
+    candidates = []
+    index = 0
+    while index < len(words):
+        current = words[index]
+        token = filler_token(current["t"])
+        end_index = index + 1
+        if token == "you" and end_index < len(words) and filler_token(words[end_index]["t"]) == "know":
+            end_index += 1
+        elif token not in FILLER_WORDS:
+            index += 1
+            continue
+        last = words[end_index - 1]
+        start, end = current["s"], last["e"]
+        if (start >= cut_in and end <= cut_out
+                and start - cut_in >= FILLER_BOUNDARY - 1e-9
+                and cut_out - end >= FILLER_BOUNDARY - 1e-9):
+            candidates.append({
+                "start": start,
+                "end": end,
+                "text": " ".join(w["t"] for w in words[index:end_index]),
+            })
+        index = end_index
+
+    merged = []
+    for candidate in candidates:
+        if merged and candidate["start"] - merged[-1]["end"] < FILLER_MERGE_GAP:
+            merged[-1]["end"] = candidate["end"]
+            merged[-1]["text"] += " " + candidate["text"]
+        else:
+            merged.append(candidate.copy())
+    return merged
+
+
+def edit_time(source_time: float, cut_in: float, fillers: list[dict]) -> float:
+    removed = 0.0
+    for filler in fillers:
+        if source_time <= filler["start"]:
+            break
+        removed += min(source_time, filler["end"]) - filler["start"]
+    return source_time - cut_in - removed
+
+
+def shift_words(words: list[dict], cut_in: float, fillers: list[dict]) -> list[dict]:
+    shifted = []
+    for word in words:
+        if any(word["s"] >= f["start"] and word["e"] <= f["end"] for f in fillers):
+            continue
+        shifted.append({**word,
+                        "s": round(edit_time(word["s"], cut_in, fillers), 2),
+                        "e": round(edit_time(word["e"], cut_in, fillers), 2)})
+    return shifted
+
+
+def filler_filter(cut_in: float, cut_out: float, fillers: list[dict], fade: float,
+                  duration: float) -> str:
+    filters = []
+    labels = []
+    start = cut_in
+    for index, filler in enumerate([*fillers, {"start": cut_out, "end": cut_out}]):
+        label = f"a{index}"
+        filters.append(f"[0:a]atrim=start={start:.6f}:end={filler['start']:.6f},"
+                       f"asetpts=PTS-STARTPTS[{label}]")
+        labels.append(f"[{label}]")
+        start = filler["end"]
+    filters.append("".join(labels) + f"concat=n={len(labels)}:v=0:a=1,"
+                   f"afade=t=in:d=0.03,afade=t=out:st={duration - fade:.3f}:d={fade:.3f}[voice]")
+    return ";".join(filters)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Trim a take to its speech.")
     parser.add_argument("source", type=Path, help="the recording transcribe.py read (video or audio)")
@@ -86,6 +166,8 @@ def main() -> int:
     parser.add_argument("--out", dest="cut_out", default="auto", help="seconds into the source to end, or auto")
     parser.add_argument("--lead", type=float, default=0.5, help="seconds kept before the first word with --in auto")
     parser.add_argument("--tail", type=float, default=2.5, help="seconds kept after the last word with --out auto (the outro)")
+    parser.add_argument("--remove-fillers", action="store_true",
+                        help="remove um/uh/erm/er/ah/mmm and 'you know' (audio only)")
     args = parser.parse_args()
 
     if not args.source.is_file():
@@ -116,37 +198,64 @@ def main() -> int:
         return 1
     dropped = len(words) - len(kept)
     words = kept
-    duration = cut_out - cut_in
+    fillers = find_fillers(words, cut_in, cut_out) if args.remove_fillers else []
+    removed = sum(f["end"] - f["start"] for f in fillers)
+    duration = cut_out - cut_in - removed
 
     probe = probe_source(args.source)
+    if args.remove_fillers and probe:
+        print("filler cuts are audio-only for now: mid-take cuts would break the face/presenter frame mapping",
+              file=sys.stderr)
+        print("Next: use it on audio-only projects, or cut by hand with --in/--out", file=sys.stderr)
+        return 1
     if probe and probe["hdr"]:
         print(f"WARNING: the source video is HDR ({probe['codec']}); the render is SDR and HDR face "
               "shots wash out — re-record in SDR if you can", file=sys.stderr)
 
-    # The tail fades so a reach for the stop button never ends the video on a thump
-    fade = min(1.0, max(0.0, duration - words[-1]["e"] + cut_in - 0.2))
     voice = args.work / "voice.wav"
-    result = subprocess.run(
-        ["ffmpeg", "-v", "error", "-y", "-i", str(args.source), "-vn",
-         "-af", f"atrim=start={cut_in:.6f}:end={cut_out:.6f},asetpts=PTS-STARTPTS,"
-                f"afade=t=in:d=0.03,afade=t=out:st={duration - fade:.3f}:d={fade:.3f}",
-         "-c:a", "pcm_s24le", str(voice)], capture_output=True, text=True)
+    if fillers:
+        shifted = shift_words(words, cut_in, fillers)
+        last_word_end = shifted[-1]["e"] if shifted else 0.0
+        # The tail fades so a reach for the stop button never ends the video on a thump
+        fade = min(1.0, max(0.0, duration - last_word_end - 0.2))
+        result = subprocess.run(
+            ["ffmpeg", "-v", "error", "-y", "-i", str(args.source), "-vn",
+             "-filter_complex", filler_filter(cut_in, cut_out, fillers, fade, duration),
+             "-map", "[voice]", "-ar", "48000", "-c:a", "pcm_s24le", str(voice)],
+            capture_output=True, text=True)
+    else:
+        # The tail fades so a reach for the stop button never ends the video on a thump
+        fade = min(1.0, max(0.0, duration - words[-1]["e"] + cut_in - 0.2))
+        result = subprocess.run(
+            ["ffmpeg", "-v", "error", "-y", "-i", str(args.source), "-vn",
+             "-af", f"atrim=start={cut_in:.6f}:end={cut_out:.6f},asetpts=PTS-STARTPTS,"
+                    f"afade=t=in:d=0.03,afade=t=out:st={duration - fade:.3f}:d={fade:.3f}",
+             "-c:a", "pcm_s24le", str(voice)], capture_output=True, text=True)
+        shifted = [{**w, "s": round(w["s"] - cut_in, 2), "e": round(w["e"] - cut_in, 2)} for w in words]
     if result.returncode != 0:
         print(f"ffmpeg could not cut the voice: {result.stderr.strip()[-300:]}", file=sys.stderr)
         print("Next: check the recording has an audio track (ffprobe it)", file=sys.stderr)
         return 1
 
-    shifted = [{**w, "s": round(w["s"] - cut_in, 2), "e": round(w["e"] - cut_in, 2)} for w in words]
     words_path.write_text(json.dumps(shifted), encoding="utf-8")
     with transcript_path.open("w", encoding="utf-8") as handle:
         for phrase in split_phrases(shifted):
             handle.write(f"[{phrase[0]['s']:.2f}] " + " ".join(f"{w['t']}@{w['s']:.2f}" for w in phrase) + "\n")
     take = {"source": str(args.source.resolve()), "in": round(cut_in, 6), "out": round(cut_out, 6),
             "duration": round(duration, 6), "firstFrame": first_frame, "fps": FPS}
+    if args.remove_fillers:
+        take["fillers"] = [{"start": round(f["start"], 6), "end": round(f["end"], 6), "text": f["text"]}
+                           for f in fillers]
     if probe:
         take["probe"] = probe
     (args.work / "take.json").write_text(json.dumps(take, indent=2) + "\n", encoding="utf-8")
 
+    if args.remove_fillers:
+        print(f"{voice.name} · {len(fillers)} filler cuts ({removed:.2f}s removed) · "
+              f"new duration {duration:.2f}s")
+        print(f"Next: proofread transcript.txt (times now start at 0); use {voice.name} as the audio and "
+              f"{duration:.2f} as the duration from here on")
+        return 0
     if probe and abs(probe["fps"] - FPS) > 0.5:
         print(f"source is {probe['fps']:g} fps; the edit renders at {FPS} fps "
               "(motion cadence preserved, frames resampled)")

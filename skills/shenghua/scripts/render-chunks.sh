@@ -91,7 +91,17 @@ chunk_ok() {
   [[ -f "$1" ]] || return 1
   local n
   n=$(ffprobe -v error -select_streams v:0 -show_entries stream=nb_frames -of csv=p=0 "$1" 2>/dev/null)
-  [[ "$n" =~ ^[0-9]+$ && "$n" == "$2" ]]
+  # ffmpeg 8's csv output can carry a trailing comma ("90,"), which is not a number and never equals WANT
+  n=${n//[[:space:],]/}
+  # Some ffprobe builds report no nb_frames for these mp4s; count by decode instead
+  if ! [[ "$n" =~ ^[0-9]+$ ]]; then
+    n=$(ffprobe -v error -select_streams v:0 -count_frames -show_entries stream=nb_read_frames -of csv=p=0 "$1" 2>/dev/null)
+    n=${n//[[:space:],]/}
+  fi
+  if [[ "$n" =~ ^[0-9]+$ && "$n" == "$2" ]]; then return 0; fi
+  # A redone chunk should say why — a probe quirk otherwise looks like a resume bug
+  echo "resume probe: $(basename "$1") has ${n:-unknown} frames, want $2 — re-encoding" >&2
+  return 1
 }
 
 CHUNK_COUNT=$(( (TOTAL + CHUNK_FRAMES - 1) / CHUNK_FRAMES ))
@@ -202,7 +212,7 @@ bash "$SCRIPTS_DIR/mix-audio.sh" "$WORK" "$VOICE" "$DURATION" ${MUSIC:+"$MUSIC"}
 
 ffmpeg -v error -y -i "$CHUNKS_DIR/video.mp4" -i "$WORK/mix.wav" \
   -map 0:v -map 1:a -c:v copy \
-  -c:a aac -b:a 256k -t "$DURATION" -movflags +faststart "$OUT"
+  -c:a aac -b:a 256k -ac 2 -t "$DURATION" -movflags +faststart "$OUT"
 
 LOUDNESS=$(ffmpeg -hide_banner -i "$WORK/mix.wav" -af ebur128 -f null - 2>&1 | awk '/I:/{v=$2} END{print v}')
 INFO=$(ffprobe -v error -show_entries stream=width,height:format=duration,size -of default=nw=1 "$OUT" | tr '\n' ' ')

@@ -35,6 +35,16 @@ numbered by edit frame, so frame N of the edit shows frame N of the recording. I
 range — never re-time a face shot alone. Face shots are full-bleed; check the stills for a crop that
 cuts off the head.
 
+With the optional vision setup (`setup.sh --vision`), also measure the face positions:
+
+```bash
+python3 SKILL_DIR/scripts/face_zones.py "$work"
+```
+
+Then `render.js check` fails on text or graphics over the face in face shots as well as presenter mode.
+Move the text off the face, just as for a presenter overlap, and re-run check. Without vision,
+`face_zones.py` skips cleanly and the rest of the workflow is unchanged.
+
 ---
 
 ## Failure states

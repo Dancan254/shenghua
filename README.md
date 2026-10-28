@@ -229,6 +229,17 @@ One copy can serve several agents: OpenCode also reads `~/.claude/skills/` and `
 skill installed for Claude Code or Codex shows up in OpenCode too.
 </details>
 
+### Updating
+
+```bash
+bash shenghua/install.sh --check    # which installs are behind the latest main? (read-only)
+bash shenghua/install.sh --update   # update in place — downloaded fonts, Chromium and assets are kept
+```
+
+(Use the path to your clone; the curl one-liner works too. Plugin installs update through the plugin
+manager instead.) `bash …/shenghua/scripts/doctor.sh` checks an install's health any time and names
+the fix for anything missing.
+
 ### One-time setup
 
 Nothing to run by hand: the agent runs `setup.sh` the first time you use the skill. It installs

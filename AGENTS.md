@@ -32,17 +32,22 @@ skills/shenghua/
 ├── tests/                       unittest suite (numpy only), run from the repo root
 └── scripts/
     ├── setup.sh                 dependency check, playwright-core + Chromium, GSAP, fonts; --voices, --vision, --enhance
+    ├── doctor.sh                install health check: required + optional pieces, kit fonts; names the fix, exit 1 on gaps
+    ├── make.sh                  fast path: prepare (doctor+transcribe+trim+theme suggestions) / finish (render+deliver+verify)
+    ├── suggest_theme.py         ranks themes for a mode/topic from templates.json, deterministic
     ├── speak.py                 script mode: script → voice.wav + speech.json/js + aligned words.json
     ├── transcribe.py            faster-whisper, word-level timestamps; config.json for model/device defaults
-    ├── trim_take.py             cut dead air: lossless voice.wav, word times shifted to 0, take.json (+ probe block for video)
+    ├── trim_take.py             cut dead air: lossless voice.wav, word times shifted to 0, take.json (+ probe block for video); --remove-fillers (audio-only)
     ├── enhance_voice.py         optional DeepFilterNet cleanup: voice.wav → voice-clean.wav (setup.sh --enhance)
+    ├── episodes.py              split a script/transcript into epN folders at sentence boundaries; status shows series progress
     ├── key_greenscreen.py       green-screen take → presenter/fNNNNN.webp with alpha, resumable; 30 fps edit frames
     ├── retime.py                re-time an edit onto a retake of the same script
-    ├── build_captions.py        applies fixes.json → words.js + captions.srt/vtt
+    ├── build_captions.py        applies fixes.json → words.js + captions.srt/vtt; --from-srt re-imports externally edited captions
     ├── brand_kit.py             kit validation, colour derivation, contrast/glyph report, kits folder, per-kit install
     ├── init_kit.py              answers or client files → a kit in the kits folder; --from converts a version-1 brand.json
-    ├── fill_template.py         kit + theme + geometry + duration → work/index.html (or board.html); keeps authored shots
+    ├── fill_template.py         kit + theme + geometry + duration → work/index.html (or board.html); keeps authored shots; --energy, --captions, --platform
     ├── extract_face.sh          to-camera video → face/fNNNNN.jpg, numbered by edit frame
+    ├── face_zones.py            optional YuNet face boxes from face/ frames → facezones.js for overlap checks
     ├── find_media.py            photo/video search (Commons, Openverse, Archive, Pexels, web, YouTube) + credits.json
     ├── excerpt.js               article/PDF passage → excerpts/<name>.png + highlight box in excerpts.js + credits.json
     ├── extract_clip.sh          fetched clip → clips/<name>/fNNNNN.jpg (+ clips/<name>.wav)
@@ -55,7 +60,7 @@ skills/shenghua/
     ├── mix-audio.sh             the soundtrack both encoders share: voice + ducked clip audio + ducked music + SFX → mix.wav
     ├── mix-encode.sh            frames + mix-audio.sh → mp4; --10bit, --embed; bitrate cap scales with the canvas
     ├── check_quality.py         VMAF gate: encoded output vs source video, skips cleanly without libvmaf
-    ├── deliver.sh               master + web copy + captions + cover + credits.txt → delivery/
+    ├── deliver.sh               master + stereo web copy + captions + cover + credits.txt → delivery/; quality gate vs the source (--source, --skip-quality)
     └── assemble.py              long form: chapters.json → one master, one loudness pass, merged captions, YouTube chapters
 ```
 
@@ -63,7 +68,8 @@ skills/shenghua/
 `.kimi-plugin/plugin.json` registers it for Kimi Code CLI's `/plugins install`. Both are additive: other
 hosts ignore them and read `SKILL.md` directly. `install.sh` at the root is the install path for
 everyone else: it copies the skill into an agent's skills directory (auto-detect, or `--dir`), updates
-in place without losing setup.sh's downloads, and uninstalls. Keep it dependency-free, working on
+in place without losing setup.sh's downloads, checks for updates (`--check`, comparing each install's
+`.installed-from` commit against the remote main), and uninstalls. Keep it dependency-free, working on
 macOS's bash 3.2, and working when piped through `curl | bash`.
 
 ## What an agent needs to run this
@@ -73,9 +79,9 @@ Keep it that way:
 
 - **Required:** a shell, file writing, reading text output. Every script prints a one-line result and a
   `Next:` line, so an agent can follow the workflow from stdout alone.
-- **Optional:** vision. Only Step 5 (judging a downloaded image) and Step 7 (reading the contact sheet)
-  benefit. Both have a documented text path: list images for the user to confirm, and
-  `render.js check`, which measures every shot and reports defects as text.
+- **Optional:** vision. Step 5 (judging a downloaded image), Step 7 (reading the contact sheet), and
+  automatic face measurements benefit. The visual checks have a documented text path: list images for
+  the user to confirm, and `render.js check`, which measures every shot and reports defects as text.
 - **Never assumed:** audio. Nothing can hear the mix, so the workflow always asks the user to listen.
 
 A change that makes any step impossible without vision, or that ties the workflow to one agent's tool
@@ -116,10 +122,10 @@ names, breaks this.
    other. A theme declares its canvas (`scheme`: dark or light) in `templates.json`; the kit's display font
    always wins, and a theme's own typeface (`templates.json` → `fonts`) is only its fallback.
 11. **Hosts are pure functions of `t`.** `renderHosts(t)` derives every mouth, blink and bob from `t` and
-   `speech.js`; a host never keeps state between frames. `speech.js`, `faces.js` and `excerpts.js` always
-   exist (`fill_template.py` writes an empty one of each), so a recording without speakers, face
-   measurements or captured excerpts renders hosts idle, photos unshifted and no document cards rather
-   than failing.
+   `speech.js`; a host never keeps state between frames. `speech.js`, `faces.js`, `facezones.js` and
+   `excerpts.js` always exist (`fill_template.py` writes an empty one of each), so a recording without
+   speakers, face measurements or captured excerpts renders hosts idle, photos unshifted and no document
+   cards rather than failing.
 12. **Characters are original.** The shipped hosts are original designs. Never add a host that imitates an
    existing cartoon, film or game character.
 13. **Scripts fail loud.** Every script prints a one-line result and a `Next:` line, and on failure names
@@ -139,8 +145,8 @@ names, breaks this.
 - **Bash:** `set -euo pipefail`, quote every variable, `SCRIPTS_DIR` resolved from `BASH_SOURCE`. Scripts
   are called from zsh too — never rely on word splitting.
 - **Python:** 3.10+, standard library plus `numpy` and `faster-whisper` only (`find_media.py` uses `urllib`;
-  `speak.py` alone also needs `kokoro-onnx`, installed by `setup.sh --voices`; `key_greenscreen.py` and
-  `find_media.py` use `opencv` only when `setup.sh --vision` installed it; `enhance_voice.py` needs
+  `speak.py` alone also needs `kokoro-onnx`, installed by `setup.sh --voices`; `key_greenscreen.py`,
+  `face_zones.py` and `find_media.py` use `opencv` only when `setup.sh --vision` installed it; `enhance_voice.py` needs
   `deepfilternet`, installed by `setup.sh --enhance`). `argparse`, a `main()`
   returning an exit code, errors to stderr.
 - **JavaScript:** `render.js` and `excerpt.js` depend on `playwright-core` only; the template on GSAP
