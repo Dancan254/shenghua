@@ -107,12 +107,30 @@ fi
 if (( NODE_OK )) && [[ -d "$SCRIPTS_DIR/node_modules/playwright-core" ]]; then
   if CHROMIUM_PATH=$(node - "$SCRIPTS_DIR/node_modules/playwright-core" <<'JS'
 const fs = require('fs');
+const path = require('path');
+// Playwright launches the headless shell when the full chromium build is absent, so either
+// binary satisfies the renderer; executablePath() alone reports a false missing
+function shellBinary(dir) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, entry.name);
+    if (entry.isDirectory()) { const found = shellBinary(p); if (found) return found; }
+    else if (/^chrome-headless-shell(\.exe)?$/.test(entry.name)) return p;
+  }
+  return null;
+}
 try {
   const { chromium } = require(process.argv[2]);
   const executable = chromium.executablePath();
-  fs.accessSync(executable, fs.constants.X_OK);
-  if (!fs.statSync(executable).isFile()) process.exit(1);
-  console.log(executable);
+  try {
+    fs.accessSync(executable, fs.constants.X_OK);
+    if (fs.statSync(executable).isFile()) { console.log(executable); process.exit(0); }
+  } catch { /* fall through to the headless shell */ }
+  const match = executable.match(/^(.*)[/\\]chromium-(\d+)[/\\]/);
+  if (match) {
+    const shell = shellBinary(path.join(match[1], `chromium_headless_shell-${match[2]}`));
+    if (shell) { console.log(shell); process.exit(0); }
+  }
+  process.exit(1);
 } catch {
   process.exit(1);
 }
